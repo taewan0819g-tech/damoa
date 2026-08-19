@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(npm ping *)",
+      "Bash(curl -sI https://registry.npmjs.org)",
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --eslint --app --src-dir=false --import-alias \"@/*\" --use-npm --no-turbopack)",
+      "Bash(npm cache *)",
+      "Bash(mkdir -p /Users/hwangtaewan/.npm-local-cache)",
+      "Bash(rm -rf /Users/hwangtaewan/newapp1/* /Users/hwangtaewan/newapp1/.[!.]*)",
+      "Bash(export npm_config_cache=/Users/hwangtaewan/.npm-local-cache)"
+    ]
+  }
+}
