@@ -1,26 +1,88 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf7f2;
+  --surface: #ffffff;
+  --surface-muted: #f2ede5;
+  --foreground: #1c1a17;
+  --foreground-muted: #6b6459;
+  --border: #e8e1d6;
+  --accent: #d9622b;
+  --accent-foreground: #ffffff;
+  --accent-soft: #fbe6d8;
+  --danger: #c0402c;
+  --success: #3f7a54;
+  --radius: 1rem;
+}
+
+.dark {
+  --background: #14120f;
+  --surface: #1e1b17;
+  --surface-muted: #262220;
+  --foreground: #f3efe8;
+  --foreground-muted: #a89e8f;
+  --border: #332e28;
+  --accent: #e8763f;
+  --accent-foreground: #17130f;
+  --accent-soft: #3a2818;
+  --danger: #e06a52;
+  --success: #6fbf8b;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --radius-card: var(--radius);
+  --font-sans: var(--font-noto-sans-kr), "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: var(--color-surface-muted);
 }

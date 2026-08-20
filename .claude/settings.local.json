@@ -8,7 +8,20 @@
       "Bash(npm cache *)",
       "Bash(mkdir -p /Users/hwangtaewan/.npm-local-cache)",
       "Bash(rm -rf /Users/hwangtaewan/newapp1/* /Users/hwangtaewan/newapp1/.[!.]*)",
-      "Bash(export npm_config_cache=/Users/hwangtaewan/.npm-local-cache)"
+      "Bash(export npm_config_cache=/Users/hwangtaewan/.npm-local-cache)",
+      "Bash(npm install *)",
+      "Bash(xargs -I{} sed -n '1,200p' {})",
+      "Bash(npx tsc *)",
+      "Bash(npm_config_cache=/Users/hwangtaewan/.npm-local-cache npm install -D @types/leaflet)",
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)",
+      "Bash(npm run *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof -i :3000 -sTCP:LISTEN -n -P)",
+      "Bash(kill 64504)",
+      "Bash(git status *)",
+      "Bash(grep -rniE \"SUPABASE_SERVICE_ROLE_KEY\\\\s*=\\\\s*['\\\\\"a-zA-Z0-9]|sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|BEGIN \\(RSA|EC|OPENSSH\\) PRIVATE KEY\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.json\" --include=\"*.env*\" --include=\"*.mjs\" --include=\"*.mts\" . --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git)",
+      "Bash(git add *)"
     ]
   }
 }
