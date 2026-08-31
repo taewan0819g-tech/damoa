@@ -1,32 +1,34 @@
 import type { Benefit } from "@/types/benefit";
 
-/** Shape of a single raw record from the 온통청년(Youth Center) API. Fill in once the real schema is known. */
-export interface YouthRawPolicy {
-  plcyNo: string;
-  plcyNm: string;
-  plcyExplnCn: string;
-  sprvsnInstCdNm: string;
-  aplyYmd?: string;
-  refUrlAddr1?: string;
-  frstRegDt?: string;
-  [key: string]: unknown;
-}
+/**
+ * IMPORTANT: response field names for the 온통청년(Youth Center) Open API are
+ * NOT confirmed as of 2026-08-31.
+ *
+ * The only documented endpoint (https://www.youthcenter.go.kr/opi/youthPlcyList.do,
+ * per https://www.youthcenter.go.kr/cmnFooter/openapiIntro/oaiDoc) returns an
+ * unconditional HTTP 302 redirect to `http://www.youthcenter.go.kr:8080/`
+ * regardless of query parameters — confirmed via direct curl with a real
+ * issued key, and that port is unreachable (connection times out). The
+ * request parameter names (openApiVlak, pageIndex, display, query,
+ * bizTycdSel, srchPolyBizSecd, keyword) are confirmed from the official docs
+ * page, but the response schema (a "코드정의서" Excel file) is not published
+ * as readable text anywhere we could fetch, and we never received a live
+ * response to inspect.
+ *
+ * Per explicit instruction: do not invent response field names. This raw
+ * type intentionally stays untyped (`Record<string, unknown>`) and
+ * `normalizeYouthPolicy` intentionally returns `null` until a real response
+ * sample or updated API spec is available — see YouthCenterBenefitProvider
+ * for the real (currently failing) network call this feeds.
+ */
+export type YouthRawPolicy = Record<string, unknown>;
 
 /**
- * Normalizes a raw 온통청년 API record into the app's common Benefit schema.
- * The UI never touches YouthRawPolicy directly — only this function's output.
+ * Cannot safely normalize until real response field names are confirmed.
+ * Returns null rather than guessing so no fabricated data ever reaches the
+ * UI. Revisit once a live sample or updated spec is available.
  */
-export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {
-  return {
-    id: `youth-${raw.plcyNo}`,
-    title: raw.plcyNm,
-    shortDescription: raw.plcyExplnCn,
-    category: "other",
-    source: { type: "youth_policy", organization: raw.sprvsnInstCdNm, providerId: raw.plcyNo },
-    benefitType: "other",
-    application: { officialUrl: raw.refUrlAddr1, sourceUrl: raw.refUrlAddr1 },
-    institution: { name: raw.sprvsnInstCdNm, type: "local_government" },
-    updatedAt: raw.frstRegDt,
-    isDemo: false,
-  };
+export function normalizeYouthPolicy(_raw: YouthRawPolicy): Benefit | null {
+  void _raw;
+  return null;
 }

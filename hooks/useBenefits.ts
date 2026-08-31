@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { benefitProvider } from "@/providers";
 import { matchBenefits } from "@/domain/eligibility/matchBenefits";
 import { useProfileStore } from "@/stores/profileStore";
 import type { Benefit, EligibilityStatus } from "@/types/benefit";
@@ -27,10 +26,15 @@ export function useBenefits(): UseBenefitsResult {
 
   useEffect(() => {
     let cancelled = false;
-    benefitProvider
-      .getBenefits()
-      .then((result) => {
-        if (!cancelled) setBenefits(result);
+    // Fetched via a server-only Route Handler (never calls the provider
+    // layer directly from the client) so real API keys stay on the server.
+    fetch("/api/benefits")
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { benefits: Benefit[] }) => {
+        if (!cancelled) setBenefits(data.benefits);
       })
       .catch(() => {
         if (!cancelled) setError(true);

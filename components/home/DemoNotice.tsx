@@ -1,6 +1,8 @@
 import { Info } from "lucide-react";
 
-export function DemoNotice() {
+/** Only rendered when the currently loaded benefits are demo/mock data (no real API key configured) — hidden once real MOIS/청년 data is live. */
+export function DemoNotice({ isDemo }: { isDemo: boolean }) {
+  if (!isDemo) return null;
   return (
     <div className="flex items-start gap-2.5 rounded-xl bg-accent-soft px-4 py-3 text-xs leading-relaxed text-accent">
       <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />

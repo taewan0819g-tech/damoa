@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 export default function HomePage() {
   const { benefits, statusById, loading, error } = useBenefits();
   const profile = useProfileStore((s) => s.profile);
+  const isDemo = benefits.length > 0 && benefits.every((b) => b.isDemo);
 
   const summary = useMemo(() => getBenefitSummary(benefits, statusById), [benefits, statusById]);
   const recommended = useMemo(
@@ -28,7 +29,7 @@ export default function HomePage() {
         <p className="mt-0.5 text-sm text-foreground-muted">다모아가 지금 확인할 수 있는 혜택을 정리했어요.</p>
       </div>
 
-      <DemoNotice />
+      <DemoNotice isDemo={isDemo} />
 
       {loading ? (
         <div className="grid grid-cols-2 gap-3">
