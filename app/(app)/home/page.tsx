@@ -1,71 +1,68 @@
-import Link from "next/link";
-import { Users } from "lucide-react";
-import { PlaceCard } from "@/components/place/PlaceCard";
+"use client";
+
+import { useMemo } from "react";
+import { useBenefits } from "@/hooks/useBenefits";
+import { useProfileStore } from "@/stores/profileStore";
+import { getBenefitSummary } from "@/domain/benefit/summary";
+import { getRecommendedBenefits } from "@/domain/benefit/recommend";
+import { DemoNotice } from "@/components/home/DemoNotice";
+import { SummaryCards } from "@/components/home/SummaryCards";
+import { BenefitMiniRow } from "@/components/benefit/BenefitMiniRow";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getSessionUserId } from "@/lib/auth/session";
-import { getSavedPlaceRepository } from "@/lib/repositories/factory";
-import { getHomeFeed, type FeedScope } from "@/lib/feed/feedService";
-import { cn } from "@/lib/utils/cn";
 
-const SCOPES: { value: FeedScope; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "friends", label: "친구" },
-  { value: "fof", label: "친구의 친구" },
-];
+export default function HomePage() {
+  const { benefits, statusById, loading, error } = useBenefits();
+  const profile = useProfileStore((s) => s.profile);
 
-export default async function HomePage({ searchParams }: { searchParams: Promise<{ scope?: string }> }) {
-  const { scope: scopeParam } = await searchParams;
-  const scope: FeedScope = SCOPES.some((s) => s.value === scopeParam) ? (scopeParam as FeedScope) : "all";
-
-  const userId = (await getSessionUserId())!;
-  const [feed, saved] = await Promise.all([getHomeFeed(userId, scope), getSavedPlaceRepository().getByUser(userId)]);
-  const savedPlaceIds = new Set(saved.map((s) => s.placeId));
+  const summary = useMemo(() => getBenefitSummary(benefits, statusById), [benefits, statusById]);
+  const recommended = useMemo(
+    () => getRecommendedBenefits(benefits, statusById, profile, 6),
+    [benefits, statusById, profile]
+  );
 
   return (
-    <div className="space-y-4 px-4 py-4">
-      <div className="flex gap-2 overflow-x-auto scrollbar-none">
-        {SCOPES.map((s) => (
-          <Link
-            key={s.value}
-            href={s.value === "all" ? "/home" : `/home?scope=${s.value}`}
-            className={cn(
-              "shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-              scope === s.value
-                ? "border-accent bg-accent text-accent-foreground"
-                : "border-border bg-surface text-foreground-muted hover:border-accent/40"
-            )}
-          >
-            {s.label}
-          </Link>
-        ))}
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-lg font-bold text-foreground">안녕하세요.</h1>
+        <p className="mt-0.5 text-sm text-foreground-muted">다모아가 지금 확인할 수 있는 혜택을 정리했어요.</p>
       </div>
 
-      {feed.length === 0 ? (
-        <EmptyState
-          icon={<Users className="h-6 w-6" />}
-          title="아직 보여드릴 친구 활동이 없어요"
-          description="친구를 추가하면 그들이 다녀온 곳과 후기가 여기에 모여요."
-          action={
-            <Link href="/onboarding" className="text-sm font-medium text-accent hover:underline">
-              친구 찾아보기
-            </Link>
-          }
-        />
-      ) : (
-        <div className="space-y-4">
-          {feed.map((item) => (
-            <PlaceCard
-              key={item.id}
-              place={item.place}
-              summary={item.socialSummary}
-              headline={item.headline}
-              subline={item.subline}
-              highlightReview={item.highlightReview}
-              saved={savedPlaceIds.has(item.place.id)}
-            />
+      <DemoNotice />
+
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full" />
           ))}
         </div>
+      ) : error ? (
+        <EmptyState title="혜택 정보를 불러오지 못했어요." description="잠시 후 다시 시도해 주세요." />
+      ) : (
+        <SummaryCards summary={summary} />
       )}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-foreground">다모아 추천</h2>
+        {loading ? (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : recommended.length === 0 ? (
+          <EmptyState
+            title="현재 입력한 정보에서 확인되는 혜택이 없어요."
+            description="내 정보에서 조건을 변경하거나 다른 카테고리를 확인해 보세요."
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {recommended.map((benefit) => (
+              <BenefitMiniRow key={benefit.id} benefit={benefit} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

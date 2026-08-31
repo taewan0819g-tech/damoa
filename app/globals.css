@@ -2,32 +2,32 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  --background: #faf7f2;
+  --background: #f7f8fa;
   --surface: #ffffff;
-  --surface-muted: #f2ede5;
-  --foreground: #1c1a17;
-  --foreground-muted: #6b6459;
-  --border: #e8e1d6;
-  --accent: #d9622b;
+  --surface-muted: #eef1f5;
+  --foreground: #16181d;
+  --foreground-muted: #666e7c;
+  --border: #e4e7ec;
+  --accent: #2f6fed;
   --accent-foreground: #ffffff;
-  --accent-soft: #fbe6d8;
-  --danger: #c0402c;
-  --success: #3f7a54;
+  --accent-soft: #e8f0ff;
+  --danger: #d94848;
+  --success: #1f9d55;
   --radius: 1rem;
 }
 
 .dark {
-  --background: #14120f;
-  --surface: #1e1b17;
-  --surface-muted: #262220;
-  --foreground: #f3efe8;
-  --foreground-muted: #a89e8f;
-  --border: #332e28;
-  --accent: #e8763f;
-  --accent-foreground: #17130f;
-  --accent-soft: #3a2818;
-  --danger: #e06a52;
-  --success: #6fbf8b;
+  --background: #0f1115;
+  --surface: #171a20;
+  --surface-muted: #1f232b;
+  --foreground: #f2f3f5;
+  --foreground-muted: #9aa2b1;
+  --border: #2a2f3a;
+  --accent: #5b8def;
+  --accent-foreground: #0f1115;
+  --accent-soft: #1c2740;
+  --danger: #e57373;
+  --success: #4cbb7a;
 }
 
 @theme inline {
@@ -80,9 +80,4 @@ body {
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
-}
-
-.leaflet-container {
-  font-family: var(--font-sans);
-  background: var(--color-surface-muted);
 }

@@ -1,182 +1,334 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { UserPlus, Check, Sparkles } from "lucide-react";
-import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { completeOnboarding } from "@/app/actions/auth";
-import { addFriend } from "@/app/actions/social";
-import { CATEGORY_LABELS } from "@/lib/i18n/labels";
-import { APP_NAME } from "@/config/constants";
-import { cn } from "@/lib/utils/cn";
-import type { PlaceCategory } from "@/types/domain";
-import type { UserProfile } from "@/types/domain";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { StepShell } from "./StepShell";
+import { OptionList } from "./OptionList";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Chip } from "@/components/ui/chip";
+import { useProfileStore } from "@/stores/profileStore";
+import { birthDateSchema } from "@/lib/validation/profileSchema";
+import { PROVINCES } from "@/lib/constants/regions";
+import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
+import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
+import type { BenefitCategory } from "@/types/benefit";
+import type { EmploymentStatus, EducationStatus, HousingType, MaritalStatus, UserProfile } from "@/types/profile";
 
-const DISCOVERY_STYLES = [
-  { value: "trust", label: "친구가 간 곳 위주로", desc: "신뢰할 수 있는 사람들의 선택을 먼저 볼래요" },
-  { value: "balanced", label: "적당히 섞어서", desc: "친구 취향과 새로운 곳을 골고루 볼래요" },
-  { value: "explore", label: "새로운 곳 위주로", desc: "아직 안 가본 곳을 더 많이 발견하고 싶어요" },
-] as const;
+type CurrentStatusOption = "employed" | "university" | "graduate_school" | "unemployed" | "self_employed" | "freelancer" | "other";
 
-const STEPS = ["intro", "interests", "style", "friends"] as const;
+const CURRENT_STATUS_OPTIONS: { value: CurrentStatusOption; label: string }[] = [
+  { value: "employed", label: "직장인" },
+  { value: "university", label: "대학생" },
+  { value: "graduate_school", label: "대학원생" },
+  { value: "unemployed", label: "취업준비/미취업" },
+  { value: "self_employed", label: "자영업" },
+  { value: "freelancer", label: "프리랜서" },
+  { value: "other", label: "기타" },
+];
 
-/**
- * Interests/discovery-style answers are collected for a warmer first-run
- * feel but the MVP recommendation model (config/ranking.ts) doesn't yet take
- * an explicit onboarding taste vector as input — taste is inferred instead
- * from real visits/reviews (lib/recommendations/tasteProfile.ts). Documented
- * assumption: these two steps are UX warm-up, not persisted server-side.
- */
-export function OnboardingFlow({ suggestions }: { suggestions: UserProfile[] }) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [interests, setInterests] = useState<PlaceCategory[]>([]);
-  const [style, setStyle] = useState<(typeof DISCOVERY_STYLES)[number]["value"] | null>(null);
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
-  const [isPending, startTransition] = useTransition();
-  const step = STEPS[stepIndex];
+const CURRENT_STATUS_TO_PROFILE: Record<CurrentStatusOption, { employmentStatus: EmploymentStatus; educationStatus?: EducationStatus }> = {
+  employed: { employmentStatus: "employed" },
+  university: { employmentStatus: "student", educationStatus: "university" },
+  graduate_school: { employmentStatus: "student", educationStatus: "graduate_school" },
+  unemployed: { employmentStatus: "unemployed" },
+  self_employed: { employmentStatus: "self_employed" },
+  freelancer: { employmentStatus: "freelancer" },
+  other: { employmentStatus: "other" },
+};
 
-  function next() {
-    setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
+const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
+  ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
+).map((value) => ({ value, label: HOUSING_TYPE_LABELS[value] }));
+
+const MARITAL_OPTIONS: { value: MaritalStatus; label: string }[] = (
+  ["single", "married", "divorced", "widowed"] as MaritalStatus[]
+).map((value) => ({ value, label: MARITAL_STATUS_LABELS[value] }));
+
+interface Draft {
+  birthDate: string;
+  province: string;
+  city: string;
+  currentStatus?: CurrentStatusOption;
+  individualIncomeManwon: string;
+  householdSize: string;
+  householdIncomeManwon: string;
+  maritalStatus?: MaritalStatus;
+  childrenCount: string;
+  housingType?: HousingType;
+  homeowner: boolean;
+  interests: BenefitCategory[];
+}
+
+const INITIAL_DRAFT: Draft = {
+  birthDate: "",
+  province: "",
+  city: "",
+  individualIncomeManwon: "",
+  householdSize: "",
+  householdIncomeManwon: "",
+  childrenCount: "",
+  homeowner: false,
+  interests: [],
+};
+
+const TOTAL_STEPS = 6;
+
+export function OnboardingFlow() {
+  const router = useRouter();
+  const setProfile = useProfileStore((s) => s.setProfile);
+  const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
+  const [step, setStep] = useState(0);
+  const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
+
+  const patch = (next: Partial<Draft>) => setDraft((d) => ({ ...d, ...next }));
+
+  const birthDateValid = useMemo(() => draft.birthDate !== "" && birthDateSchema.safeParse(draft.birthDate).success, [draft.birthDate]);
+
+  const goNext = () => {
+    if (step < TOTAL_STEPS - 1) {
+      setStep((s) => s + 1);
+      return;
+    }
+    finish();
+  };
+
+  const finish = () => {
+    const status = draft.currentStatus ? CURRENT_STATUS_TO_PROFILE[draft.currentStatus] : undefined;
+    const profile: UserProfile = {
+      birthDate: draft.birthDate || undefined,
+      residence: { province: draft.province || undefined, city: draft.city || undefined },
+      employmentStatus: status?.employmentStatus,
+      educationStatus: status?.educationStatus,
+      annualIndividualIncome: draft.individualIncomeManwon ? Number(draft.individualIncomeManwon) * 10000 : undefined,
+      householdSize: draft.householdSize ? Number(draft.householdSize) : undefined,
+      annualHouseholdIncome: draft.householdIncomeManwon ? Number(draft.householdIncomeManwon) * 10000 : undefined,
+      maritalStatus: draft.maritalStatus,
+      childrenCount: draft.childrenCount ? Number(draft.childrenCount) : undefined,
+      housingType: draft.housingType,
+      homeowner: draft.homeowner,
+      interests: draft.interests.length > 0 ? draft.interests : undefined,
+    };
+    setProfile(profile);
+    completeOnboarding();
+    router.push("/home");
+  };
+
+  const goBack = () => setStep((s) => Math.max(0, s - 1));
+
+  if (step === 0) {
+    return (
+      <StepShell
+        step={0}
+        totalSteps={TOTAL_STEPS}
+        title="기본정보를 알려주세요"
+        description="생년월일과 거주지역을 입력해 주세요."
+        onNext={goNext}
+        nextDisabled={!birthDateValid || !draft.province}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="birthDate">생년월일</Label>
+            <Input
+              id="birthDate"
+              type="date"
+              value={draft.birthDate}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => patch({ birthDate: e.target.value })}
+            />
+            {draft.birthDate !== "" && !birthDateValid && (
+              <p className="text-xs text-danger">올바른 생년월일을 입력해 주세요.</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="province">시/도</Label>
+            <Select id="province" value={draft.province} onChange={(e) => patch({ province: e.target.value })}>
+              <option value="">선택해 주세요</option>
+              {PROVINCES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="city">시/군/구</Label>
+            <Input id="city" placeholder="예: 이천시" value={draft.city} onChange={(e) => patch({ city: e.target.value })} />
+          </div>
+        </div>
+      </StepShell>
+    );
   }
 
-  function toggleInterest(cat: PlaceCategory) {
-    setInterests((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  if (step === 1) {
+    return (
+      <StepShell
+        step={1}
+        totalSteps={TOTAL_STEPS}
+        title="현재 상태를 알려주세요"
+        description="가장 가까운 상태를 선택해 주세요."
+        onBack={goBack}
+        onNext={goNext}
+        nextDisabled={!draft.currentStatus}
+      >
+        <OptionList
+          name="currentStatus"
+          options={CURRENT_STATUS_OPTIONS}
+          value={draft.currentStatus}
+          onChange={(v) => patch({ currentStatus: v })}
+        />
+      </StepShell>
+    );
   }
 
-  function handleAddFriend(id: string) {
-    setAddedIds((prev) => new Set(prev).add(id));
-    startTransition(async () => {
-      try {
-        await addFriend(id);
-      } catch {
-        setAddedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    });
+  if (step === 2) {
+    return (
+      <StepShell
+        step={2}
+        totalSteps={TOTAL_STEPS}
+        title="소득을 알려주세요"
+        description="세전 연소득 기준, 만원 단위로 입력해 주세요. (선택 입력)"
+        onBack={goBack}
+        onNext={goNext}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="individualIncome">개인 연소득 (만원)</Label>
+            <Input
+              id="individualIncome"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              placeholder="예: 3200"
+              value={draft.individualIncomeManwon}
+              onChange={(e) => patch({ individualIncomeManwon: e.target.value })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="householdSize">가구원 수</Label>
+            <Input
+              id="householdSize"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              placeholder="예: 2"
+              value={draft.householdSize}
+              onChange={(e) => patch({ householdSize: e.target.value })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="householdIncome">가구 연소득 (만원)</Label>
+            <Input
+              id="householdIncome"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              placeholder="예: 5000"
+              value={draft.householdIncomeManwon}
+              onChange={(e) => patch({ householdIncomeManwon: e.target.value })}
+            />
+          </div>
+        </div>
+      </StepShell>
+    );
+  }
+
+  if (step === 3) {
+    return (
+      <StepShell
+        step={3}
+        totalSteps={TOTAL_STEPS}
+        title="가족 정보를 알려주세요"
+        onBack={goBack}
+        onNext={goNext}
+        nextDisabled={!draft.maritalStatus}
+      >
+        <div className="flex flex-col gap-6">
+          <OptionList
+            name="maritalStatus"
+            options={MARITAL_OPTIONS}
+            value={draft.maritalStatus}
+            onChange={(v) => patch({ maritalStatus: v })}
+          />
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="childrenCount">자녀 수</Label>
+            <Input
+              id="childrenCount"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              placeholder="예: 0"
+              value={draft.childrenCount}
+              onChange={(e) => patch({ childrenCount: e.target.value })}
+            />
+          </div>
+        </div>
+      </StepShell>
+    );
+  }
+
+  if (step === 4) {
+    return (
+      <StepShell
+        step={4}
+        totalSteps={TOTAL_STEPS}
+        title="주거 정보를 알려주세요"
+        onBack={goBack}
+        onNext={goNext}
+        nextDisabled={!draft.housingType}
+      >
+        <div className="flex flex-col gap-6">
+          <OptionList
+            name="housingType"
+            options={HOUSING_OPTIONS}
+            value={draft.housingType}
+            onChange={(v) => patch({ housingType: v, homeowner: v === "own" ? true : draft.homeowner })}
+          />
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3.5 text-sm font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={draft.homeowner}
+              onChange={(e) => patch({ homeowner: e.target.checked })}
+              className="size-4 accent-accent"
+            />
+            주택을 소유하고 있어요
+          </label>
+        </div>
+      </StepShell>
+    );
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-5rem)] flex-col">
-      <div className="mb-8 flex gap-1.5">
-        {STEPS.map((s, i) => (
-          <div key={s} className={cn("h-1 flex-1 rounded-full", i <= stepIndex ? "bg-accent" : "bg-surface-muted")} />
-        ))}
-      </div>
-
-      <div className="flex-1">
-        {step === "intro" ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft">
-              <Sparkles className="h-7 w-7 text-accent" />
-            </div>
-            <h1 className="text-xl font-bold text-foreground">{APP_NAME}에 오신 걸 환영해요</h1>
-            <p className="text-sm leading-relaxed text-foreground-muted">
-              광고나 낯선 사람의 별점 대신, 실제로 아는 사람들이 어디에 가고 무엇을 좋아했는지부터 보여드릴게요.
-            </p>
-          </div>
-        ) : null}
-
-        {step === "interests" ? (
-          <div>
-            <h2 className="text-lg font-bold text-foreground">어떤 곳에 관심이 많으세요?</h2>
-            <p className="mt-1 text-sm text-foreground-muted">관심사에 맞는 친구 활동을 먼저 보여드려요.</p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {(Object.keys(CATEGORY_LABELS) as PlaceCategory[]).map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => toggleInterest(cat)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                    interests.includes(cat)
-                      ? "border-accent bg-accent text-accent-foreground"
-                      : "border-border bg-surface text-foreground-muted hover:border-accent/40"
-                  )}
-                >
-                  {CATEGORY_LABELS[cat]}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {step === "style" ? (
-          <div>
-            <h2 className="text-lg font-bold text-foreground">어떻게 발견하고 싶으세요?</h2>
-            <p className="mt-1 text-sm text-foreground-muted">언제든 홈 화면에서 필터로 바꿀 수 있어요.</p>
-            <div className="mt-6 space-y-2.5">
-              {DISCOVERY_STYLES.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setStyle(opt.value)}
-                  className={cn(
-                    "w-full rounded-2xl border px-4 py-3.5 text-left transition-colors",
-                    style === opt.value ? "border-accent bg-accent-soft" : "border-border bg-surface hover:border-accent/40"
-                  )}
-                >
-                  <p className="text-sm font-semibold text-foreground">{opt.label}</p>
-                  <p className="mt-0.5 text-xs text-foreground-muted">{opt.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {step === "friends" ? (
-          <div>
-            <h2 className="text-lg font-bold text-foreground">친구를 찾아보세요</h2>
-            <p className="mt-1 text-sm text-foreground-muted">친구를 추가하면 그들의 방문과 후기가 홈에 보여요.</p>
-            <div className="mt-6 space-y-2">
-              {suggestions.length === 0 ? (
-                <p className="text-sm text-foreground-muted">추천할 친구가 없어요. 나중에 검색에서 찾아보세요.</p>
-              ) : (
-                suggestions.map((u) => {
-                  const added = addedIds.has(u.id);
-                  return (
-                    <div key={u.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border p-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <Avatar src={u.avatarUrl} alt={u.displayName} size={40} />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{u.displayName}</p>
-                          <p className="truncate text-xs text-foreground-muted">@{u.username}</p>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={added ? "secondary" : "outline"}
-                        disabled={added || isPending}
-                        onClick={() => handleAddFriend(u.id)}
-                      >
-                        {added ? <Check className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
-                        {added ? "추가됨" : "추가"}
-                      </Button>
-                    </div>
-                  );
+    <StepShell
+      step={5}
+      totalSteps={TOTAL_STEPS}
+      title="관심분야를 선택해 주세요"
+      description="복수 선택할 수 있어요. (선택 입력)"
+      onBack={goBack}
+      onNext={goNext}
+      nextLabel="완료"
+    >
+      <div className="flex flex-wrap gap-2">
+        {INTEREST_CATEGORIES.map((category) => {
+          const selected = draft.interests.includes(category);
+          return (
+            <Chip
+              key={category}
+              selected={selected}
+              onClick={() =>
+                patch({
+                  interests: selected
+                    ? draft.interests.filter((c) => c !== category)
+                    : [...draft.interests, category],
                 })
-              )}
-            </div>
-          </div>
-        ) : null}
+              }
+            >
+              {CATEGORY_LABELS[category]}
+            </Chip>
+          );
+        })}
       </div>
-
-      <div className="mt-8">
-        {step === "friends" ? (
-          <form action={completeOnboarding}>
-            <Button type="submit" size="lg" className="w-full">
-              시작하기
-            </Button>
-          </form>
-        ) : (
-          <Button type="button" size="lg" className="w-full" onClick={next}>
-            다음
-          </Button>
-        )}
-      </div>
-    </div>
+    </StepShell>
   );
 }

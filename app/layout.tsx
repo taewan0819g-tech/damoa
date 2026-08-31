@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_KR } from "next/font/google";
-import { APP_NAME, APP_TAGLINE } from "@/config/constants";
 import "./globals.css";
 
 const notoSansKr = Noto_Sans_KR({
@@ -11,21 +10,21 @@ const notoSansKr = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: `${APP_NAME} — ${APP_TAGLINE}`,
-  description: "친구들이 실제로 다녀온 곳과 솔직한 의견을 발견하는 트러스트 기반 로컬 소셜 디스커버리.",
+  title: "다모아 — 놓치는 혜택 없게",
+  description: "생년월일, 거주지역, 소득 등 몇 가지 정보로 정부·청년·금융 혜택을 한곳에서 확인하세요.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#faf7f2",
+  themeColor: "#2f6fed",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className={`${notoSansKr.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-background text-foreground">{children}</body>
+      <body className="min-h-full bg-background text-foreground">{children}</body>
     </html>
   );
 }

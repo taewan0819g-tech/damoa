@@ -21,7 +21,21 @@
       "Bash(kill 64504)",
       "Bash(git status *)",
       "Bash(grep -rniE \"SUPABASE_SERVICE_ROLE_KEY\\\\s*=\\\\s*['\\\\\"a-zA-Z0-9]|sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|BEGIN \\(RSA|EC|OPENSSH\\) PRIVATE KEY\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.json\" --include=\"*.env*\" --include=\"*.mjs\" --include=\"*.mts\" . --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(grep -iE \"\\\\.env\\($|\\\\.\\)\")",
+      "Bash(grep -niE \"sk-[a-zA-Z0-9]{20,}|eyJhbGciOi|SUPABASE_SERVICE_ROLE_KEY\\\\s*=\\\\s*[\\\\\"'a-zA-Z0-9]|BEGIN \\(RSA|EC|OPENSSH\\) PRIVATE KEY|postgres\\(ql\\)?://[^ ]*:[^ ]*@\")",
+      "Bash(git remote *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Read(//Users/hwangtaewan/newapp1/**)",
+      "Read(//Users/hwangtaewan/newapp1/=== companionIds in ReviewFlow /**)",
+      "Bash(rm -rf \"app/\\(app\\)\" app/actions app/login app/onboarding app/page.tsx)",
+      "Bash(rm -rf components/settings components/navigation components/search components/social components/map components/add components/review components/place components/notifications components/onboarding)",
+      "Bash(rm -f components/ui/bottom-sheet.tsx components/ui/filter-chips.tsx components/ui/empty-state.tsx components/ui/avatar.tsx components/ui/switch.tsx components/ui/tabs.tsx)",
+      "Bash(rm -rf lib/demo lib/ranking lib/privacy lib/auth lib/repositories lib/recommendations lib/social lib/map lib/feed lib/i18n lib/analytics lib/reviews lib/supabase)",
+      "Bash(rm -rf config hooks types supabase)",
+      "Bash(npx next *)",
+      "Bash(grep -iE '\\\\.env\\($|\\\\.[^.]*$\\)|credentials|secret|\\\\.pem$|\\\\.key$')"
     ]
   }
 }
