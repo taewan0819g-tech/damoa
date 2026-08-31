@@ -6,34 +6,69 @@ import type {
   UserProfile,
 } from "@/types";
 import { resolveProfileField } from "./fieldResolver";
+import { matchRegion, type RegionSpec } from "./region";
 
 type NodeResult = "pass" | "fail" | "unknown" | "skip";
+type CompareResult = "pass" | "fail" | "unknown";
 
 function isGroup(node: EligibilityRule | EligibilityRuleGroup): node is EligibilityRuleGroup {
   return "type" in node && (node.type === "all" || node.type === "any");
 }
 
-function compare(operator: EligibilityRule["operator"], fieldValue: unknown, ruleValue: unknown): boolean {
+function isRangeValue(value: unknown): value is { min: number; max: number } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { min?: unknown }).min === "number" &&
+    typeof (value as { max?: unknown }).max === "number"
+  );
+}
+
+/**
+ * Compares a resolved profile field against a rule's expected value.
+ * Returns a tri-state result rather than a boolean: most operators only
+ * ever produce "pass"/"fail" (matching the original behavior exactly), but
+ * `range_within` and `region_in` can legitimately produce "unknown" when
+ * the profile data only partially overlaps/identifies the target — a
+ * signal the caller (evaluateRule) treats the same as a missing required
+ * field.
+ */
+function compare(operator: EligibilityRule["operator"], fieldValue: unknown, ruleValue: unknown): CompareResult {
   switch (operator) {
     case "eq":
-      return fieldValue === ruleValue;
+      return fieldValue === ruleValue ? "pass" : "fail";
     case "neq":
-      return fieldValue !== ruleValue;
+      return fieldValue !== ruleValue ? "pass" : "fail";
     case "in":
-      return Array.isArray(ruleValue) && ruleValue.includes(fieldValue);
+      return Array.isArray(ruleValue) && ruleValue.includes(fieldValue) ? "pass" : "fail";
     case "not_in":
-      return Array.isArray(ruleValue) && !ruleValue.includes(fieldValue);
+      return Array.isArray(ruleValue) && !ruleValue.includes(fieldValue) ? "pass" : "fail";
     case "gte":
-      return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue >= ruleValue;
+      return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue >= ruleValue
+        ? "pass"
+        : "fail";
     case "lte":
-      return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue <= ruleValue;
+      return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue <= ruleValue
+        ? "pass"
+        : "fail";
     case "between": {
-      if (typeof fieldValue !== "number" || !Array.isArray(ruleValue) || ruleValue.length !== 2) return false;
+      if (typeof fieldValue !== "number" || !Array.isArray(ruleValue) || ruleValue.length !== 2) return "fail";
       const [min, max] = ruleValue as [number, number];
-      return fieldValue >= min && fieldValue <= max;
+      return fieldValue >= min && fieldValue <= max ? "pass" : "fail";
+    }
+    case "range_within": {
+      if (!isRangeValue(fieldValue) || !Array.isArray(ruleValue) || ruleValue.length !== 2) return "fail";
+      const [policyMin, policyMax] = ruleValue as [number, number];
+      if (fieldValue.max < policyMin || fieldValue.min > policyMax) return "fail";
+      if (fieldValue.min >= policyMin && fieldValue.max <= policyMax) return "pass";
+      return "unknown";
+    }
+    case "region_in": {
+      if (!Array.isArray(ruleValue)) return "fail";
+      return matchRegion(fieldValue as { province?: string; city?: string } | undefined, ruleValue as RegionSpec[]);
     }
     default:
-      return false;
+      return "fail";
   }
 }
 
@@ -50,7 +85,9 @@ function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeResult {
     return rule.required ? "unknown" : "skip";
   }
 
-  return compare(rule.operator, fieldValue, rule.value) ? "pass" : "fail";
+  const result = compare(rule.operator, fieldValue, rule.value);
+  if (result === "unknown") return rule.required ? "unknown" : "skip";
+  return result;
 }
 
 function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile): NodeResult {
@@ -88,14 +125,38 @@ const NODE_RESULT_TO_STATUS: Record<Exclude<NodeResult, "skip">, EligibilityStat
  * A benefit with no structured eligibility rules is NOT assumed to be open
  * to everyone — the absence of rules usually just means the source data
  * didn't provide structured criteria, not that there are none. Such
- * benefits resolve to "unknown" unless explicitly flagged via
- * `eligibilityUnrestricted: true` (set only when the source data
- * affirmatively states universal eligibility).
+ * benefits resolve to "unknown" unless explicitly flagged as unrestricted
+ * (via `eligibilityUnrestricted: true` or `eligibilityDataStatus:
+ * "unrestricted"` — set only when the source data affirmatively states
+ * universal eligibility).
+ *
+ * "Eligibility completeness": some sources (MOIS free-text 선정기준/지원대상,
+ * Youth Center's less-verified fields, etc.) very likely have MORE real
+ * eligibility conditions than we've managed to turn into structured rules.
+ * A benefit marked `eligibilityDataStatus: "incomplete"` passing only the
+ * rules we DID manage to parse is not strong evidence of full eligibility —
+ * we could easily be missing a disqualifying region/income/employment
+ * condition. So for incomplete benefits: a definite FAIL proven from the
+ * parsed rules still produces not_eligible (a rule that CAN fail on known
+ * data is trustworthy evidence), but a pass (or an already-unknown result)
+ * never promotes to likely_eligible — it stays unknown.
  */
-export function evaluateEligibility(benefit: Pick<Benefit, "eligibility" | "eligibilityUnrestricted">, profile: UserProfile): EligibilityStatus {
+export function evaluateEligibility(
+  benefit: Pick<Benefit, "eligibility" | "eligibilityUnrestricted" | "eligibilityDataStatus">,
+  profile: UserProfile
+): EligibilityStatus {
+  const isUnrestricted = benefit.eligibilityUnrestricted === true || benefit.eligibilityDataStatus === "unrestricted";
+
   if (!benefit.eligibility) {
-    return benefit.eligibilityUnrestricted ? "likely_eligible" : "unknown";
+    return isUnrestricted ? "likely_eligible" : "unknown";
   }
+
   const result = evaluateGroup(benefit.eligibility, profile);
-  return NODE_RESULT_TO_STATUS[result === "skip" ? "unknown" : result];
+  const normalized = result === "skip" ? "unknown" : result;
+
+  if (benefit.eligibilityDataStatus === "incomplete") {
+    return normalized === "fail" ? "not_eligible" : "unknown";
+  }
+
+  return NODE_RESULT_TO_STATUS[normalized];
 }

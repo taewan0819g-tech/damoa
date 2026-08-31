@@ -13,9 +13,10 @@ export function sortBenefits(
 ): Benefit[] {
   switch (sort) {
     case "recommended": {
-      const eligibleOrUnknown = getRecommendedBenefits(benefits, statusById, profile, benefits.length);
-      const notEligible = benefits.filter((b) => statusById.get(b.id) === "not_eligible");
-      return [...eligibleOrUnknown, ...notEligible];
+      // The server-side /api/benefits/match endpoint never returns
+      // not_eligible benefits, so `benefits` here is already just
+      // likely_eligible + unknown — no separate not_eligible bucket needed.
+      return getRecommendedBenefits(benefits, statusById, profile, benefits.length);
     }
     case "deadline":
       return [...benefits].sort((a, b) => {

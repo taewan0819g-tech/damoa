@@ -165,8 +165,35 @@ function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined
   return { type: "all", rules };
 }
 
+/**
+ * Eligibility completeness for Youth Center records.
+ *
+ * We only structure age (`sprtTrgt*Age*`) and individual income
+ * (`earnCndSeCd === "0043002"`). But every live record also carries
+ * `mrgSttsCd` (marital status), `jobCd` (employment status), `schoolCd`
+ * (education status), `sbizCd` (business/startup status), `zipCd`
+ * (residence area) and `plcyMajorCd` — confirmed live via a 300-record
+ * sample (see this file's test + `adapters/youthCenter/YouthAdapter.ts`
+ * history) to always carry a non-blank value. A handful of specific codes
+ * appear alongside one dominant value per field (e.g. jobCd is "0013010"
+ * ~76% of the time, with ~10 other specific codes filling the rest), which
+ * is consistent with the dominant value meaning "제한없음"(no restriction)
+ * and the others meaning a real, specific restriction — but 온통청년 doesn't
+ * publish a code table to confirm that mapping, and guessing it wrong
+ * would risk turning a real restriction into a false pass. So none of
+ * those fields are structured into rules, and ANY built eligibility group
+ * (age and/or income) is marked "incomplete": we know there's more region/
+ * employment/education/marital/business eligibility data on every record
+ * than we can safely parse, so a pass on age+income alone is never strong
+ * enough evidence for likely_eligible.
+ */
+function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): Benefit["eligibilityDataStatus"] {
+  return eligibility ? "incomplete" : undefined;
+}
+
 export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {
   const organization = raw.sprvsnInstCdNm || raw.operInstCdNm || "온통청년";
+  const eligibility = buildEligibility(raw);
   return {
     id: `youth-${raw.plcyNo}`,
     title: raw.plcyNm,
@@ -174,7 +201,8 @@ export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {
     category: mapCategory(raw),
     source: { type: "youth_policy", organization, providerId: raw.plcyNo },
     benefitType: mapBenefitType(raw),
-    eligibility: buildEligibility(raw),
+    eligibility,
+    eligibilityDataStatus: eligibilityDataStatus(eligibility),
     application: {
       startDate: raw.bizPrdBgngYmd?.trim() || undefined,
       endDate: raw.bizPrdEndYmd?.trim() || undefined,

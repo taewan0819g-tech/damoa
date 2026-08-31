@@ -2,31 +2,49 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useProfileStore } from "@/stores/profileStore";
-import type { Benefit, BenefitMatchResult, EligibilityStatus } from "@/types/benefit";
+import type { Benefit, EligibilityStatus } from "@/types/benefit";
+
+export interface MatchCounts {
+  likelyEligible: number;
+  unknown: number;
+  notEligible: number;
+  totalEvaluated: number;
+}
 
 interface UseMatchedBenefitsResult {
+  /** likely_eligible + unknown benefits only — never includes not_eligible records. */
   benefits: Benefit[];
   statusById: Map<string, EligibilityStatus>;
+  counts: MatchCounts | null;
   loading: boolean;
   error: boolean;
+}
+
+interface MatchResponse {
+  likelyEligible: Benefit[];
+  unknown: Benefit[];
+  counts: MatchCounts;
 }
 
 interface MatchState {
   profileKey: string;
   benefits: Benefit[];
-  matches: BenefitMatchResult[];
+  statusById: Map<string, EligibilityStatus>;
+  counts: MatchCounts | null;
   loading: boolean;
   error: boolean;
 }
 
 const DEBOUNCE_MS = 400;
+const INITIAL_STATE_BASE = { benefits: [] as Benefit[], statusById: new Map<string, EligibilityStatus>(), counts: null };
 
 /**
- * Loads the full benefit catalog together with per-benefit eligibility
- * status from the server via POST /api/benefits/match. Matching now runs
- * server-side (against the fully-paginated, server-cached catalog) instead
- * of the client fetching the whole catalog and evaluating locally, so the
- * client never needs its own copy of the rule engine's logic.
+ * Loads eligibility-matched benefits from the server via
+ * POST /api/benefits/match. As of the fix for the "entire catalog sent to
+ * the browser" bug, the server only ever returns the likely_eligible and
+ * unknown subsets (never not_eligible records, never the full catalog) —
+ * this hook just combines those two arrays and derives a status map for
+ * the existing display/sort/search helpers that expect one.
  *
  * Refetches whenever the profile changes, debounced: the profile form
  * updates the store on every keystroke, and each change now triggers a
@@ -42,8 +60,7 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
 
   const [state, setState] = useState<MatchState>({
     profileKey,
-    benefits: [],
-    matches: [],
+    ...INITIAL_STATE_BASE,
     loading: true,
     error: false,
   });
@@ -71,11 +88,15 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json();
         })
-        .then((data: { benefits: Benefit[]; matches: BenefitMatchResult[] }) => {
+        .then((data: MatchResponse) => {
           if (cancelled) return;
+          const benefits = [...data.likelyEligible, ...data.unknown];
+          const statusById = new Map<string, EligibilityStatus>();
+          for (const b of data.likelyEligible) statusById.set(b.id, "likely_eligible");
+          for (const b of data.unknown) statusById.set(b.id, "unknown");
           setState((prev) =>
             prev.profileKey === profileKey
-              ? { ...prev, benefits: data.benefits, matches: data.matches, loading: false, error: false }
+              ? { ...prev, benefits, statusById, counts: data.counts, loading: false, error: false }
               : prev
           );
         })
@@ -92,7 +113,5 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
     };
   }, [profileKey]);
 
-  const statusById = useMemo(() => new Map(state.matches.map((m) => [m.benefitId, m.status])), [state.matches]);
-
-  return { benefits: state.benefits, statusById, loading: state.loading, error: state.error };
+  return { benefits: state.benefits, statusById: state.statusById, counts: state.counts, loading: state.loading, error: state.error };
 }

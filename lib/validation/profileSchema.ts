@@ -29,6 +29,12 @@ export const userProfileSchema = z.object({
     .optional(),
   annualIndividualIncome: z.number().min(0, "소득은 0 이상이어야 합니다.").optional(),
   annualHouseholdIncome: z.number().min(0, "소득은 0 이상이어야 합니다.").optional(),
+  individualIncomeBand: z
+    .enum(["none", "under_1000", "1000_2000", "2000_3000", "3000_4000", "4000_5000", "5000_7000", "over_7000", "unknown"])
+    .optional(),
+  householdIncomeBand: z
+    .enum(["none", "under_1000", "1000_2000", "2000_3000", "3000_4000", "4000_5000", "5000_7000", "over_7000", "unknown"])
+    .optional(),
   housingType: z.enum(["own", "jeonse", "monthly_rent", "living_with_family", "other"]).optional(),
   homeowner: z.boolean().optional(),
   housingDeposit: z.number().min(0).optional(),

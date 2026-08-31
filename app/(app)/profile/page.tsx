@@ -16,8 +16,9 @@ import { calculateAge } from "@/domain/profile/age";
 import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, deriveCurrentStatus } from "@/domain/profile/currentStatus";
 import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
+import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
-import type { HousingType, MaritalStatus } from "@/types/profile";
+import type { HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
   ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
@@ -119,16 +120,21 @@ export default function ProfilePage() {
       </Section>
 
       <Section title="가구·소득">
-        <Field label="개인 연소득 (만원)" htmlFor="individualIncome">
-          <Input
-            id="individualIncome"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            placeholder="예: 3200"
-            value={toManwon(profile.annualIndividualIncome)}
-            onChange={(e) => updateProfile({ annualIndividualIncome: fromManwon(e.target.value) })}
-          />
+        <Field label="개인 연소득" htmlFor="individualIncomeBand">
+          <Select
+            id="individualIncomeBand"
+            value={profile.individualIncomeBand ?? ""}
+            onChange={(e) =>
+              updateProfile({ individualIncomeBand: (e.target.value || undefined) as IncomeBand | undefined })
+            }
+          >
+            <option value="">선택해 주세요</option>
+            {INCOME_BAND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="가구원 수" htmlFor="householdSize">
           <Input
@@ -143,16 +149,21 @@ export default function ProfilePage() {
             }
           />
         </Field>
-        <Field label="가구 연소득 (만원)" htmlFor="householdIncome">
-          <Input
-            id="householdIncome"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            placeholder="예: 5000"
-            value={toManwon(profile.annualHouseholdIncome)}
-            onChange={(e) => updateProfile({ annualHouseholdIncome: fromManwon(e.target.value) })}
-          />
+        <Field label="가구 연소득" htmlFor="householdIncomeBand">
+          <Select
+            id="householdIncomeBand"
+            value={profile.householdIncomeBand ?? ""}
+            onChange={(e) =>
+              updateProfile({ householdIncomeBand: (e.target.value || undefined) as IncomeBand | undefined })
+            }
+          >
+            <option value="">선택해 주세요</option>
+            {INCOME_BAND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="금융자산 (만원)" htmlFor="financialAssets">
           <Input

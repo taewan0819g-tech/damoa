@@ -116,6 +116,25 @@ function splitDocumentList(text?: string): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
+/**
+ * Eligibility completeness for MOIS records.
+ *
+ * The only verified structured criterion is applicant age (JA0110/JA0111).
+ * Live sampling of `supportConditions` shows dozens of other JA02xx/JA03xx/
+ * JA04xx/JA11xx/JA12xx/JA21xx/JA22xx condition codes populated with "Y"/null
+ * on the very same records — clearly encoding real eligibility categories
+ * (income bracket, household type, disability, region, etc.) that odcloud
+ * doesn't publish a decoder for. The free-text `선정기준`/`지원대상` fields on
+ * `serviceList`/`serviceDetail` almost certainly restate (or add to) those
+ * same conditions in prose we don't parse either. So an age-only rule group
+ * is never treated as the FULL picture — it's marked "incomplete", meaning
+ * a pass on age alone can't promote a benefit to likely_eligible; only a
+ * definite age-based fail can still produce not_eligible.
+ */
+function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): Benefit["eligibilityDataStatus"] {
+  return eligibility ? "incomplete" : undefined;
+}
+
 export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, eligibility?: EligibilityRuleGroup): Benefit {
   return {
     id: `mois-${raw.서비스ID}`,
@@ -125,6 +144,7 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, eligib
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,
+    eligibilityDataStatus: eligibilityDataStatus(eligibility),
     application: {
       officialUrl: raw.상세조회URL,
       sourceUrl: raw.상세조회URL,
@@ -145,6 +165,7 @@ export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, eligibilit
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,
+    eligibilityDataStatus: eligibilityDataStatus(eligibility),
     application: {
       officialUrl: raw.온라인신청사이트URL,
       applicationUrl: raw.온라인신청사이트URL,

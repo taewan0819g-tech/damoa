@@ -12,10 +12,11 @@ import { useProfileStore } from "@/stores/profileStore";
 import { birthDateSchema } from "@/lib/validation/profileSchema";
 import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
+import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
 import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, type CurrentStatusOption } from "@/domain/profile/currentStatus";
 import type { BenefitCategory } from "@/types/benefit";
-import type { HousingType, MaritalStatus, UserProfile } from "@/types/profile";
+import type { HousingType, IncomeBand, MaritalStatus, UserProfile } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
   ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
@@ -30,9 +31,9 @@ interface Draft {
   province: string;
   city: string;
   currentStatus?: CurrentStatusOption;
-  individualIncomeManwon: string;
+  individualIncomeBand?: IncomeBand;
   householdSize: string;
-  householdIncomeManwon: string;
+  householdIncomeBand?: IncomeBand;
   maritalStatus?: MaritalStatus;
   childrenCount: string;
   housingType?: HousingType;
@@ -44,9 +45,7 @@ const INITIAL_DRAFT: Draft = {
   birthDate: "",
   province: "",
   city: "",
-  individualIncomeManwon: "",
   householdSize: "",
-  householdIncomeManwon: "",
   childrenCount: "",
   homeowner: false,
   interests: [],
@@ -80,9 +79,9 @@ export function OnboardingFlow() {
       residence: { province: draft.province || undefined, city: draft.city || undefined },
       employmentStatus: status?.employmentStatus,
       educationStatus: status?.educationStatus,
-      annualIndividualIncome: draft.individualIncomeManwon ? Number(draft.individualIncomeManwon) * 10000 : undefined,
+      individualIncomeBand: draft.individualIncomeBand,
       householdSize: draft.householdSize ? Number(draft.householdSize) : undefined,
-      annualHouseholdIncome: draft.householdIncomeManwon ? Number(draft.householdIncomeManwon) * 10000 : undefined,
+      householdIncomeBand: draft.householdIncomeBand,
       maritalStatus: draft.maritalStatus,
       childrenCount: draft.childrenCount ? Number(draft.childrenCount) : undefined,
       housingType: draft.housingType,
@@ -167,22 +166,25 @@ export function OnboardingFlow() {
         step={2}
         totalSteps={TOTAL_STEPS}
         title="소득을 알려주세요"
-        description="세전 연소득 기준, 만원 단위로 입력해 주세요. (선택 입력)"
+        description="세전 연소득 기준, 해당하는 구간을 선택해 주세요. (선택 입력)"
         onBack={goBack}
         onNext={goNext}
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="individualIncome">개인 연소득 (만원)</Label>
-            <Input
-              id="individualIncome"
-              type="number"
-              min={0}
-              inputMode="numeric"
-              placeholder="예: 3200"
-              value={draft.individualIncomeManwon}
-              onChange={(e) => patch({ individualIncomeManwon: e.target.value })}
-            />
+            <Label htmlFor="individualIncomeBand">개인 연소득</Label>
+            <Select
+              id="individualIncomeBand"
+              value={draft.individualIncomeBand ?? ""}
+              onChange={(e) => patch({ individualIncomeBand: (e.target.value || undefined) as IncomeBand | undefined })}
+            >
+              <option value="">선택해 주세요</option>
+              {INCOME_BAND_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="householdSize">가구원 수</Label>
@@ -197,16 +199,19 @@ export function OnboardingFlow() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="householdIncome">가구 연소득 (만원)</Label>
-            <Input
-              id="householdIncome"
-              type="number"
-              min={0}
-              inputMode="numeric"
-              placeholder="예: 5000"
-              value={draft.householdIncomeManwon}
-              onChange={(e) => patch({ householdIncomeManwon: e.target.value })}
-            />
+            <Label htmlFor="householdIncomeBand">가구 연소득</Label>
+            <Select
+              id="householdIncomeBand"
+              value={draft.householdIncomeBand ?? ""}
+              onChange={(e) => patch({ householdIncomeBand: (e.target.value || undefined) as IncomeBand | undefined })}
+            >
+              <option value="">선택해 주세요</option>
+              {INCOME_BAND_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
       </StepShell>

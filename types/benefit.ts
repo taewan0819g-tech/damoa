@@ -55,7 +55,21 @@ export type RuleOperator =
   | "gte"
   | "lte"
   | "between"
-  | "exists";
+  | "exists"
+  /**
+   * Range-vs-range containment: the resolved field value must be a
+   * `{min, max}` range (e.g. an income band converted to a range). `value`
+   * is the policy's own `[min, max]` range. Fully contained -> pass, no
+   * overlap at all -> fail, partial overlap -> unknown (we can't prove the
+   * user's actual number falls on the eligible side).
+   */
+  | "range_within"
+  /**
+   * Hierarchical Korean region matching. `value` is a `RegionSpec[]`
+   * (OR'd list of `{province, city?}`; omitting `city` allows the whole
+   * province). See lib/eligibility/region.ts for alias normalization.
+   */
+  | "region_in";
 
 export interface EligibilityRule {
   id: string;
@@ -116,9 +130,26 @@ export interface Benefit {
    * restrictions. Only set this when the source data affirmatively states
    * universal eligibility — do NOT infer this from a benefit simply lacking
    * structured `eligibility` rules (that case should resolve to "unknown",
-   * not "likely_eligible").
+   * not "likely_eligible"). Equivalent to `eligibilityDataStatus: "unrestricted"`;
+   * kept as its own flag for backward compatibility.
    */
   eligibilityUnrestricted?: boolean;
+  /**
+   * Whether the structured `eligibility` rules capture ALL of the source's
+   * real eligibility conditions ("complete"), only SOME of them
+   * ("incomplete" — e.g. we parsed age but the source also has an
+   * unparsed region/employment/income restriction in free text),
+   * or the source affirmatively states there are none ("unrestricted").
+   *
+   * Left undefined (or "complete") preserves the original all-pass/any-fail
+   * behavior. "incomplete" changes the outcome: a benefit whose parsed rules
+   * all pass is NOT promoted to likely_eligible, because there may be other
+   * real requirements we never got to check — only a definite fail proven
+   * from the parsed rules can produce not_eligible; everything else is
+   * unknown. This is the fix for silently overclaiming eligibility on
+   * partially-structured source data.
+   */
+  eligibilityDataStatus?: "unrestricted" | "complete" | "incomplete";
 }
 
 export type EligibilityStatus = "likely_eligible" | "unknown" | "not_eligible";

@@ -1,6 +1,17 @@
 import { z } from "zod";
 
-const ruleOperatorSchema = z.enum(["eq", "neq", "in", "not_in", "gte", "lte", "between", "exists"]);
+const ruleOperatorSchema = z.enum([
+  "eq",
+  "neq",
+  "in",
+  "not_in",
+  "gte",
+  "lte",
+  "between",
+  "exists",
+  "range_within",
+  "region_in",
+]);
 
 const eligibilityRuleSchema = z.object({
   id: z.string(),
@@ -93,6 +104,7 @@ export const benefitSchema = z.object({
   updatedAt: z.string().optional(),
   isDemo: z.boolean().optional(),
   eligibilityUnrestricted: z.boolean().optional(),
+  eligibilityDataStatus: z.enum(["unrestricted", "complete", "incomplete"]).optional(),
 });
 
 export function parseBenefit(value: unknown) {
