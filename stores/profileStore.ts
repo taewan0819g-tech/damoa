@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { UserProfile } from "@/types/profile";
@@ -5,7 +6,6 @@ import type { UserProfile } from "@/types/profile";
 interface ProfileState {
   profile: UserProfile;
   onboardingCompleted: boolean;
-  hasHydrated: boolean;
   updateProfile: (patch: Partial<UserProfile>) => void;
   setProfile: (profile: UserProfile) => void;
   completeOnboarding: () => void;
@@ -19,7 +19,6 @@ export const useProfileStore = create<ProfileState>()(
     (set) => ({
       profile: EMPTY_PROFILE,
       onboardingCompleted: false,
-      hasHydrated: false,
       updateProfile: (patch) => set((state) => ({ profile: { ...state.profile, ...patch } })),
       setProfile: (profile) => set({ profile }),
       completeOnboarding: () => set({ onboardingCompleted: true }),
@@ -28,9 +27,6 @@ export const useProfileStore = create<ProfileState>()(
     {
       name: "damoa-profile",
       partialize: (state) => ({ profile: state.profile, onboardingCompleted: state.onboardingCompleted }),
-      onRehydrateStorage: () => () => {
-        useProfileStore.setState({ hasHydrated: true });
-      },
       // Corrupted localStorage payloads fall back to defaults instead of throwing during hydration.
       merge: (persisted, current) => {
         try {
@@ -45,3 +41,18 @@ export const useProfileStore = create<ProfileState>()(
     }
   )
 );
+
+/**
+ * Tracks whether the persisted profile store has finished rehydrating from
+ * localStorage. Uses zustand's own `persist.hasHydrated()` / `onFinishHydration`
+ * APIs instead of a plain state field, since a hydration flag stored inside the
+ * state itself can be clobbered by the middleware's internal replace-on-hydrate
+ * step depending on call ordering.
+ */
+export function useProfileHydrated(): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => useProfileStore.persist.onFinishHydration(onStoreChange),
+    () => useProfileStore.persist.hasHydrated(),
+    () => false
+  );
+}

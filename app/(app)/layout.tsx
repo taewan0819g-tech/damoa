@@ -3,11 +3,11 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
-import { useProfileStore } from "@/stores/profileStore";
+import { useProfileStore, useProfileHydrated } from "@/stores/profileStore";
 
 export default function AppGroupLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const hasHydrated = useProfileStore((s) => s.hasHydrated);
+  const hasHydrated = useProfileHydrated();
   const onboardingCompleted = useProfileStore((s) => s.onboardingCompleted);
 
   useEffect(() => {

@@ -13,30 +13,9 @@ import { birthDateSchema } from "@/lib/validation/profileSchema";
 import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
+import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, type CurrentStatusOption } from "@/domain/profile/currentStatus";
 import type { BenefitCategory } from "@/types/benefit";
-import type { EmploymentStatus, EducationStatus, HousingType, MaritalStatus, UserProfile } from "@/types/profile";
-
-type CurrentStatusOption = "employed" | "university" | "graduate_school" | "unemployed" | "self_employed" | "freelancer" | "other";
-
-const CURRENT_STATUS_OPTIONS: { value: CurrentStatusOption; label: string }[] = [
-  { value: "employed", label: "직장인" },
-  { value: "university", label: "대학생" },
-  { value: "graduate_school", label: "대학원생" },
-  { value: "unemployed", label: "취업준비/미취업" },
-  { value: "self_employed", label: "자영업" },
-  { value: "freelancer", label: "프리랜서" },
-  { value: "other", label: "기타" },
-];
-
-const CURRENT_STATUS_TO_PROFILE: Record<CurrentStatusOption, { employmentStatus: EmploymentStatus; educationStatus?: EducationStatus }> = {
-  employed: { employmentStatus: "employed" },
-  university: { employmentStatus: "student", educationStatus: "university" },
-  graduate_school: { employmentStatus: "student", educationStatus: "graduate_school" },
-  unemployed: { employmentStatus: "unemployed" },
-  self_employed: { employmentStatus: "self_employed" },
-  freelancer: { employmentStatus: "freelancer" },
-  other: { employmentStatus: "other" },
-};
+import type { HousingType, MaritalStatus, UserProfile } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
   ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
