@@ -1,4 +1,11 @@
-import type { Benefit, BenefitCategory, BenefitType, EligibilityRuleGroup, InstitutionType } from "@/types/benefit";
+import type {
+  Benefit,
+  BenefitCategory,
+  BenefitType,
+  EligibilityRule,
+  EligibilityRuleGroup,
+  InstitutionType,
+} from "@/types/benefit";
 
 /**
  * Raw record shape confirmed live against the 온통청년(Youth Center) Open API
@@ -36,6 +43,19 @@ export interface YouthRawPolicy {
   aplyYmd?: string;
   frstRegDt?: string;
   lastMdfcnDt?: string;
+  /**
+   * Income condition type code. Confirmed via a 500-record correlation
+   * analysis against `earnMinAmt`/`earnMaxAmt`/`earnEtcCn`:
+   *   "0043001" = no income condition
+   *   "0043002" = structured min/max income amount (KRW, annual) — the only
+   *               variant we can safely turn into a rule
+   *   "0043003" = free-text income description only (`earnEtcCn`) — not
+   *               structured, left as unstructured/unknown
+   */
+  earnCndSeCd?: string;
+  earnMinAmt?: string;
+  earnMaxAmt?: string;
+  earnEtcCn?: string;
   [key: string]: unknown;
 }
 
@@ -78,17 +98,71 @@ function splitList(text?: string): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
-function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined {
+function buildAgeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
   if (raw.sprtTrgtAgeLmtYn !== "Y") return undefined;
   const min = raw.sprtTrgtMinAge ? Number(raw.sprtTrgtMinAge) : undefined;
   const max = raw.sprtTrgtMaxAge ? Number(raw.sprtTrgtMaxAge) : undefined;
   if (typeof min === "number" && typeof max === "number" && !Number.isNaN(min) && !Number.isNaN(max)) {
+    return { id: "youth-age", field: "age", operator: "between", value: [min, max], required: true };
+  }
+  return undefined;
+}
+
+/**
+ * Only `earnCndSeCd === "0043002"` (structured min/max income amount) is
+ * turned into a rule. "0043001" (no condition) needs no rule, and
+ * "0043003" (free-text description only, in `earnEtcCn`) can't be
+ * structured without guessing at natural-language content, so it's left
+ * unstructured — the benefit falls back to "unknown" for that criterion
+ * rather than a false "likely_eligible" or "not_eligible".
+ */
+// earnMinAmt/earnMaxAmt are denominated in 만원 (10,000 KRW) units — confirmed
+// live: getPlcy?plcyNo=20260724005400113307 ("햇살론유스", a well-known
+// program capped around 35,000,000 KRW annual income) returns
+// earnMaxAmt: "3500", i.e. 3500만원 = 35,000,000 KRW. The profile's
+// `annualIndividualIncome` field is raw KRW (see OnboardingFlow.tsx, which
+// multiplies the user's 만원 input by 10,000 before storing it), so these
+// amounts must be converted to raw KRW to compare correctly.
+const MANWON_TO_KRW = 10000;
+
+function buildIncomeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
+  if (raw.earnCndSeCd !== "0043002") return undefined;
+  const min = raw.earnMinAmt ? Number(raw.earnMinAmt) : undefined;
+  const max = raw.earnMaxAmt ? Number(raw.earnMaxAmt) : undefined;
+  if (typeof min === "number" && typeof max === "number" && !Number.isNaN(min) && !Number.isNaN(max)) {
     return {
-      type: "all",
-      rules: [{ id: "youth-age", field: "age", operator: "between", value: [min, max], required: true }],
+      id: "youth-income",
+      field: "annualIndividualIncome",
+      operator: "between",
+      value: [min * MANWON_TO_KRW, max * MANWON_TO_KRW],
+      required: true,
+    };
+  }
+  if (typeof max === "number" && !Number.isNaN(max)) {
+    return {
+      id: "youth-income-max",
+      field: "annualIndividualIncome",
+      operator: "lte",
+      value: max * MANWON_TO_KRW,
+      required: true,
+    };
+  }
+  if (typeof min === "number" && !Number.isNaN(min)) {
+    return {
+      id: "youth-income-min",
+      field: "annualIndividualIncome",
+      operator: "gte",
+      value: min * MANWON_TO_KRW,
+      required: true,
     };
   }
   return undefined;
+}
+
+function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined {
+  const rules = [buildAgeRule(raw), buildIncomeRule(raw)].filter((r): r is EligibilityRule => Boolean(r));
+  if (rules.length === 0) return undefined;
+  return { type: "all", rules };
 }
 
 export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {

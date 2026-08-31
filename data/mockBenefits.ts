@@ -455,6 +455,7 @@ export const mockBenefits: Benefit[] = [
     tags: ["예금"],
     updatedAt: now,
     isDemo: true,
+    eligibilityUnrestricted: true,
   },
   {
     id: "fin-003",

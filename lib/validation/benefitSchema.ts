@@ -92,6 +92,7 @@ export const benefitSchema = z.object({
   tags: z.array(z.string()).optional(),
   updatedAt: z.string().optional(),
   isDemo: z.boolean().optional(),
+  eligibilityUnrestricted: z.boolean().optional(),
 });
 
 export function parseBenefit(value: unknown) {

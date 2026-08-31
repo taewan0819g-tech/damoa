@@ -1,5 +1,6 @@
 import type { Benefit } from "@/types/benefit";
 import type { BenefitProvider } from "./BenefitProvider";
+import { memoizeAsync } from "@/lib/cache/memoizeAsync";
 import { normalizeYouthPolicy, type YouthRawPolicy } from "@/adapters/youthCenter/YouthAdapter";
 
 /**
@@ -14,10 +15,20 @@ import { normalizeYouthPolicy, type YouthRawPolicy } from "@/adapters/youthCente
  * Response envelope: { resultCode, resultMessage, result: { pagging, youthPolicyList } }.
  * This file only runs server-side (imported by Route Handlers) —
  * YOUTH_POLICY_API_KEY is never bundled to the client.
+ *
+ * The catalog is fully paginated (not capped at a single page) and cached
+ * in-process via `memoizeAsync`, so records beyond the old cutoff are
+ * discoverable and repeated requests don't re-hit the upstream API.
+ * `getBenefit()` resolves from that same cached catalog instead of doing a
+ * live per-ID fetch — the old live per-ID `getPlcy?plcyNo=` call returned
+ * `lclsfNm`/`mclsfNm` as null in filtered mode, which broke category
+ * mapping; reading from the already-normalized cached catalog sidesteps
+ * that bug entirely.
  */
 const BASE_URL = "https://www.youthcenter.go.kr/go/ythip/getPlcy";
-const PAGE_SIZE = 500; // caps total records fetched per request, mirrors MOISBenefitProvider's cap
-const CACHE_SECONDS = 3600;
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 20; // up to 20,000 records — comfortably covers the full catalog
+const CACHE_MS = 3600_000;
 
 interface YouthApiResponse {
   resultCode: number;
@@ -33,27 +44,50 @@ function buildUrl(key: string, params: Record<string, string>): string {
   return `${BASE_URL}?${search.toString()}`;
 }
 
+async function fetchAllYouthPolicies(key: string): Promise<YouthRawPolicy[]> {
+  const results: YouthRawPolicy[] = [];
+  for (let pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
+    try {
+      const url = buildUrl(key, { pageNum: String(pageNum), pageSize: String(PAGE_SIZE) });
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error(`[YouthCenterBenefitProvider] getPlcy HTTP ${res.status} on page ${pageNum}`);
+        break;
+      }
+      const json = (await res.json()) as YouthApiResponse;
+      if (json.resultCode !== 200) {
+        console.error(
+          `[YouthCenterBenefitProvider] getPlcy returned resultCode ${json.resultCode}: ${json.resultMessage}`
+        );
+        break;
+      }
+      const list = json.result?.youthPolicyList ?? [];
+      const totCount = json.result?.pagging?.totCount ?? 0;
+      results.push(...list);
+      if (list.length < PAGE_SIZE || pageNum * PAGE_SIZE >= totCount) break;
+    } catch (err) {
+      console.error(`[YouthCenterBenefitProvider] Failed to fetch getPlcy page ${pageNum}:`, err);
+      break;
+    }
+  }
+  return results;
+}
+
+async function buildCatalog(key: string): Promise<Benefit[]> {
+  const rawList = await fetchAllYouthPolicies(key);
+  return rawList.map(normalizeYouthPolicy);
+}
+
+const getCachedCatalog = memoizeAsync(buildCatalog, CACHE_MS);
+
 export class YouthCenterBenefitProvider implements BenefitProvider {
   async getBenefits(): Promise<Benefit[]> {
     const key = process.env.YOUTH_POLICY_API_KEY;
     if (!key) return [];
-
     try {
-      const url = buildUrl(key, { pageNum: "1", pageSize: String(PAGE_SIZE) });
-      const res = await fetch(url, { next: { revalidate: CACHE_SECONDS } });
-      if (!res.ok) {
-        console.error(`[YouthCenterBenefitProvider] getPlcy HTTP ${res.status}`);
-        return [];
-      }
-      const json = (await res.json()) as YouthApiResponse;
-      if (json.resultCode !== 200) {
-        console.error(`[YouthCenterBenefitProvider] getPlcy returned resultCode ${json.resultCode}: ${json.resultMessage}`);
-        return [];
-      }
-      const list = json.result?.youthPolicyList ?? [];
-      return list.map(normalizeYouthPolicy);
+      return await getCachedCatalog(key);
     } catch (err) {
-      console.error("[YouthCenterBenefitProvider] Failed to fetch getPlcy:", err);
+      console.error("[YouthCenterBenefitProvider] Failed to build catalog:", err);
       return [];
     }
   }
@@ -61,21 +95,12 @@ export class YouthCenterBenefitProvider implements BenefitProvider {
   async getBenefit(id: string): Promise<Benefit | null> {
     const key = process.env.YOUTH_POLICY_API_KEY;
     if (!key) return null;
-    const plcyNo = id.startsWith("youth-") ? id.slice("youth-".length) : id;
 
     try {
-      const url = buildUrl(key, { pageNum: "1", pageSize: "1", plcyNo });
-      const res = await fetch(url, { next: { revalidate: CACHE_SECONDS } });
-      if (!res.ok) {
-        console.error(`[YouthCenterBenefitProvider] getPlcy detail HTTP ${res.status} for ${plcyNo}`);
-        return null;
-      }
-      const json = (await res.json()) as YouthApiResponse;
-      if (json.resultCode !== 200) return null;
-      const raw = json.result?.youthPolicyList?.[0];
-      return raw ? normalizeYouthPolicy(raw) : null;
+      const catalog = await getCachedCatalog(key);
+      return catalog.find((b) => b.id === id) ?? null;
     } catch (err) {
-      console.error(`[YouthCenterBenefitProvider] Failed to fetch getPlcy detail for ${plcyNo}:`, err);
+      console.error(`[YouthCenterBenefitProvider] Failed to resolve ${id} from catalog:`, err);
       return null;
     }
   }

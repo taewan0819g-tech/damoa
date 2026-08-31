@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { useBenefits } from "@/hooks/useBenefits";
+import { useMatchedBenefits } from "@/hooks/useMatchedBenefits";
 import { useProfileStore } from "@/stores/profileStore";
 import { searchBenefits } from "@/domain/benefit/search";
 import { sortBenefits, type BenefitSort } from "@/domain/benefit/sort";
@@ -33,7 +33,7 @@ const SORT_OPTIONS: { value: BenefitSort; label: string }[] = [
 ];
 
 export default function BenefitsPage() {
-  const { benefits, statusById, loading, error } = useBenefits();
+  const { benefits, statusById, loading, error } = useMatchedBenefits();
   const profile = useProfileStore((s) => s.profile);
 
   const [query, setQuery] = useState("");

@@ -111,6 +111,14 @@ export interface Benefit {
   tags?: string[];
   updatedAt?: string;
   isDemo?: boolean;
+  /**
+   * Explicitly marks a benefit as open to everyone with no eligibility
+   * restrictions. Only set this when the source data affirmatively states
+   * universal eligibility — do NOT infer this from a benefit simply lacking
+   * structured `eligibility` rules (that case should resolve to "unknown",
+   * not "likely_eligible").
+   */
+  eligibilityUnrestricted?: boolean;
 }
 
 export type EligibilityStatus = "likely_eligible" | "unknown" | "not_eligible";

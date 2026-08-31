@@ -1,4 +1,5 @@
 import type {
+  Benefit,
   EligibilityRule,
   EligibilityRuleGroup,
   EligibilityStatus,
@@ -82,14 +83,19 @@ const NODE_RESULT_TO_STATUS: Record<Exclude<NodeResult, "skip">, EligibilityStat
 };
 
 /**
- * Evaluates a benefit's eligibility rule group against a user profile.
- * A benefit with no eligibility rules is treated as open to everyone.
+ * Evaluates a benefit's eligibility against a user profile.
+ *
+ * A benefit with no structured eligibility rules is NOT assumed to be open
+ * to everyone — the absence of rules usually just means the source data
+ * didn't provide structured criteria, not that there are none. Such
+ * benefits resolve to "unknown" unless explicitly flagged via
+ * `eligibilityUnrestricted: true` (set only when the source data
+ * affirmatively states universal eligibility).
  */
-export function evaluateEligibility(
-  eligibility: EligibilityRuleGroup | undefined,
-  profile: UserProfile
-): EligibilityStatus {
-  if (!eligibility) return "likely_eligible";
-  const result = evaluateGroup(eligibility, profile);
+export function evaluateEligibility(benefit: Pick<Benefit, "eligibility" | "eligibilityUnrestricted">, profile: UserProfile): EligibilityStatus {
+  if (!benefit.eligibility) {
+    return benefit.eligibilityUnrestricted ? "likely_eligible" : "unknown";
+  }
+  const result = evaluateGroup(benefit.eligibility, profile);
   return NODE_RESULT_TO_STATUS[result === "skip" ? "unknown" : result];
 }

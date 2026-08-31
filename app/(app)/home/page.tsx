@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { useBenefits } from "@/hooks/useBenefits";
+import { useMatchedBenefits } from "@/hooks/useMatchedBenefits";
 import { useProfileStore } from "@/stores/profileStore";
 import { getBenefitSummary } from "@/domain/benefit/summary";
 import { getRecommendedBenefits } from "@/domain/benefit/recommend";
+import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
 import { DemoNotice } from "@/components/home/DemoNotice";
 import { SummaryCards } from "@/components/home/SummaryCards";
 import { BenefitMiniRow } from "@/components/benefit/BenefitMiniRow";
@@ -12,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default function HomePage() {
-  const { benefits, statusById, loading, error } = useBenefits();
+  const { benefits, statusById, loading, error } = useMatchedBenefits();
   const profile = useProfileStore((s) => s.profile);
   const isDemo = benefits.length > 0 && benefits.every((b) => b.isDemo);
 
@@ -21,6 +22,7 @@ export default function HomePage() {
     () => getRecommendedBenefits(benefits, statusById, profile, 6),
     [benefits, statusById, profile]
   );
+  const needsReview = useMemo(() => getUnknownBenefits(benefits, statusById, 6), [benefits, statusById]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -64,6 +66,22 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {!loading && !error && needsReview.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">확인이 필요해요</h2>
+            <p className="mt-0.5 text-xs text-foreground-muted">
+              자격 조건 정보가 부족해 자동으로 판단할 수 없어요. 직접 조건을 확인해 주세요.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {needsReview.map((benefit) => (
+              <BenefitMiniRow key={benefit.id} benefit={benefit} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

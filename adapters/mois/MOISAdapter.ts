@@ -116,7 +116,7 @@ function splitDocumentList(text?: string): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
-export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem): Benefit {
+export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, eligibility?: EligibilityRuleGroup): Benefit {
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
@@ -124,6 +124,7 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem): Benef
     category: mapCategory(raw),
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
+    eligibility,
     application: {
       officialUrl: raw.상세조회URL,
       sourceUrl: raw.상세조회URL,

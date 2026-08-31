@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
 import { Bookmark } from "lucide-react";
-import { useBenefits } from "@/hooks/useBenefits";
+import { useSavedBenefits } from "@/hooks/useSavedBenefits";
 import { useSavedBenefitStore } from "@/stores/savedBenefitStore";
 import { BenefitCard } from "@/components/benefit/BenefitCard";
 import { BenefitCardSkeleton } from "@/components/benefit/BenefitCardSkeleton";
@@ -11,10 +10,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 
 export default function SavedPage() {
-  const { benefits, statusById, loading, error } = useBenefits();
+  const { benefits: savedBenefits, statusById, loading, error } = useSavedBenefits();
   const savedIds = useSavedBenefitStore((s) => s.savedIds);
-
-  const savedBenefits = useMemo(() => benefits.filter((b) => savedIds.includes(b.id)), [benefits, savedIds]);
 
   return (
     <div className="flex flex-col gap-5">
