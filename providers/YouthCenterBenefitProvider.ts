@@ -5,16 +5,33 @@ import { normalizeYouthPolicy, type YouthRawPolicy } from "@/adapters/youthCente
 /**
  * 온통청년(Youth Center) Open API integration.
  *
- * STATUS (2026-08-31): the only documented endpoint is currently
- * unreachable — see adapters/youthCenter/YouthAdapter.ts for the full
- * investigation. This class still makes a real, server-side HTTP request
- * (using YOUTH_POLICY_API_KEY, never exposed to the client) on every call so
- * the integration is genuinely wired up and will start working the moment
- * the endpoint/spec is fixed or updated — it does not fabricate data in the
- * meantime. On any failure it logs a clear diagnostic and returns an empty
- * result instead of silently substituting mock data.
+ * The endpoint documented on the site's own docs page
+ * (youthcenter.go.kr/opi/youthPlcyList.do) is dead — confirmed via curl, it
+ * 302-redirects to an unreachable internal host regardless of parameters.
+ * The working endpoint, confirmed live 2026-08-31 with a real key, is:
+ *   GET https://www.youthcenter.go.kr/go/ythip/getPlcy
+ *     ?apiKeyNm=<key>&pageNum=&pageSize=&pageType=1&rtnType=json[&plcyNo=<id>]
+ * Response envelope: { resultCode, resultMessage, result: { pagging, youthPolicyList } }.
+ * This file only runs server-side (imported by Route Handlers) —
+ * YOUTH_POLICY_API_KEY is never bundled to the client.
  */
-const ENDPOINT = "https://www.youthcenter.go.kr/opi/youthPlcyList.do";
+const BASE_URL = "https://www.youthcenter.go.kr/go/ythip/getPlcy";
+const PAGE_SIZE = 500; // caps total records fetched per request, mirrors MOISBenefitProvider's cap
+const CACHE_SECONDS = 3600;
+
+interface YouthApiResponse {
+  resultCode: number;
+  resultMessage: string;
+  result?: {
+    pagging?: { totCount: number; pageNum: number; pageSize: number };
+    youthPolicyList?: YouthRawPolicy[];
+  };
+}
+
+function buildUrl(key: string, params: Record<string, string>): string {
+  const search = new URLSearchParams({ apiKeyNm: key, pageType: "1", rtnType: "json", ...params });
+  return `${BASE_URL}?${search.toString()}`;
+}
 
 export class YouthCenterBenefitProvider implements BenefitProvider {
   async getBenefits(): Promise<Benefit[]> {
@@ -22,34 +39,45 @@ export class YouthCenterBenefitProvider implements BenefitProvider {
     if (!key) return [];
 
     try {
-      const url = `${ENDPOINT}?openApiVlak=${encodeURIComponent(key)}&pageIndex=1&display=100`;
-      const res = await fetch(url, { next: { revalidate: 3600 }, redirect: "manual" });
-
-      if (res.status >= 300 && res.status < 400) {
-        console.error(
-          `[YouthCenterBenefitProvider] ${ENDPOINT} redirected (HTTP ${res.status}) to an unreachable host — the documented endpoint appears to be decommissioned. Returning no youth-policy records.`
-        );
-        return [];
-      }
+      const url = buildUrl(key, { pageNum: "1", pageSize: String(PAGE_SIZE) });
+      const res = await fetch(url, { next: { revalidate: CACHE_SECONDS } });
       if (!res.ok) {
-        console.error(`[YouthCenterBenefitProvider] youthPlcyList.do HTTP ${res.status}`);
+        console.error(`[YouthCenterBenefitProvider] getPlcy HTTP ${res.status}`);
         return [];
       }
-
-      // Response schema is not confirmed (see YouthAdapter.ts) — we can't
-      // safely parse XML/JSON into records without guessing field names, so
-      // normalizeYouthPolicy always returns null for now.
-      const raw: YouthRawPolicy[] = [];
-      return raw.map(normalizeYouthPolicy).filter((b): b is Benefit => b !== null);
+      const json = (await res.json()) as YouthApiResponse;
+      if (json.resultCode !== 200) {
+        console.error(`[YouthCenterBenefitProvider] getPlcy returned resultCode ${json.resultCode}: ${json.resultMessage}`);
+        return [];
+      }
+      const list = json.result?.youthPolicyList ?? [];
+      return list.map(normalizeYouthPolicy);
     } catch (err) {
-      console.error("[YouthCenterBenefitProvider] Failed to reach youthPlcyList.do:", err);
+      console.error("[YouthCenterBenefitProvider] Failed to fetch getPlcy:", err);
       return [];
     }
   }
 
-  async getBenefit(): Promise<Benefit | null> {
-    // No confirmed single-policy detail endpoint or response schema yet.
-    return null;
+  async getBenefit(id: string): Promise<Benefit | null> {
+    const key = process.env.YOUTH_POLICY_API_KEY;
+    if (!key) return null;
+    const plcyNo = id.startsWith("youth-") ? id.slice("youth-".length) : id;
+
+    try {
+      const url = buildUrl(key, { pageNum: "1", pageSize: "1", plcyNo });
+      const res = await fetch(url, { next: { revalidate: CACHE_SECONDS } });
+      if (!res.ok) {
+        console.error(`[YouthCenterBenefitProvider] getPlcy detail HTTP ${res.status} for ${plcyNo}`);
+        return null;
+      }
+      const json = (await res.json()) as YouthApiResponse;
+      if (json.resultCode !== 200) return null;
+      const raw = json.result?.youthPolicyList?.[0];
+      return raw ? normalizeYouthPolicy(raw) : null;
+    } catch (err) {
+      console.error(`[YouthCenterBenefitProvider] Failed to fetch getPlcy detail for ${plcyNo}:`, err);
+      return null;
+    }
   }
 }
 
