@@ -149,4 +149,78 @@ describe("evaluateEligibility", () => {
     };
     expect(evaluateEligibility(makeBenefit({ eligibility: group }), {})).toBe("likely_eligible");
   });
+
+  describe("range_within_interval (end-to-end through the rule engine, section 6/25)", () => {
+    function incomeGroup(interval: { min?: number; max?: number; minInclusive: boolean; maxInclusive: boolean }): EligibilityRuleGroup {
+      return {
+        type: "all",
+        rules: [{ id: "income", field: "individualIncomeRange", operator: "range_within_interval", value: interval, required: true }],
+      };
+    }
+
+    it("an exact 35,000,000원 income FAILS a strict 미만 (< 35,000,000) policy", () => {
+      const status = evaluateEligibility(
+        makeBenefit({ eligibility: incomeGroup({ max: 35_000_000, minInclusive: true, maxInclusive: false }) }),
+        { annualIndividualIncome: 35_000_000 }
+      );
+      expect(status).toBe("not_eligible");
+    });
+
+    it("the SAME exact 35,000,000원 income PASSES an inclusive 이하 (<= 35,000,000) policy", () => {
+      const status = evaluateEligibility(
+        makeBenefit({ eligibility: incomeGroup({ max: 35_000_000, minInclusive: true, maxInclusive: true }) }),
+        { annualIndividualIncome: 35_000_000 }
+      );
+      expect(status).toBe("likely_eligible");
+    });
+
+    it("resolves to unknown (not a guess) when the user's income band straddles a strict boundary", () => {
+      const status = evaluateEligibility(
+        makeBenefit({ eligibility: incomeGroup({ max: 35_000_000, minInclusive: true, maxInclusive: false }) }),
+        { individualIncomeBand: "3000_4000" } // {min:30M, max:40M} straddles 35M
+      );
+      expect(status).toBe("unknown");
+    });
+  });
+
+  describe("status_compat (employment, end-to-end through the rule engine, section 11/25)", () => {
+    function employmentGroup(target: "unemployed" | "employed"): EligibilityRuleGroup {
+      return {
+        type: "all",
+        rules: [
+          {
+            id: "employment",
+            field: "employmentStatus",
+            operator: "status_compat",
+            value:
+              target === "unemployed"
+                ? { passValues: ["unemployed"], failValues: ["employed"] }
+                : { passValues: ["employed"], failValues: ["unemployed"] },
+            required: true,
+          },
+        ],
+      };
+    }
+
+    it("passes an unemployed applicant against a 미취업자 requirement", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: employmentGroup("unemployed") }), {
+        employmentStatus: "unemployed",
+      });
+      expect(status).toBe("likely_eligible");
+    });
+
+    it("fails an employed applicant against a 미취업자 requirement", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: employmentGroup("unemployed") }), {
+        employmentStatus: "employed",
+      });
+      expect(status).toBe("not_eligible");
+    });
+
+    it("never guesses for a freelancer — resolves to unknown rather than pass or fail", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: employmentGroup("unemployed") }), {
+        employmentStatus: "freelancer",
+      });
+      expect(status).toBe("unknown");
+    });
+  });
 });

@@ -1,12 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Benefit } from "@/types/benefit";
 // Renamed to satisfy vitest's vi.mock hoisting rule (only identifiers
-// prefixed with "mock" may be referenced inside a vi.mock factory). This is
-// the REAL production index builder, not a stub — using it here means these
-// route tests exercise the actual candidate-retrieval layer end-to-end,
-// which matters because pruning is only a valid optimization if it never
-// changes the final personalized result (see the assertions below).
+// prefixed with "mock" may be referenced inside a vi.mock factory). These are
+// the REAL production candidate-index/active-catalog builders, not stubs —
+// using them here means these route tests exercise the actual
+// candidate-retrieval and application-window-classification layers
+// end-to-end, which matters because pruning/classification is only a valid
+// optimization if it never changes the final personalized result (see the
+// assertions below).
 import { buildCandidateIndex as mockBuildCandidateIndex } from "@/lib/eligibility/candidateIndex";
+import { classifyCatalog as mockClassifyCatalog } from "@/lib/catalog/activeCatalog";
+import type { CatalogWithIndex } from "@/providers";
 
 const BULK_COUNT = 550; // comfortably past the old "first 500 records only" cutoff
 
@@ -97,26 +101,55 @@ const mockBenefits: Benefit[] = [
     eligibilityUnrestricted: true,
     application: { endDate: "2000-01-01" },
   },
-  ...bulkBenefits,
 ];
+
+/**
+ * Builds the same `CatalogWithIndex` shape providers/index.ts's
+ * `getCatalogWithCandidateIndex` returns, using the REAL classification and
+ * candidate-index builders instead of hand-constructing the split — this way
+ * these tests exercise the actual active/upcoming/expired/date_unknown split
+ * (section 1/23) together with candidate retrieval, not a fake stand-in.
+ */
+function buildMockCatalog(benefits: Benefit[]): CatalogWithIndex {
+  const classified = mockClassifyCatalog(benefits);
+  const personalizable = [...classified.active, ...classified.dateUnknown];
+  return {
+    benefits: personalizable,
+    index: mockBuildCandidateIndex(personalizable),
+    expiredBenefits: classified.expired,
+    expiredIndex: mockBuildCandidateIndex(classified.expired),
+    upcomingBenefits: classified.upcoming,
+    counts: {
+      sourceCatalogCount: benefits.length,
+      activeCount: classified.active.length,
+      upcomingCount: classified.upcoming.length,
+      expiredCount: classified.expired.length,
+      dateUnknownCount: classified.dateUnknown.length,
+    },
+  };
+}
+
+const mockGetCatalogWithCandidateIndex = vi.fn<() => Promise<CatalogWithIndex>>();
 
 vi.mock("@/providers", () => ({
   benefitProvider: {
-    getBenefits: vi.fn(async () => mockBenefits),
+    getBenefits: vi.fn(async () => []),
     getBenefit: vi.fn(async () => null),
   },
-  getCatalogWithCandidateIndex: vi.fn(async () => ({
-    benefits: mockBenefits,
-    index: mockBuildCandidateIndex(mockBenefits),
-  })),
+  getCatalogWithCandidateIndex: mockGetCatalogWithCandidateIndex,
 }));
 
-describe("POST /api/benefits/match (non-paginated default feed)", () => {
+describe("POST /api/benefits/match (non-paginated, bounded home-summary shape)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Small, fully-named dataset only — small enough that every relevant
+    // item fits inside HOME_PREVIEW_LIMIT, so per-ID assertions below stay
+    // meaningful (see the separate "bounded preview" describe block for
+    // explicit over-the-cap coverage).
+    mockGetCatalogWithCandidateIndex.mockImplementation(async () => buildMockCatalog(mockBenefits));
   });
 
-  it("returns only likelyEligible/unknown/counts — never a full catalog and never a not_eligible benefit", async () => {
+  it("returns the bounded summary shape — never a full catalog and never a not_eligible benefit", async () => {
     const { POST } = await import("@/app/api/benefits/match/route");
     const birthYear = new Date().getFullYear() - 25;
     const request = new Request("http://localhost/api/benefits/match", {
@@ -128,13 +161,20 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
 
-    // The old response shape ({ benefits, matches }) must be gone entirely.
+    // The old response shapes must be gone entirely.
     expect(json.benefits).toBeUndefined();
     expect(json.matches).toBeUndefined();
+    expect(json.likelyEligible).toBeUndefined();
+    expect(json.unknown).toBeUndefined();
 
-    const returnedIds = new Set([...json.likelyEligible, ...json.unknown].map((b: Benefit) => b.id));
+    expect(Array.isArray(json.recommended)).toBe(true);
+    expect(Array.isArray(json.needsReview)).toBe(true);
+    expect(json.summary).toBeDefined();
+    expect(typeof json.statuses).toBe("object");
+
+    const returnedIds = new Set([...json.recommended, ...json.needsReview].map((b: Benefit) => b.id));
     expect(returnedIds.has("age-90-99")).toBe(false); // not_eligible for a 25-year-old — must never be sent
-    expect(json.likelyEligible.length + json.unknown.length).toBeLessThan(mockBenefits.length);
+    expect(json.recommended.length + json.needsReview.length).toBeLessThan(mockBenefits.length);
   });
 
   it("reports accurate counts that fully account for the catalog via likelyEligible+unknown+notEligible+excluded", async () => {
@@ -148,8 +188,11 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
     const res = await POST(request);
     const json = await res.json();
 
-    expect(json.counts.likelyEligible).toBe(json.likelyEligible.length);
-    expect(json.counts.unknown).toBe(json.unknown.length);
+    // Dataset is small enough that the full relevant set fits inside the
+    // preview caps, so likelyEligible+unknown (computed server-side over the
+    // FULL relevant set) equals exactly what's echoed back in the previews.
+    expect(json.counts.likelyEligible + json.counts.unknown).toBe(json.recommended.length);
+    expect(json.counts.unknown).toBe(json.needsReview.length);
     expect(json.counts.totalEvaluated).toBe(mockBenefits.length);
     expect(json.counts.likelyEligible + json.counts.unknown + json.counts.notEligible + json.counts.excluded).toBe(
       mockBenefits.length
@@ -186,10 +229,12 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
 
     const res = await POST(request);
     const json = await res.json();
-    const likelyIds = new Set(json.likelyEligible.map((b: Benefit) => b.id));
 
-    expect(likelyIds.has("unrestricted")).toBe(true);
-    expect(likelyIds.has("age-19-34")).toBe(true);
+    expect(json.statuses["unrestricted"]).toBe("likely_eligible");
+    expect(json.statuses["age-19-34"]).toBe("likely_eligible");
+    const recommendedIds = new Set(json.recommended.map((b: Benefit) => b.id));
+    expect(recommendedIds.has("unrestricted")).toBe(true);
+    expect(recommendedIds.has("age-19-34")).toBe(true);
   });
 
   it("excludes a zero-evidence unknown (no structured eligibility data at all) from both buckets", async () => {
@@ -202,7 +247,7 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
 
     const res = await POST(request);
     const json = await res.json();
-    const allReturnedIds = new Set([...json.likelyEligible, ...json.unknown].map((b: Benefit) => b.id));
+    const allReturnedIds = new Set([...json.recommended, ...json.needsReview].map((b: Benefit) => b.id));
     expect(allReturnedIds.has("no-rules")).toBe(false);
   });
 
@@ -215,11 +260,11 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
 
     const res = await POST(request);
     const json = await res.json();
-    const allReturnedIds = new Set([...json.likelyEligible, ...json.unknown].map((b: Benefit) => b.id));
+    const allReturnedIds = new Set([...json.recommended, ...json.needsReview].map((b: Benefit) => b.id));
     expect(allReturnedIds.has("age-19-34")).toBe(false);
   });
 
-  it("still surfaces an unknown benefit that has real partial evidence (one rule resolved, another unresolved)", async () => {
+  it("still surfaces an unknown benefit that has real positive partial evidence (one rule passed, another unresolved)", async () => {
     const { POST } = await import("@/app/api/benefits/match/route");
     const birthYear = new Date().getFullYear() - 25;
     const request = new Request("http://localhost/api/benefits/match", {
@@ -229,8 +274,9 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
 
     const res = await POST(request);
     const json = await res.json();
-    const unknownIds = new Set(json.unknown.map((b: Benefit) => b.id));
-    expect(unknownIds.has("mixed-evidence-unknown")).toBe(true);
+    expect(json.statuses["mixed-evidence-unknown"]).toBe("unknown");
+    const needsReviewIds = new Set(json.needsReview.map((b: Benefit) => b.id));
+    expect(needsReviewIds.has("mixed-evidence-unknown")).toBe(true);
   });
 
   it("excludes a closed benefit from the default feed even when it's a definite match", async () => {
@@ -239,8 +285,9 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
 
     const res = await POST(request);
     const json = await res.json();
-    const allReturnedIds = new Set([...json.likelyEligible, ...json.unknown].map((b: Benefit) => b.id));
+    const allReturnedIds = new Set([...json.recommended, ...json.needsReview].map((b: Benefit) => b.id));
     expect(allReturnedIds.has("closed-but-eligible")).toBe(false);
+    expect(json.counts.expiredCatalogCount).toBe(1);
   });
 
   it("includes a closed benefit when includeClosed: true is passed", async () => {
@@ -252,8 +299,8 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
 
     const res = await POST(request);
     const json = await res.json();
-    const likelyIds = new Set(json.likelyEligible.map((b: Benefit) => b.id));
-    expect(likelyIds.has("closed-but-eligible")).toBe(true);
+    const recommendedIds = new Set(json.recommended.map((b: Benefit) => b.id));
+    expect(recommendedIds.has("closed-but-eligible")).toBe(true);
   });
 
   it("returns not_eligible (i.e. excludes) a benefit whose rule the profile fails, and changes results when the profile changes", async () => {
@@ -271,23 +318,11 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
     const youngJson = await (await POST(youngReq)).json();
     const oldJson = await (await POST(oldReq)).json();
 
-    const youngIds = new Set([...youngJson.likelyEligible, ...youngJson.unknown].map((b: Benefit) => b.id));
-    const oldIds = new Set([...oldJson.likelyEligible, ...oldJson.unknown].map((b: Benefit) => b.id));
+    const youngIds = new Set([...youngJson.recommended, ...youngJson.needsReview].map((b: Benefit) => b.id));
+    const oldIds = new Set([...oldJson.recommended, ...oldJson.needsReview].map((b: Benefit) => b.id));
 
     expect(youngIds.has("age-19-34")).toBe(true);
     expect(oldIds.has("age-19-34")).toBe(false); // now not_eligible for a 60-year-old, so excluded
-  });
-
-  it("keeps discovering records well past the old 500-record cutoff", async () => {
-    const { POST } = await import("@/app/api/benefits/match/route");
-    const request = new Request("http://localhost/api/benefits/match", { method: "POST", body: "{}" });
-
-    const res = await POST(request);
-    const json = await res.json();
-    const likelyIds = new Set(json.likelyEligible.map((b: Benefit) => b.id));
-
-    expect(likelyIds.has("bulk-520")).toBe(true);
-    expect(likelyIds.has(`bulk-${BULK_COUNT}`)).toBe(true);
   });
 
   it("rejects a malformed profile with 400", async () => {
@@ -312,9 +347,43 @@ describe("POST /api/benefits/match (non-paginated default feed)", () => {
   });
 });
 
+describe("POST /api/benefits/match (bounded home preview cap, section 20)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("never returns more than the preview limit per bucket even when far more benefits are relevant", async () => {
+    const manyUnrestricted: Benefit[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `many-${i + 1}`,
+      title: `Open benefit ${i + 1}`,
+      shortDescription: "desc",
+      category: "welfare",
+      source: { type: "government", organization: "org" },
+      benefitType: "other",
+      eligibilityUnrestricted: true,
+    }));
+    mockGetCatalogWithCandidateIndex.mockImplementation(async () => buildMockCatalog(manyUnrestricted));
+
+    const { POST } = await import("@/app/api/benefits/match/route");
+    const request = new Request("http://localhost/api/benefits/match", { method: "POST", body: "{}" });
+
+    const res = await POST(request);
+    const json = await res.json();
+
+    // All 40 are likely_eligible (uninformative aggregate), but the preview
+    // array actually sent to the browser must stay bounded.
+    expect(json.counts.likelyEligible).toBe(40);
+    expect(json.recommended.length).toBeLessThanOrEqual(10);
+  });
+});
+
 describe("POST /api/benefits/match (paginated mode)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Combines the small named dataset with the large bulk dataset — the
+    // paginated listing page is the one that must keep discovering records
+    // well past the old 500-record cutoff, unlike the bounded home preview.
+    mockGetCatalogWithCandidateIndex.mockImplementation(async () => buildMockCatalog([...mockBenefits, ...bulkBenefits]));
   });
 
   it("switches to the paginated shape when page/pageSize is present, and paginates the relevant set", async () => {
@@ -328,8 +397,8 @@ describe("POST /api/benefits/match (paginated mode)", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
 
-    expect(json.likelyEligible).toBeUndefined();
-    expect(json.unknown).toBeUndefined();
+    expect(json.recommended).toBeUndefined();
+    expect(json.needsReview).toBeUndefined();
     expect(Array.isArray(json.benefits)).toBe(true);
     expect(json.benefits.length).toBe(10);
     expect(json.page).toBe(1);
@@ -413,5 +482,24 @@ describe("POST /api/benefits/match (paginated mode)", () => {
     const ids = new Set(json.benefits.map((b: Benefit) => b.id));
     expect(ids.has("no-rules")).toBe(false);
     expect(ids.has("closed-but-eligible")).toBe(false);
+  });
+
+  it("keeps discovering records well past the old 500-record cutoff via pagination (not the bounded home preview)", async () => {
+    const { POST } = await import("@/app/api/benefits/match/route");
+    const request = new Request("http://localhost/api/benefits/match", {
+      method: "POST",
+      body: JSON.stringify({ profile: {}, page: 1, pageSize: 20, search: `Bulk benefit ${BULK_COUNT}` }),
+    });
+
+    const res = await POST(request);
+    const json = await res.json();
+    expect(json.benefits.some((b: Benefit) => b.id === `bulk-${BULK_COUNT}`)).toBe(true);
+
+    const totalsRequest = new Request("http://localhost/api/benefits/match", {
+      method: "POST",
+      body: JSON.stringify({ profile: {}, page: 1, pageSize: 1 }),
+    });
+    const totalsJson = await (await POST(totalsRequest)).json();
+    expect(totalsJson.total).toBeGreaterThan(500);
   });
 });

@@ -67,11 +67,33 @@ export type RuleOperator =
    */
   | "range_within"
   /**
+   * Interval-vs-range containment using explicit boundary inclusivity
+   * (see lib/eligibility/interval.ts's `Interval`). `value` is an
+   * `Interval` (`{min?, max?, minInclusive, maxInclusive}`); the resolved
+   * field value must be a `{min, max}` range (same shape `range_within`
+   * expects). Preferred over `range_within` for any boundary derived from
+   * Korean 이상/초과/이하/미만 text, because it preserves the
+   * inclusive-vs-strict distinction that a plain `[min, max]` tuple can't
+   * represent. Fully contained -> pass, no overlap -> fail, partial overlap
+   * -> unknown.
+   */
+  | "range_within_interval"
+  /**
    * Hierarchical Korean region matching. `value` is a `RegionSpec[]`
    * (OR'd list of `{province, city?}`; omitting `city` allows the whole
    * province). See lib/eligibility/region.ts for alias normalization.
    */
   | "region_in"
+  /**
+   * Small-enum applicant-status compatibility (e.g. employment status)
+   * where the domain has ambiguous/unmodeled real-world values (freelancer,
+   * gig work, etc.) that must resolve to "unknown" rather than being forced
+   * into an exact-equality guess. `value` is `{ passValues, failValues }` —
+   * two disjoint sets of known-compatible / known-incompatible values for
+   * the target the rule expresses; anything not in either set is unknown.
+   * See lib/eligibility/employment.ts.
+   */
+  | "status_compat"
   /**
    * Applicant-scope matching (개인/가구/법인·시설·단체/소상공인, verified from
    * MOIS's `사용자구분` field). `value` is a `TargetScope[]` (OR'd, mirroring

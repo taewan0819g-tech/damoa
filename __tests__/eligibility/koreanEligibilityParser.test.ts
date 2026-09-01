@@ -3,6 +3,7 @@ import {
   detectLogicalConnective,
   extractEligibilityFromText,
 } from "@/lib/eligibility/extraction/koreanEligibilityParser";
+import { EMPLOYMENT_TARGET_SPECS } from "@/lib/eligibility/employment";
 
 describe("extractEligibilityFromText", () => {
   it("returns empty result for blank/missing text", () => {
@@ -81,8 +82,8 @@ describe("extractEligibilityFromText", () => {
       expect(rules[0]).toEqual(
         expect.objectContaining({
           field: "individualIncomeRange",
-          operator: "range_within",
-          value: [30000000, Number.POSITIVE_INFINITY],
+          operator: "range_within_interval",
+          value: { min: 30000000, minInclusive: true, maxInclusive: true },
         })
       );
     });
@@ -90,14 +91,58 @@ describe("extractEligibilityFromText", () => {
     it("routes an explicit 가구 qualifier to householdIncomeRange, converting comma-formatted 만원 to KRW", () => {
       const { rules } = extractEligibilityFromText("f", "가구 연 소득 5,000만원 이하인 가구");
       expect(rules[0]).toEqual(
-        expect.objectContaining({ field: "householdIncomeRange", operator: "range_within", value: [0, 50000000] })
+        expect.objectContaining({
+          field: "householdIncomeRange",
+          operator: "range_within_interval",
+          value: { max: 50000000, minInclusive: true, maxInclusive: true },
+        })
+      );
+    });
+
+    it("distinguishes strict 미만 from inclusive 이하 at the exact boundary value", () => {
+      const { rules: leRules } = extractEligibilityFromText("f", "연소득 3500만원 이하인 자");
+      expect(leRules[0]).toEqual(
+        expect.objectContaining({
+          operator: "range_within_interval",
+          value: { max: 35000000, minInclusive: true, maxInclusive: true },
+        })
+      );
+
+      const { rules: ltRules } = extractEligibilityFromText("f", "연소득 3500만원 미만인 자");
+      expect(ltRules[0]).toEqual(
+        expect.objectContaining({
+          operator: "range_within_interval",
+          value: { max: 35000000, minInclusive: true, maxInclusive: false },
+        })
+      );
+    });
+
+    it("distinguishes strict 초과 from inclusive 이상 at the exact boundary value", () => {
+      const { rules: gteRules } = extractEligibilityFromText("f", "연소득 3500만원 이상인 자");
+      expect(gteRules[0]).toEqual(
+        expect.objectContaining({
+          operator: "range_within_interval",
+          value: { min: 35000000, minInclusive: true, maxInclusive: true },
+        })
+      );
+
+      const { rules: gtRules } = extractEligibilityFromText("f", "연소득 3500만원 초과인 자");
+      expect(gtRules[0]).toEqual(
+        expect.objectContaining({
+          operator: "range_within_interval",
+          value: { min: 35000000, minInclusive: false, maxInclusive: true },
+        })
       );
     });
 
     it("flips 이상 to 미만-equivalent (upper-bounded) under adjacent 하지 않은 negation", () => {
       const { rules } = extractEligibilityFromText("f", "연소득 5000만원 이상하지 않은 자");
       expect(rules[0]).toEqual(
-        expect.objectContaining({ field: "individualIncomeRange", operator: "range_within", value: [0, 50000000] })
+        expect.objectContaining({
+          field: "individualIncomeRange",
+          operator: "range_within_interval",
+          value: { max: 50000000, minInclusive: true, maxInclusive: false },
+        })
       );
     });
 
@@ -204,14 +249,22 @@ describe("extractEligibilityFromText", () => {
     it("resolves 미취업", () => {
       const { rules } = extractEligibilityFromText("f", "미취업자만 신청 가능");
       expect(rules[0]).toEqual(
-        expect.objectContaining({ field: "employmentStatus", operator: "eq", value: "unemployed" })
+        expect.objectContaining({
+          field: "employmentStatus",
+          operator: "status_compat",
+          value: EMPLOYMENT_TARGET_SPECS.unemployed,
+        })
       );
     });
 
     it("resolves 재직", () => {
       const { rules } = extractEligibilityFromText("f", "재직자만 신청 가능");
       expect(rules[0]).toEqual(
-        expect.objectContaining({ field: "employmentStatus", operator: "eq", value: "employed" })
+        expect.objectContaining({
+          field: "employmentStatus",
+          operator: "status_compat",
+          value: EMPLOYMENT_TARGET_SPECS.employed,
+        })
       );
     });
 
@@ -310,7 +363,9 @@ describe("extractEligibilityFromText", () => {
       // one rule is produced and the OR safety net should not apply.
       const result = extractEligibilityFromText("f", "미취업자 또는 취업준비생 지원");
       expect(result.rules).toHaveLength(1);
-      expect(result.rules[0]).toEqual(expect.objectContaining({ field: "employmentStatus", value: "unemployed" }));
+      expect(result.rules[0]).toEqual(
+        expect.objectContaining({ field: "employmentStatus", value: EMPLOYMENT_TARGET_SPECS.unemployed })
+      );
     });
 
     it("does NOT bail out for an AND-combined multi-dimension clause", () => {

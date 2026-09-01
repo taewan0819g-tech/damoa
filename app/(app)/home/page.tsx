@@ -1,28 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
 import { useMatchedBenefits } from "@/hooks/useMatchedBenefits";
-import { useProfileStore } from "@/stores/profileStore";
-import { getBenefitSummary } from "@/domain/benefit/summary";
-import { getRecommendedBenefits } from "@/domain/benefit/recommend";
-import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
 import { DemoNotice } from "@/components/home/DemoNotice";
 import { SummaryCards } from "@/components/home/SummaryCards";
 import { BenefitMiniRow } from "@/components/benefit/BenefitMiniRow";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 
+// The home page only ever shows a handful of cards, so the server already
+// returns bounded `recommended`/`needsReview` previews (top ~10 each) plus a
+// server-aggregated `summary` — see the match route and useMatchedBenefits
+// for why this no longer fetches (or re-derives top-N from) the full
+// personalized relevant set.
 export default function HomePage() {
-  const { benefits, statusById, loading, error } = useMatchedBenefits();
-  const profile = useProfileStore((s) => s.profile);
-  const isDemo = benefits.length > 0 && benefits.every((b) => b.isDemo);
-
-  const summary = useMemo(() => getBenefitSummary(benefits, statusById), [benefits, statusById]);
-  const recommended = useMemo(
-    () => getRecommendedBenefits(benefits, statusById, profile, 6),
-    [benefits, statusById, profile]
-  );
-  const needsReview = useMemo(() => getUnknownBenefits(benefits, statusById, 6), [benefits, statusById]);
+  const { recommended, needsReview, summary, loading, error } = useMatchedBenefits();
+  const isDemo = recommended.length > 0 && recommended.every((b) => b.isDemo);
 
   return (
     <div className="flex flex-col gap-6">
@@ -33,14 +25,14 @@ export default function HomePage() {
 
       <DemoNotice isDemo={isDemo} />
 
-      {loading ? (
+      {error ? (
+        <EmptyState title="혜택 정보를 불러오지 못했어요." description="잠시 후 다시 시도해 주세요." />
+      ) : loading || !summary ? (
         <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-20 w-full" />
           ))}
         </div>
-      ) : error ? (
-        <EmptyState title="혜택 정보를 불러오지 못했어요." description="잠시 후 다시 시도해 주세요." />
       ) : (
         <SummaryCards summary={summary} />
       )}

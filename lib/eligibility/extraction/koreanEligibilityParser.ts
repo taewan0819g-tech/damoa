@@ -1,5 +1,7 @@
 import type { EligibilityRule } from "@/types/benefit";
 import { normalizeProvince, PROVINCE_ALIAS_KEYS, type RegionSpec } from "../region";
+import { intervalFromBoundaryWord } from "../interval";
+import { EMPLOYMENT_TARGET_SPECS } from "../employment";
 
 /**
  * Deterministic Korean eligibility text parser.
@@ -175,15 +177,13 @@ function parseIncomeClause(text: string): { rule?: EligibilityRule; unresolved?:
   const field = qualifier === "가구" ? "householdIncomeRange" : "individualIncomeRange";
   const krw = amount * MANWON_TO_KRW;
 
-  const value: [number, number] =
-    effectiveWord === "이하" || effectiveWord === "미만"
-      ? [0, krw]
-      : effectiveWord === "이상" || effectiveWord === "초과"
-        ? [krw, Number.POSITIVE_INFINITY]
-        : [0, krw];
+  // Preserves the 이상(>=)/초과(>)/이하(<=)/미만(<) boundary-inclusivity
+  // distinction via Interval instead of collapsing it into a plain tuple —
+  // see lib/eligibility/interval.ts.
+  const interval = intervalFromBoundaryWord(effectiveWord as "이상" | "초과" | "이하" | "미만", krw);
 
   return {
-    rule: { id: "text-income", field, operator: "range_within", value, required: true },
+    rule: { id: "text-income", field, operator: "range_within_interval", value: interval, required: true },
   };
 }
 
@@ -297,11 +297,27 @@ function parseEmploymentClause(text: string): { rule?: EligibilityRule; unresolv
 
   if (text.includes("미취업")) {
     if (negatedNear("미취업")) return { unresolved: text };
-    return { rule: { id: "text-employment-unemployed", field: "employmentStatus", operator: "eq", value: "unemployed", required: true } };
+    return {
+      rule: {
+        id: "text-employment-unemployed",
+        field: "employmentStatus",
+        operator: "status_compat",
+        value: EMPLOYMENT_TARGET_SPECS.unemployed,
+        required: true,
+      },
+    };
   }
   if (text.includes("재직")) {
     if (negatedNear("재직")) return { unresolved: text };
-    return { rule: { id: "text-employment-employed", field: "employmentStatus", operator: "eq", value: "employed", required: true } };
+    return {
+      rule: {
+        id: "text-employment-employed",
+        field: "employmentStatus",
+        operator: "status_compat",
+        value: EMPLOYMENT_TARGET_SPECS.employed,
+        required: true,
+      },
+    };
   }
   return undefined;
 }

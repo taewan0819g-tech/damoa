@@ -106,6 +106,20 @@ export interface CandidateIndex {
   constrained: ConstrainedEntry[];
   /** Diagnostics only: how many necessary-rule extractions landed in each dimension. */
   dimensionCounts: Record<IndexDimension, number>;
+  /**
+   * Section 18: the same `constrained` entries, additionally grouped by
+   * dimension (an entry with rules in multiple dimensions appears under each
+   * one). Built once per index build, alongside `constrained` — not a
+   * replacement for it. This is scaffolding toward dimension-scoped
+   * retrieval (e.g. "only re-check candidates that have an income rule when
+   * only income changed") for a future caller; `getCandidateBenefits` below
+   * deliberately does NOT use this yet and keeps scanning every necessary
+   * rule on every constrained entry, because correctness (never pruning on
+   * an unrelated dimension's stale conclusion) matters far more than the
+   * marginal speedup at current catalog scale. Exposed so it doesn't need a
+   * second O(catalog) pass to introduce later.
+   */
+  constrainedByDimension: Map<IndexDimension, ConstrainedEntry[]>;
 }
 
 const EMPTY_DIMENSION_COUNTS: Record<IndexDimension, number> = {
@@ -129,6 +143,7 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
   const unconstrained: Benefit[] = [];
   const constrained: ConstrainedEntry[] = [];
   const dimensionCounts: Record<IndexDimension, number> = { ...EMPTY_DIMENSION_COUNTS };
+  const constrainedByDimension = new Map<IndexDimension, ConstrainedEntry[]>();
 
   for (const benefit of benefits) {
     if (!benefit.eligibility) {
@@ -150,10 +165,23 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
       dimensions.add(dim);
       dimensionCounts[dim] += 1;
     }
-    constrained.push({ benefit, necessaryRules, dimensions: [...dimensions] });
+    const entry: ConstrainedEntry = { benefit, necessaryRules, dimensions: [...dimensions] };
+    constrained.push(entry);
+    for (const dim of dimensions) {
+      const bucket = constrainedByDimension.get(dim);
+      if (bucket) bucket.push(entry);
+      else constrainedByDimension.set(dim, [entry]);
+    }
   }
 
-  return { builtAt: Date.now(), totalCount: benefits.length, unconstrained, constrained, dimensionCounts };
+  return {
+    builtAt: Date.now(),
+    totalCount: benefits.length,
+    unconstrained,
+    constrained,
+    dimensionCounts,
+    constrainedByDimension,
+  };
 }
 
 /**

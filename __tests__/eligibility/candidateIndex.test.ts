@@ -128,6 +128,24 @@ describe("buildCandidateIndex", () => {
       region: 1,
     });
   });
+
+  it("groups constrained entries by dimension in constrainedByDimension, with a multi-dimension entry appearing under each dimension", () => {
+    const eligibility: EligibilityRuleGroup = {
+      type: "all",
+      rules: [
+        { id: "age", field: "age", operator: "between", value: [19, 34], required: true },
+        { id: "employment", field: "employmentStatus", operator: "eq", value: "unemployed", required: true },
+      ],
+    };
+    const b = benefit("age-and-employment", { eligibility });
+    const index = buildCandidateIndex([b]);
+
+    expect(index.constrainedByDimension.get("age")?.map((e) => e.benefit.id)).toEqual(["age-and-employment"]);
+    expect(index.constrainedByDimension.get("employment")?.map((e) => e.benefit.id)).toEqual(["age-and-employment"]);
+    expect(index.constrainedByDimension.get("income")).toBeUndefined();
+    // Same entry object (not a copy) so the bucket stays consistent with `constrained`.
+    expect(index.constrainedByDimension.get("age")?.[0]).toBe(index.constrained[0]);
+  });
 });
 
 describe("getCandidateBenefits", () => {

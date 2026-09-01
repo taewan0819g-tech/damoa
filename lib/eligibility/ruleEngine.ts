@@ -8,6 +8,8 @@ import type {
 import { resolveProfileField } from "./fieldResolver";
 import { matchRegion, type RegionSpec } from "./region";
 import { matchTargetScope, type TargetScope } from "./targetScope";
+import { compareRangeToInterval, isInterval } from "./interval";
+import { matchStatusCompat, type StatusCompatSpec } from "./employment";
 
 export type NodeResult = "pass" | "fail" | "unknown" | "skip";
 type CompareResult = "pass" | "fail" | "unknown";
@@ -72,9 +74,17 @@ function compare(operator: EligibilityRule["operator"], fieldValue: unknown, rul
       if (fieldValue.min >= policyMin && fieldValue.max <= policyMax) return "pass";
       return "unknown";
     }
+    case "range_within_interval": {
+      if (!isRangeValue(fieldValue) || !isInterval(ruleValue)) return "fail";
+      return compareRangeToInterval(fieldValue, ruleValue);
+    }
     case "region_in": {
       if (!Array.isArray(ruleValue)) return "fail";
       return matchRegion(fieldValue as { province?: string; city?: string } | undefined, ruleValue as RegionSpec[]);
+    }
+    case "status_compat": {
+      if (typeof ruleValue !== "object" || ruleValue === null) return "fail";
+      return matchStatusCompat(fieldValue, ruleValue as StatusCompatSpec);
     }
     default:
       return "fail";
@@ -180,8 +190,31 @@ export interface EligibilityDiagnostics {
    * profile data (as opposed to being skipped, or unknown for lack of data).
    */
   resolvedRules: number;
-  /** True when `resolvedRules > 0` — i.e. at least one rule was actually checked against the profile, not just absent data. */
+  /** How many leaves resolved to a concrete "pass" against real profile data. */
+  passedRules: number;
+  /** How many leaves resolved to a concrete "fail" against real profile data. */
+  failedRules: number;
+  /**
+   * True when `resolvedRules > 0` — i.e. at least one rule was actually
+   * checked against the profile (pass OR fail), not just absent data. This
+   * is a DIAGNOSTIC signal only — useful for observability — and must NOT
+   * be used to decide personalized relevance, because a rule that only ever
+   * FAILED is "evidence" in this sense but is not a reason to show the
+   * benefit to the user. See `hasPositiveEvidence` for the relevance gate.
+   */
   hasEvidence: boolean;
+  /**
+   * True when `passedRules > 0` — i.e. at least one rule was actually
+   * verified to PASS against real profile data. This is what personalized
+   * relevance should gate on (see isRelevantForFeed in
+   * domain/eligibility/matchBenefits.ts): "not disproven" is not the same
+   * as "actually connected to this user". A benefit whose only resolved
+   * rule FAILED (status still landed on "unknown" because that fail was
+   * inside an "any" branch with another unresolved alternative) has
+   * `hasEvidence: true` but `hasPositiveEvidence: false` — it must not be
+   * recommended merely because something was checked.
+   */
+  hasPositiveEvidence: boolean;
   /**
    * True when every parsed rule actually passed, but the status was held at
    * "unknown" anyway because the source data is known-incomplete
@@ -229,7 +262,10 @@ export function evaluateEligibilityDetailed(
       status: isUnrestricted ? "likely_eligible" : "unknown",
       totalRules: 0,
       resolvedRules: 0,
+      passedRules: 0,
+      failedRules: 0,
       hasEvidence: false,
+      hasPositiveEvidence: false,
       downgradedFromPass: false,
     };
   }
@@ -238,7 +274,9 @@ export function evaluateEligibilityDetailed(
   const result = evaluateGroup(benefit.eligibility, profile, leaves);
   const normalized = result === "skip" ? "unknown" : result;
 
-  const resolvedRules = leaves.filter((r) => r === "pass" || r === "fail").length;
+  const passedRules = leaves.filter((r) => r === "pass").length;
+  const failedRules = leaves.filter((r) => r === "fail").length;
+  const resolvedRules = passedRules + failedRules;
   const isIncomplete = benefit.eligibilityDataStatus === "incomplete" || benefit.hasUnresolvedEligibility === true;
   const downgradedFromPass = isIncomplete && normalized === "pass";
   const status = isIncomplete ? (normalized === "fail" ? "not_eligible" : "unknown") : NODE_RESULT_TO_STATUS[normalized];
@@ -247,7 +285,10 @@ export function evaluateEligibilityDetailed(
     status,
     totalRules: leaves.length,
     resolvedRules,
+    passedRules,
+    failedRules,
     hasEvidence: resolvedRules > 0,
+    hasPositiveEvidence: passedRules > 0,
     downgradedFromPass,
   };
 }

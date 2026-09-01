@@ -101,7 +101,10 @@ describe("evaluateEligibilityDetailed", () => {
       status: "unknown",
       totalRules: 0,
       resolvedRules: 0,
+      passedRules: 0,
+      failedRules: 0,
       hasEvidence: false,
+      hasPositiveEvidence: false,
       downgradedFromPass: false,
     });
   });
@@ -115,6 +118,7 @@ describe("evaluateEligibilityDetailed", () => {
     expect(diag.totalRules).toBe(1);
     expect(diag.resolvedRules).toBe(1);
     expect(diag.hasEvidence).toBe(true);
+    expect(diag.hasPositiveEvidence).toBe(true); // the one resolved rule actually PASSED
     expect(diag.downgradedFromPass).toBe(true);
   });
 
@@ -124,6 +128,7 @@ describe("evaluateEligibilityDetailed", () => {
     expect(diag.totalRules).toBe(1);
     expect(diag.resolvedRules).toBe(0);
     expect(diag.hasEvidence).toBe(false);
+    expect(diag.hasPositiveEvidence).toBe(false);
     expect(diag.downgradedFromPass).toBe(false);
   });
 
@@ -132,6 +137,7 @@ describe("evaluateEligibilityDetailed", () => {
     expect(diag.status).toBe("likely_eligible");
     expect(diag.downgradedFromPass).toBe(false);
     expect(diag.hasEvidence).toBe(true);
+    expect(diag.hasPositiveEvidence).toBe(true);
   });
 
   it("counts resolved rules across a multi-rule group with mixed evidence", () => {
@@ -146,6 +152,18 @@ describe("evaluateEligibilityDetailed", () => {
     expect(diag.totalRules).toBe(2);
     expect(diag.resolvedRules).toBe(1); // age resolved (pass), income unresolved (missing field)
     expect(diag.hasEvidence).toBe(true);
+    expect(diag.hasPositiveEvidence).toBe(true); // age resolved to a PASS
     expect(diag.status).toBe("unknown"); // required income field missing
+  });
+
+  it("reports hasEvidence: true but hasPositiveEvidence: false when the only resolved rule FAILED", () => {
+    // A required rule that definitively fails makes the whole benefit
+    // not_eligible, but this still exercises the diagnostic distinction:
+    // something was compared (hasEvidence), yet it never PASSED
+    // (hasPositiveEvidence) — the correct signal for personalization gating.
+    const diag = evaluateEligibilityDetailed({ eligibility: ageRule }, profileWithAge(99));
+    expect(diag.status).toBe("not_eligible");
+    expect(diag.hasEvidence).toBe(true);
+    expect(diag.hasPositiveEvidence).toBe(false);
   });
 });

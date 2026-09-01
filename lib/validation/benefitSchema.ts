@@ -5,12 +5,17 @@ const ruleOperatorSchema = z.enum([
   "neq",
   "in",
   "not_in",
+  "gt",
+  "lt",
   "gte",
   "lte",
   "between",
   "exists",
   "range_within",
+  "range_within_interval",
   "region_in",
+  "target_scope_in",
+  "status_compat",
 ]);
 
 const eligibilityRuleSchema = z.object({

@@ -2,51 +2,64 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useProfileStore } from "@/stores/profileStore";
-import type { Benefit, EligibilityStatus } from "@/types/benefit";
+import type { Benefit } from "@/types/benefit";
+import type { BenefitSummary } from "@/domain/benefit/summary";
 
 export interface MatchCounts {
   likelyEligible: number;
   unknown: number;
   notEligible: number;
   totalEvaluated: number;
-  /** Benefits excluded from the personalized feed entirely (zero-evidence unknown and/or closed). */
+  /** Benefits excluded from the personalized feed entirely (zero-positive-evidence unknown, upcoming, and/or expired). */
   excluded: number;
+  candidatesEvaluated: number;
+  activeCatalogCount: number;
+  dateUnknownCatalogCount: number;
+  expiredCatalogCount: number;
+  upcomingCatalogCount: number;
 }
 
 interface UseMatchedBenefitsResult {
-  /** likely_eligible + unknown benefits only — never includes not_eligible records. */
-  benefits: Benefit[];
-  statusById: Map<string, EligibilityStatus>;
+  /** Top recommended benefits (bounded preview — never the full relevant set, see the match route's home-summary shape). */
+  recommended: Benefit[];
+  /** Top "needs review" (unknown-status, positively-evidenced) benefits — also a bounded preview. */
+  needsReview: Benefit[];
+  /** Aggregate card counts, computed server-side over the FULL relevant set even though the arrays above are capped. */
+  summary: BenefitSummary | null;
   counts: MatchCounts | null;
   loading: boolean;
   error: boolean;
 }
 
-interface MatchResponse {
-  likelyEligible: Benefit[];
-  unknown: Benefit[];
+interface HomeSummaryResponse {
   counts: MatchCounts;
+  summary: BenefitSummary;
+  recommended: Benefit[];
+  needsReview: Benefit[];
 }
 
 interface MatchState {
   profileKey: string;
-  benefits: Benefit[];
-  statusById: Map<string, EligibilityStatus>;
+  recommended: Benefit[];
+  needsReview: Benefit[];
+  summary: BenefitSummary | null;
   counts: MatchCounts | null;
   loading: boolean;
   error: boolean;
 }
 
 const DEBOUNCE_MS = 400;
-const INITIAL_STATE_BASE = { benefits: [] as Benefit[], statusById: new Map<string, EligibilityStatus>(), counts: null };
+const INITIAL_STATE_BASE = { recommended: [] as Benefit[], needsReview: [] as Benefit[], summary: null, counts: null };
 
 /**
- * Loads eligibility-matched benefits from the server via
- * POST /api/benefits/match. As of the fix for the "entire catalog sent to
- * the browser" bug, the server only ever returns the likely_eligible and
- * unknown subsets (never not_eligible records, never the full catalog) —
- * this hook just combines those two arrays and derives a status map for
- * the existing display/sort/search helpers that expect one.
+ * Loads the bounded home-summary payload from POST /api/benefits/match (see
+ * that route's non-paginated response shape). As of the fix for the "entire
+ * relevant set sent to the browser just to display a handful of cards" bug
+ * (section 20 of the constraint-compatibility spec), the server now does the
+ * top-N selection AND the summary-card aggregation itself — this hook just
+ * exposes the already-bounded `recommended`/`needsReview` arrays plus the
+ * `summary` aggregate directly, instead of receiving thousands of Benefit
+ * records and re-deriving those same six-to-ten-item lists client-side.
  *
  * Refetches whenever the profile changes, debounced: the profile form
  * updates the store on every keystroke, and each change now triggers a
@@ -90,15 +103,19 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json();
         })
-        .then((data: MatchResponse) => {
+        .then((data: HomeSummaryResponse) => {
           if (cancelled) return;
-          const benefits = [...data.likelyEligible, ...data.unknown];
-          const statusById = new Map<string, EligibilityStatus>();
-          for (const b of data.likelyEligible) statusById.set(b.id, "likely_eligible");
-          for (const b of data.unknown) statusById.set(b.id, "unknown");
           setState((prev) =>
             prev.profileKey === profileKey
-              ? { ...prev, benefits, statusById, counts: data.counts, loading: false, error: false }
+              ? {
+                  ...prev,
+                  recommended: data.recommended,
+                  needsReview: data.needsReview,
+                  summary: data.summary,
+                  counts: data.counts,
+                  loading: false,
+                  error: false,
+                }
               : prev
           );
         })
@@ -115,5 +132,12 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
     };
   }, [profileKey]);
 
-  return { benefits: state.benefits, statusById: state.statusById, counts: state.counts, loading: state.loading, error: state.error };
+  return {
+    recommended: state.recommended,
+    needsReview: state.needsReview,
+    summary: state.summary,
+    counts: state.counts,
+    loading: state.loading,
+    error: state.error,
+  };
 }

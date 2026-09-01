@@ -4,6 +4,7 @@ import { MockBenefitProvider } from "./MockBenefitProvider";
 import { MOISBenefitProvider } from "./MOISBenefitProvider";
 import { YouthCenterBenefitProvider } from "./YouthCenterBenefitProvider";
 import { buildCandidateIndex, type CandidateIndex } from "@/lib/eligibility/candidateIndex";
+import { classifyCatalog, type ClassifiedCatalog } from "@/lib/catalog/activeCatalog";
 
 // This module is only ever imported by server-side code (Route Handlers) —
 // see app/api/benefits/route.ts and app/api/benefits/[id]/route.ts. Real
@@ -60,27 +61,98 @@ export const benefitProvider: BenefitProvider = {
   },
 };
 
+// Application-window classification (see lib/catalog/activeCatalog.ts) also
+// runs once per catalog refresh, never per request — same reference-
+// stability trick as `getMergedBenefits` above. This is what lets
+// personalized retrieval skip expired records BEFORE candidate retrieval
+// and detailed evaluation ever run over them, instead of fetching
+// everything and filtering closed records out afterward.
+let classificationCache: { catalogRef: Benefit[]; classified: ClassifiedCatalog; personalizable: Benefit[] } | undefined;
+
+function getClassification(benefits: Benefit[]): { classified: ClassifiedCatalog; personalizable: Benefit[] } {
+  if (classificationCache && classificationCache.catalogRef === benefits) {
+    return classificationCache;
+  }
+  const classified = classifyCatalog(benefits);
+  // The personalizable set is ACTIVE + DATE_UNKNOWN: a missing/malformed
+  // deadline must never be treated as expired (see activeCatalog.ts).
+  // EXPIRED is excluded here entirely; UPCOMING is excluded from the
+  // default personalized set too (reserved for a future "곧 신청 가능"
+  // feature) but both remain available via `classified` for an explicit
+  // archive/opt-in path.
+  const personalizable = [...classified.active, ...classified.dateUnknown];
+  classificationCache = { catalogRef: benefits, classified, personalizable };
+  return classificationCache;
+}
+
 // Candidate index (see lib/eligibility/candidateIndex.ts) is expensive-ish
 // to build (one O(catalog size) pass extracting verified-necessary rules)
 // but cheap to reuse, and must NOT be rebuilt on every personalized
-// request. It's rebuilt only when the merged catalog reference actually
-// changes (i.e. some provider's cache refreshed) — reusing the same
-// reference-stability trick as `getMergedBenefits` above.
+// request. It's rebuilt only when its input array reference actually
+// changes (i.e. some provider's cache refreshed, which cascades into a new
+// classification and thus a new personalizable-array reference) — reusing
+// the same reference-stability trick as `getMergedBenefits` above. A second,
+// symmetric cache does the same for the (usually much smaller) EXPIRED set,
+// used only by the opt-in `includeClosed` archive path.
 let indexCache: { catalogRef: Benefit[]; index: CandidateIndex } | undefined;
+let expiredIndexCache: { catalogRef: Benefit[]; index: CandidateIndex } | undefined;
+
+export interface CatalogCounts {
+  sourceCatalogCount: number;
+  activeCount: number;
+  upcomingCount: number;
+  expiredCount: number;
+  dateUnknownCount: number;
+}
+
+export interface CatalogWithIndex {
+  /** ACTIVE + DATE_UNKNOWN benefits — the personalizable set candidate retrieval/evaluation runs over. */
+  benefits: Benefit[];
+  /** Candidate index built over `benefits` only (never includes EXPIRED). */
+  index: CandidateIndex;
+  /** EXPIRED benefits, for the explicit `includeClosed` archive opt-in only — never part of the default feed. */
+  expiredBenefits: Benefit[];
+  /** Candidate index built over `expiredBenefits`, for the same opt-in path. */
+  expiredIndex: CandidateIndex;
+  /** UPCOMING benefits — not open yet; reserved for a future "opening soon" feature, not surfaced today. */
+  upcomingBenefits: Benefit[];
+  counts: CatalogCounts;
+}
 
 /**
- * Returns the full catalog plus a candidate index built over it, rebuilding
- * the index only when the catalog itself has actually changed since the
- * last call. This is the entry point personalized-matching routes should
- * use instead of calling `benefitProvider.getBenefits()` + building an
- * index themselves.
+ * Returns the personalizable catalog (ACTIVE + DATE_UNKNOWN) plus a
+ * candidate index built over it, rebuilding classification/indexes only
+ * when the underlying catalog has actually changed since the last call.
+ * This is the entry point personalized-matching routes should use instead
+ * of calling `benefitProvider.getBenefits()` + building an index themselves
+ * — it also guarantees EXPIRED records never reach candidate retrieval or
+ * the full rule engine for a normal (non-archive) request.
  */
-export async function getCatalogWithCandidateIndex(): Promise<{ benefits: Benefit[]; index: CandidateIndex }> {
-  const benefits = await getMergedBenefits();
-  if (!indexCache || indexCache.catalogRef !== benefits) {
-    indexCache = { catalogRef: benefits, index: buildCandidateIndex(benefits) };
+export async function getCatalogWithCandidateIndex(): Promise<CatalogWithIndex> {
+  const merged = await getMergedBenefits();
+  const { classified, personalizable } = getClassification(merged);
+
+  if (!indexCache || indexCache.catalogRef !== personalizable) {
+    indexCache = { catalogRef: personalizable, index: buildCandidateIndex(personalizable) };
   }
-  return { benefits, index: indexCache.index };
+  if (!expiredIndexCache || expiredIndexCache.catalogRef !== classified.expired) {
+    expiredIndexCache = { catalogRef: classified.expired, index: buildCandidateIndex(classified.expired) };
+  }
+
+  return {
+    benefits: personalizable,
+    index: indexCache.index,
+    expiredBenefits: classified.expired,
+    expiredIndex: expiredIndexCache.index,
+    upcomingBenefits: classified.upcoming,
+    counts: {
+      sourceCatalogCount: merged.length,
+      activeCount: classified.active.length,
+      upcomingCount: classified.upcoming.length,
+      expiredCount: classified.expired.length,
+      dateUnknownCount: classified.dateUnknown.length,
+    },
+  };
 }
 
 export type { BenefitProvider };
