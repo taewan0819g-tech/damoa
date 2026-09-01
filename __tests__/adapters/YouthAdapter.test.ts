@@ -25,7 +25,9 @@ describe("normalizeYouthPolicy eligibility", () => {
     });
   });
 
-  it("builds a structured income rule only when earnCndSeCd is 0043002, converting 만원 to raw KRW", () => {
+  it("builds a max-only range_within income rule against individualIncomeRange when earnCndSeCd is 0043002, converting 만원 to raw KRW", () => {
+    // Real live record: getPlcy?plcyNo=20260724005400113307 ("햇살론유스")
+    // returns earnMaxAmt: "3500" with no earnMinAmt, i.e. 3500만원 = 35,000,000 KRW cap.
     const benefit = normalizeYouthPolicy(
       rawPolicy({ earnCndSeCd: "0043002", earnMinAmt: "0", earnMaxAmt: "3500" })
     );
@@ -33,10 +35,46 @@ describe("normalizeYouthPolicy eligibility", () => {
       type: "all",
       rules: [
         {
-          id: "youth-income",
-          field: "annualIndividualIncome",
-          operator: "between",
+          id: "youth-income-max",
+          field: "individualIncomeRange",
+          operator: "range_within",
           value: [0, 35000000],
+          required: true,
+        },
+      ],
+    });
+  });
+
+  it("builds a min+max range_within income rule when both earnMinAmt and earnMaxAmt are positive", () => {
+    const benefit = normalizeYouthPolicy(
+      rawPolicy({ earnCndSeCd: "0043002", earnMinAmt: "1000", earnMaxAmt: "5000" })
+    );
+    expect(benefit.eligibility).toEqual({
+      type: "all",
+      rules: [
+        {
+          id: "youth-income",
+          field: "individualIncomeRange",
+          operator: "range_within",
+          value: [10000000, 50000000],
+          required: true,
+        },
+      ],
+    });
+  });
+
+  it("builds a min-only (unbounded max) range_within income rule when only earnMinAmt is positive", () => {
+    const benefit = normalizeYouthPolicy(
+      rawPolicy({ earnCndSeCd: "0043002", earnMinAmt: "2000", earnMaxAmt: "0" })
+    );
+    expect(benefit.eligibility).toEqual({
+      type: "all",
+      rules: [
+        {
+          id: "youth-income-min",
+          field: "individualIncomeRange",
+          operator: "range_within",
+          value: [20000000, Number.POSITIVE_INFINITY],
           required: true,
         },
       ],

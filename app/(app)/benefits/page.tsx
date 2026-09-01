@@ -2,19 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { useMatchedBenefits } from "@/hooks/useMatchedBenefits";
-import { useProfileStore } from "@/stores/profileStore";
-import { searchBenefits } from "@/domain/benefit/search";
-import { sortBenefits, type BenefitSort } from "@/domain/benefit/sort";
-import { getSourceGroup, type BenefitSourceGroup } from "@/domain/benefit/sourceGroup";
+import { usePaginatedBenefits } from "@/hooks/usePaginatedBenefits";
+import { type BenefitSort } from "@/domain/benefit/sort";
+import { type BenefitSourceGroup } from "@/domain/benefit/sourceGroup";
 import { BenefitCard } from "@/components/benefit/BenefitCard";
 import { BenefitCardSkeleton } from "@/components/benefit/BenefitCardSkeleton";
 import { Chip } from "@/components/ui/chip";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CATEGORY_LABELS, SOURCE_GROUP_LABELS } from "@/lib/labels";
 import type { BenefitCategory } from "@/types/benefit";
+
+const PAGE_SIZE = 20;
 
 const GROUP_FILTERS: { value: BenefitSourceGroup | "all"; label: string }[] = [
   { value: "all", label: "전체" },
@@ -33,20 +34,38 @@ const SORT_OPTIONS: { value: BenefitSort; label: string }[] = [
 ];
 
 export default function BenefitsPage() {
-  const { benefits, statusById, loading, error } = useMatchedBenefits();
-  const profile = useProfileStore((s) => s.profile);
-
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<BenefitSourceGroup | "all">("all");
   const [category, setCategory] = useState<BenefitCategory | "all">("all");
   const [sort, setSort] = useState<BenefitSort>("recommended");
+  const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    let result = searchBenefits(benefits, query);
-    if (group !== "all") result = result.filter((b) => getSourceGroup(b) === group);
-    if (category !== "all") result = result.filter((b) => b.category === category);
-    return sortBenefits(result, statusById, profile, sort);
-  }, [benefits, statusById, profile, query, group, category, sort]);
+  // Any change to search/filter/sort invalidates the current page — go back
+  // to page 1 rather than showing a now out-of-range page of stale results.
+  // Reset is done directly in each change handler (not in a useEffect) to
+  // avoid the cascading-render setState-in-effect anti-pattern.
+  function updateQuery(value: string) {
+    setQuery(value);
+    setPage(1);
+  }
+  function updateGroup(value: BenefitSourceGroup | "all") {
+    setGroup(value);
+    setPage(1);
+  }
+  function updateCategory(value: BenefitCategory | "all") {
+    setCategory(value);
+    setPage(1);
+  }
+  function updateSort(value: BenefitSort) {
+    setSort(value);
+    setPage(1);
+  }
+
+  const params = useMemo(
+    () => ({ page, pageSize: PAGE_SIZE, search: query, group, category, sort }),
+    [page, query, group, category, sort]
+  );
+  const { benefits: filtered, statusById, total, totalPages, loading, error } = usePaginatedBenefits(params);
 
   return (
     <div className="flex flex-col gap-5">
@@ -62,7 +81,7 @@ export default function BenefitsPage() {
         />
         <Input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateQuery(e.target.value)}
           placeholder="혜택, 기관명으로 검색"
           aria-label="혜택 검색"
           className="pl-11"
@@ -71,29 +90,29 @@ export default function BenefitsPage() {
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 scrollbar-none">
         {GROUP_FILTERS.map((f) => (
-          <Chip key={f.value} selected={group === f.value} onClick={() => setGroup(f.value)}>
+          <Chip key={f.value} selected={group === f.value} onClick={() => updateGroup(f.value)}>
             {f.label}
           </Chip>
         ))}
       </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 scrollbar-none">
-        <Chip selected={category === "all"} onClick={() => setCategory("all")}>
+        <Chip selected={category === "all"} onClick={() => updateCategory("all")}>
           전체 카테고리
         </Chip>
         {ALL_CATEGORIES.map((c) => (
-          <Chip key={c} selected={category === c} onClick={() => setCategory(c)}>
+          <Chip key={c} selected={category === c} onClick={() => updateCategory(c)}>
             {CATEGORY_LABELS[c]}
           </Chip>
         ))}
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-foreground-muted">{loading ? "불러오는 중" : `${filtered.length}개의 혜택`}</p>
+        <p className="text-sm text-foreground-muted">{loading ? "불러오는 중" : `${total}개의 혜택`}</p>
         <Select
           aria-label="정렬"
           value={sort}
-          onChange={(e) => setSort(e.target.value as BenefitSort)}
+          onChange={(e) => updateSort(e.target.value as BenefitSort)}
           className="h-9 w-32 text-xs"
         >
           {SORT_OPTIONS.map((o) => (
@@ -115,11 +134,37 @@ export default function BenefitsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState title="조건에 맞는 혜택이 없어요." description="검색어나 필터를 변경해 보세요." />
       ) : (
-        <div className="flex flex-col gap-3">
-          {filtered.map((benefit) => (
-            <BenefitCard key={benefit.id} benefit={benefit} status={statusById.get(benefit.id) ?? "unknown"} />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-col gap-3">
+            {filtered.map((benefit) => (
+              <BenefitCard key={benefit.id} benefit={benefit} status={statusById.get(benefit.id) ?? "unknown"} />
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+              >
+                이전
+              </Button>
+              <p className="text-xs text-foreground-muted">
+                {page} / {totalPages}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+              >
+                다음
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -52,6 +52,8 @@ export type RuleOperator =
   | "neq"
   | "in"
   | "not_in"
+  | "gt"
+  | "lt"
   | "gte"
   | "lte"
   | "between"
@@ -69,7 +71,31 @@ export type RuleOperator =
    * (OR'd list of `{province, city?}`; omitting `city` allows the whole
    * province). See lib/eligibility/region.ts for alias normalization.
    */
-  | "region_in";
+  | "region_in"
+  /**
+   * Applicant-scope matching (개인/가구/법인·시설·단체/소상공인, verified from
+   * MOIS's `사용자구분` field). `value` is a `TargetScope[]` (OR'd, mirroring
+   * the source's `||`-delimited list). See lib/eligibility/targetScope.ts.
+   * Ignores `field` (always evaluated against the whole profile) — kept for
+   * documentation/evidence purposes only.
+   */
+  | "target_scope_in";
+
+/**
+ * Where a rule came from. Never expose this in end-user UI — it exists so
+ * every generated rule is auditable back to a real source field/clause
+ * instead of being an invented requirement (see the non-negotiable
+ * principle in the eligibility spec: every rule must be traceable to a
+ * verified structured field or an unambiguous deterministic text
+ * extraction).
+ */
+export interface RuleEvidence {
+  /** The raw source field/clause name, e.g. "JA0110/JA0111", "사용자구분", "지원대상". */
+  sourceField: string;
+  /** The exact source text the rule was extracted from, for deterministic_text extractions. */
+  sourceText?: string;
+  extractionType: "structured_api" | "deterministic_text";
+}
 
 export interface EligibilityRule {
   id: string;
@@ -77,6 +103,7 @@ export interface EligibilityRule {
   operator: RuleOperator;
   value?: unknown;
   required: boolean;
+  evidence?: RuleEvidence;
 }
 
 export type EligibilityRuleGroup =
@@ -150,6 +177,17 @@ export interface Benefit {
    * partially-structured source data.
    */
   eligibilityDataStatus?: "unrestricted" | "complete" | "incomplete";
+  /**
+   * True when the source has at least one eligibility-bearing field/clause
+   * that could NOT be safely turned into a rule (an undecoded condition
+   * code, an ambiguous free-text clause, an OR'd clause our extractor can't
+   * safely decompose, etc.) — independent of whether `eligibility` itself
+   * has any rules at all. A benefit can have zero structured `eligibility`
+   * rules yet still be `hasUnresolvedEligibility: true` (e.g. a free-text
+   * 지원대상 clause too vague to parse deterministically) — that is still
+   * "incomplete", not merely "no data". See lib/eligibility/ruleEngine.ts.
+   */
+  hasUnresolvedEligibility?: boolean;
 }
 
 export type EligibilityStatus = "likely_eligible" | "unknown" | "not_eligible";

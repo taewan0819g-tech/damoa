@@ -14,7 +14,7 @@ export interface RegionSpec {
   city?: string;
 }
 
-const PROVINCE_ALIASES: Record<string, string> = {
+export const PROVINCE_ALIASES: Record<string, string> = {
   "서울": "서울특별시",
   "서울시": "서울특별시",
   "서울특별시": "서울특별시",
@@ -61,6 +61,13 @@ const PROVINCE_ALIASES: Record<string, string> = {
   "제주도": "제주특별자치도",
   "제주특별자치도": "제주특별자치도",
 };
+
+/**
+ * All recognized province alias surface forms (e.g. "서울", "서울시",
+ * "서울특별시"), for callers that need to scan free text for a province
+ * mention (see `koreanEligibilityParser.ts`'s `findProvinceMention`).
+ */
+export const PROVINCE_ALIAS_KEYS: string[] = Object.keys(PROVINCE_ALIASES);
 
 /** Normalizes a province name via the explicit alias table. Falls back to a trimmed copy of the input for unrecognized-but-consistent names. */
 export function normalizeProvince(input?: string | null): string | undefined {

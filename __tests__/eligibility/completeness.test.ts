@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateEligibility } from "@/lib/eligibility/ruleEngine";
+import { evaluateEligibility, evaluateEligibilityDetailed } from "@/lib/eligibility/ruleEngine";
 import type { EligibilityRuleGroup } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 
@@ -69,5 +69,83 @@ describe("eligibility completeness", () => {
       profileWithAge(60)
     );
     expect(status).toBe("not_eligible");
+  });
+
+  describe("hasUnresolvedEligibility", () => {
+    it("holds a full pass at unknown when hasUnresolvedEligibility is true, even without eligibilityDataStatus: 'incomplete'", () => {
+      const status = evaluateEligibility({ eligibility: ageRule, hasUnresolvedEligibility: true }, profileWithAge(25));
+      expect(status).toBe("unknown");
+    });
+
+    it("still produces not_eligible on a definitive fail even when hasUnresolvedEligibility is true", () => {
+      const status = evaluateEligibility({ eligibility: ageRule, hasUnresolvedEligibility: true }, profileWithAge(60));
+      expect(status).toBe("not_eligible");
+    });
+
+    it("treats a benefit with zero structured rules but hasUnresolvedEligibility: true as unknown (same as no data)", () => {
+      const status = evaluateEligibility({ hasUnresolvedEligibility: true }, {});
+      expect(status).toBe("unknown");
+    });
+
+    it("does not affect a fully-resolved, non-incomplete benefit when hasUnresolvedEligibility is false/unset", () => {
+      const status = evaluateEligibility({ eligibility: ageRule, hasUnresolvedEligibility: false }, profileWithAge(25));
+      expect(status).toBe("likely_eligible");
+    });
+  });
+});
+
+describe("evaluateEligibilityDetailed", () => {
+  it("reports zero rules and no evidence for a benefit with no eligibility data", () => {
+    const diag = evaluateEligibilityDetailed({}, {});
+    expect(diag).toEqual({
+      status: "unknown",
+      totalRules: 0,
+      resolvedRules: 0,
+      hasEvidence: false,
+      downgradedFromPass: false,
+    });
+  });
+
+  it("reports hasEvidence: true and downgradedFromPass: true for an incomplete benefit whose rules all pass", () => {
+    const diag = evaluateEligibilityDetailed(
+      { eligibility: ageRule, eligibilityDataStatus: "incomplete" },
+      profileWithAge(25)
+    );
+    expect(diag.status).toBe("unknown");
+    expect(diag.totalRules).toBe(1);
+    expect(diag.resolvedRules).toBe(1);
+    expect(diag.hasEvidence).toBe(true);
+    expect(diag.downgradedFromPass).toBe(true);
+  });
+
+  it("reports hasEvidence: false when the required field is missing (nothing was actually compared)", () => {
+    const diag = evaluateEligibilityDetailed({ eligibility: ageRule }, {});
+    expect(diag.status).toBe("unknown");
+    expect(diag.totalRules).toBe(1);
+    expect(diag.resolvedRules).toBe(0);
+    expect(diag.hasEvidence).toBe(false);
+    expect(diag.downgradedFromPass).toBe(false);
+  });
+
+  it("reports downgradedFromPass: false for a normal (non-incomplete) pass", () => {
+    const diag = evaluateEligibilityDetailed({ eligibility: ageRule }, profileWithAge(25));
+    expect(diag.status).toBe("likely_eligible");
+    expect(diag.downgradedFromPass).toBe(false);
+    expect(diag.hasEvidence).toBe(true);
+  });
+
+  it("counts resolved rules across a multi-rule group with mixed evidence", () => {
+    const group: EligibilityRuleGroup = {
+      type: "all",
+      rules: [
+        { id: "age", field: "age", operator: "between", value: [19, 34], required: true },
+        { id: "income", field: "annualIndividualIncome", operator: "lte", value: 30000000, required: true },
+      ],
+    };
+    const diag = evaluateEligibilityDetailed({ eligibility: group }, profileWithAge(25));
+    expect(diag.totalRules).toBe(2);
+    expect(diag.resolvedRules).toBe(1); // age resolved (pass), income unresolved (missing field)
+    expect(diag.hasEvidence).toBe(true);
+    expect(diag.status).toBe("unknown"); // required income field missing
   });
 });

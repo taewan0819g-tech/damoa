@@ -9,6 +9,8 @@ export interface MatchCounts {
   unknown: number;
   notEligible: number;
   totalEvaluated: number;
+  /** Benefits excluded from the personalized feed entirely (zero-evidence unknown and/or closed). */
+  excluded: number;
 }
 
 interface UseMatchedBenefitsResult {

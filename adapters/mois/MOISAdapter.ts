@@ -1,4 +1,13 @@
-import type { Benefit, BenefitCategory, BenefitType, EligibilityRuleGroup, InstitutionType } from "@/types/benefit";
+import type {
+  Benefit,
+  BenefitCategory,
+  BenefitType,
+  EligibilityRule,
+  EligibilityRuleGroup,
+  InstitutionType,
+} from "@/types/benefit";
+import { parseMOISUserScope } from "@/lib/eligibility/targetScope";
+import { extractEligibilityFromText } from "@/lib/eligibility/extraction/koreanEligibilityParser";
 
 /**
  * Raw record shapes confirmed live against the 행정안전부 "대한민국 공공서비스
@@ -119,23 +128,85 @@ function splitDocumentList(text?: string): string[] | undefined {
 /**
  * Eligibility completeness for MOIS records.
  *
- * The only verified structured criterion is applicant age (JA0110/JA0111).
- * Live sampling of `supportConditions` shows dozens of other JA02xx/JA03xx/
+ * Beyond applicant age (JA0110/JA0111), 사용자구분 (target scope), and
+ * whatever the deterministic text parser lifts out of `선정기준`/`지원대상`,
+ * live sampling of `supportConditions` shows dozens of other JA02xx/JA03xx/
  * JA04xx/JA11xx/JA12xx/JA21xx/JA22xx condition codes populated with "Y"/null
  * on the very same records — clearly encoding real eligibility categories
  * (income bracket, household type, disability, region, etc.) that odcloud
- * doesn't publish a decoder for. The free-text `선정기준`/`지원대상` fields on
- * `serviceList`/`serviceDetail` almost certainly restate (or add to) those
- * same conditions in prose we don't parse either. So an age-only rule group
+ * doesn't publish a decoder for. So a rule group built from age+scope+text
  * is never treated as the FULL picture — it's marked "incomplete", meaning
- * a pass on age alone can't promote a benefit to likely_eligible; only a
- * definite age-based fail can still produce not_eligible.
+ * a pass on the rules we do have can't promote a benefit to likely_eligible;
+ * only a definite fail from the parsed rules can still produce not_eligible.
  */
 function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): Benefit["eligibilityDataStatus"] {
   return eligibility ? "incomplete" : undefined;
 }
 
-export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, eligibility?: EligibilityRuleGroup): Benefit {
+/**
+ * Merges every verified MOIS eligibility source into one rule group:
+ *  - `ageEligibility`: applicant age range from `supportConditions`
+ *    (JA0110/JA0111), built separately per-service and passed in by the
+ *    caller (see MOISBenefitProvider, which shares one conditions map
+ *    across all records).
+ *  - `사용자구분`: applicant-scope (개인/가구/법인·시설·단체/소상공인), decoded via
+ *    `parseMOISUserScope`/`target_scope_in` (see lib/eligibility/targetScope.ts).
+ *    An unparseable-but-nonblank value is real data we can't safely turn
+ *    into a rule, so it's surfaced via `hasUnresolvedEligibility` instead of
+ *    silently dropped.
+ *  - `지원대상`/`선정기준`: free text run through the deterministic Korean
+ *    parser (see lib/eligibility/extraction/koreanEligibilityParser.ts),
+ *    which reports its own unresolved clauses the same way.
+ */
+function buildEligibility(
+  raw: MOISRawServiceListItem | MOISRawServiceDetail,
+  ageEligibility?: EligibilityRuleGroup
+): { eligibility?: EligibilityRuleGroup; hasUnresolvedEligibility: boolean } {
+  const rules: EligibilityRule[] = [];
+  let hasUnresolvedEligibility = false;
+
+  if (ageEligibility) {
+    // supportConditions only ever produces flat EligibilityRule leaves (see
+    // normalizeMOISSupportConditions below), never nested groups.
+    rules.push(...(ageEligibility.rules as EligibilityRule[]));
+  }
+
+  // `사용자구분` is only documented on `serviceList` records; `serviceDetail`'s
+  // type doesn't declare it, so it falls through the index signature as
+  // `unknown` — read it defensively rather than assuming its shape.
+  const 사용자구분raw = (raw as { 사용자구분?: unknown }).사용자구분;
+  const 사용자구분 = typeof 사용자구분raw === "string" ? 사용자구분raw : undefined;
+
+  const scopes = parseMOISUserScope(사용자구분);
+  if (scopes) {
+    rules.push({
+      id: "mois-user-scope",
+      field: "사용자구분",
+      operator: "target_scope_in",
+      value: scopes,
+      required: true,
+      evidence: { sourceField: "사용자구분", sourceText: 사용자구분, extractionType: "structured_api" },
+    });
+  } else if (사용자구분 && 사용자구분.trim()) {
+    hasUnresolvedEligibility = true;
+  }
+
+  const textFields: [string, string | undefined][] = [
+    ["지원대상", raw.지원대상],
+    ["선정기준", raw.선정기준],
+  ];
+  for (const [sourceField, text] of textFields) {
+    const extracted = extractEligibilityFromText(sourceField, text);
+    rules.push(...extracted.rules);
+    if (extracted.unresolvedClauses.length > 0) hasUnresolvedEligibility = true;
+  }
+
+  if (rules.length === 0) return { eligibility: undefined, hasUnresolvedEligibility };
+  return { eligibility: { type: "all", rules }, hasUnresolvedEligibility };
+}
+
+export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEligibility?: EligibilityRuleGroup): Benefit {
+  const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
@@ -145,6 +216,7 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, eligib
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,
     eligibilityDataStatus: eligibilityDataStatus(eligibility),
+    hasUnresolvedEligibility,
     application: {
       officialUrl: raw.상세조회URL,
       sourceUrl: raw.상세조회URL,
@@ -156,7 +228,8 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, eligib
   };
 }
 
-export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, eligibility?: EligibilityRuleGroup): Benefit {
+export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, ageEligibility?: EligibilityRuleGroup): Benefit {
+  const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
@@ -166,6 +239,7 @@ export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, eligibilit
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,
     eligibilityDataStatus: eligibilityDataStatus(eligibility),
+    hasUnresolvedEligibility,
     application: {
       officialUrl: raw.온라인신청사이트URL,
       applicationUrl: raw.온라인신청사이트URL,

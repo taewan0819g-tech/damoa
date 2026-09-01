@@ -119,40 +119,52 @@ function buildAgeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
 // earnMinAmt/earnMaxAmt are denominated in 만원 (10,000 KRW) units — confirmed
 // live: getPlcy?plcyNo=20260724005400113307 ("햇살론유스", a well-known
 // program capped around 35,000,000 KRW annual income) returns
-// earnMaxAmt: "3500", i.e. 3500만원 = 35,000,000 KRW. The profile's
-// `annualIndividualIncome` field is raw KRW (see OnboardingFlow.tsx, which
-// multiplies the user's 만원 input by 10,000 before storing it), so these
-// amounts must be converted to raw KRW to compare correctly.
+// earnMaxAmt: "3500", i.e. 3500만원 = 35,000,000 KRW.
+//
+// The user's real profile input is an income BAND (individualIncomeBand),
+// never an exact figure, and `resolveProfileField` turns that band into a
+// `{min, max}` range via `individualIncomeRange`. So this rule must compare
+// RANGE vs RANGE (`range_within`) against that virtual field, not a scalar
+// vs the legacy `annualIndividualIncome` field — nothing in the current UI
+// ever writes that scalar (see OnboardingFlow.tsx / profile/page.tsx, both
+// collect only income bands), so a `field: "annualIndividualIncome"` rule
+// would silently never resolve for any real user and every Youth Center
+// income condition would be dead on arrival. `individualIncomeRange` still
+// falls back to the legacy scalar as a degenerate {min: x, max: x} range
+// for any caller that does set it, so backward compatibility is preserved.
 const MANWON_TO_KRW = 10000;
 
 function buildIncomeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
   if (raw.earnCndSeCd !== "0043002") return undefined;
   const min = raw.earnMinAmt ? Number(raw.earnMinAmt) : undefined;
   const max = raw.earnMaxAmt ? Number(raw.earnMaxAmt) : undefined;
-  if (typeof min === "number" && typeof max === "number" && !Number.isNaN(min) && !Number.isNaN(max)) {
+  const hasMin = typeof min === "number" && !Number.isNaN(min) && min > 0;
+  const hasMax = typeof max === "number" && !Number.isNaN(max) && max > 0;
+
+  if (hasMin && hasMax) {
     return {
       id: "youth-income",
-      field: "annualIndividualIncome",
-      operator: "between",
+      field: "individualIncomeRange",
+      operator: "range_within",
       value: [min * MANWON_TO_KRW, max * MANWON_TO_KRW],
       required: true,
     };
   }
-  if (typeof max === "number" && !Number.isNaN(max)) {
+  if (hasMax) {
     return {
       id: "youth-income-max",
-      field: "annualIndividualIncome",
-      operator: "lte",
-      value: max * MANWON_TO_KRW,
+      field: "individualIncomeRange",
+      operator: "range_within",
+      value: [0, max * MANWON_TO_KRW],
       required: true,
     };
   }
-  if (typeof min === "number" && !Number.isNaN(min)) {
+  if (hasMin) {
     return {
       id: "youth-income-min",
-      field: "annualIndividualIncome",
-      operator: "gte",
-      value: min * MANWON_TO_KRW,
+      field: "individualIncomeRange",
+      operator: "range_within",
+      value: [min * MANWON_TO_KRW, Number.POSITIVE_INFINITY],
       required: true,
     };
   }

@@ -7,11 +7,12 @@ import type {
 } from "@/types";
 import { resolveProfileField } from "./fieldResolver";
 import { matchRegion, type RegionSpec } from "./region";
+import { matchTargetScope, type TargetScope } from "./targetScope";
 
-type NodeResult = "pass" | "fail" | "unknown" | "skip";
+export type NodeResult = "pass" | "fail" | "unknown" | "skip";
 type CompareResult = "pass" | "fail" | "unknown";
 
-function isGroup(node: EligibilityRule | EligibilityRuleGroup): node is EligibilityRuleGroup {
+export function isGroup(node: EligibilityRule | EligibilityRuleGroup): node is EligibilityRuleGroup {
   return "type" in node && (node.type === "all" || node.type === "any");
 }
 
@@ -43,6 +44,14 @@ function compare(operator: EligibilityRule["operator"], fieldValue: unknown, rul
       return Array.isArray(ruleValue) && ruleValue.includes(fieldValue) ? "pass" : "fail";
     case "not_in":
       return Array.isArray(ruleValue) && !ruleValue.includes(fieldValue) ? "pass" : "fail";
+    case "gt":
+      return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue > ruleValue
+        ? "pass"
+        : "fail";
+    case "lt":
+      return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue < ruleValue
+        ? "pass"
+        : "fail";
     case "gte":
       return typeof fieldValue === "number" && typeof ruleValue === "number" && fieldValue >= ruleValue
         ? "pass"
@@ -72,7 +81,27 @@ function compare(operator: EligibilityRule["operator"], fieldValue: unknown, rul
   }
 }
 
-function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeResult {
+/**
+ * Exported for reuse by the candidate-retrieval index (see
+ * lib/eligibility/candidateIndex.ts), which needs to test a single
+ * `required: true` rule against a profile without walking a whole
+ * eligibility tree — e.g. to conservatively prune a benefit only when a
+ * verified necessary rule definitively fails. Keeping this as the single
+ * source of truth for rule-level semantics (tri-state, target_scope_in
+ * handling, missing-field-as-unknown, etc.) avoids the candidate index
+ * silently drifting from the real rule engine's behavior.
+ */
+export function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeResult {
+  // target_scope_in ignores `field` and is evaluated against the whole
+  // profile (see RuleEvidence / TargetScope docs) — it never resolves a
+  // profile field, so it must be handled before the generic fieldValue path.
+  if (rule.operator === "target_scope_in") {
+    if (!Array.isArray(rule.value)) return rule.required ? "unknown" : "skip";
+    const result = matchTargetScope(profile, rule.value as TargetScope[]);
+    if (result === "unknown") return rule.required ? "unknown" : "skip";
+    return result;
+  }
+
   const fieldValue = resolveProfileField(profile, rule.field);
 
   if (rule.operator === "exists") {
@@ -90,15 +119,23 @@ function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeResult {
   return result;
 }
 
-function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile): NodeResult {
+/**
+ * `leaves` accumulates every individual rule's result (never a group's
+ * aggregate), across the whole tree, in evaluation order — used by
+ * `evaluateEligibilityDetailed` to compute evidence diagnostics without a
+ * second traversal.
+ */
+function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile, leaves: NodeResult[]): NodeResult {
   if (isGroup(node)) {
-    return evaluateGroup(node, profile);
+    return evaluateGroup(node, profile, leaves);
   }
-  return evaluateRule(node, profile);
+  const result = evaluateRule(node, profile);
+  leaves.push(result);
+  return result;
 }
 
-function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile): NodeResult {
-  const results = group.rules.map((child) => evaluateNode(child, profile)).filter((r) => r !== "skip");
+function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile, leaves: NodeResult[]): NodeResult {
+  const results = group.rules.map((child) => evaluateNode(child, profile, leaves)).filter((r) => r !== "skip");
 
   if (group.type === "all") {
     if (results.includes("fail")) return "fail";
@@ -119,8 +156,45 @@ const NODE_RESULT_TO_STATUS: Record<Exclude<NodeResult, "skip">, EligibilityStat
   fail: "not_eligible",
 };
 
+export type EligibilityBenefitInput = Pick<
+  Benefit,
+  "eligibility" | "eligibilityUnrestricted" | "eligibilityDataStatus" | "hasUnresolvedEligibility"
+>;
+
 /**
- * Evaluates a benefit's eligibility against a user profile.
+ * Internal diagnostics behind an `EligibilityStatus`, for callers that need
+ * more than the tri-state result — e.g. the personalized relevance filter
+ * (see domain/eligibility/matchBenefits.ts), which must distinguish an
+ * "unknown" that's genuinely uninformative (zero rules ever concretely
+ * compared against the profile) from an "unknown" backed by real matched
+ * criteria (e.g. a benefit whose parsed rules all pass but got downgraded
+ * because the source data is incomplete) — the latter is still worth
+ * surfacing to the user, the former isn't.
+ */
+export interface EligibilityDiagnostics {
+  status: EligibilityStatus;
+  /** Total number of individual rule leaves considered (flattened across nested groups). */
+  totalRules: number;
+  /**
+   * How many of those leaves resolved to a concrete pass/fail against real
+   * profile data (as opposed to being skipped, or unknown for lack of data).
+   */
+  resolvedRules: number;
+  /** True when `resolvedRules > 0` — i.e. at least one rule was actually checked against the profile, not just absent data. */
+  hasEvidence: boolean;
+  /**
+   * True when every parsed rule actually passed, but the status was held at
+   * "unknown" anyway because the source data is known-incomplete
+   * (`eligibilityDataStatus: "incomplete"` and/or `hasUnresolvedEligibility:
+   * true`) — a full pass on partial information is not full evidence.
+   */
+  downgradedFromPass: boolean;
+}
+
+/**
+ * Evaluates a benefit's eligibility against a user profile and returns the
+ * full diagnostic breakdown. `evaluateEligibility` below is a thin wrapper
+ * over this for callers that only need the final status.
  *
  * A benefit with no structured eligibility rules is NOT assumed to be open
  * to everyone — the absence of rules usually just means the source data
@@ -133,30 +207,51 @@ const NODE_RESULT_TO_STATUS: Record<Exclude<NodeResult, "skip">, EligibilityStat
  * "Eligibility completeness": some sources (MOIS free-text 선정기준/지원대상,
  * Youth Center's less-verified fields, etc.) very likely have MORE real
  * eligibility conditions than we've managed to turn into structured rules.
- * A benefit marked `eligibilityDataStatus: "incomplete"` passing only the
- * rules we DID manage to parse is not strong evidence of full eligibility —
- * we could easily be missing a disqualifying region/income/employment
- * condition. So for incomplete benefits: a definite FAIL proven from the
- * parsed rules still produces not_eligible (a rule that CAN fail on known
- * data is trustworthy evidence), but a pass (or an already-unknown result)
- * never promotes to likely_eligible — it stays unknown.
+ * A benefit marked `eligibilityDataStatus: "incomplete"` OR
+ * `hasUnresolvedEligibility: true` passing only the rules we DID manage to
+ * parse is not strong evidence of full eligibility — we could easily be
+ * missing a disqualifying region/income/employment condition (the latter
+ * flag catches sources that have zero *structured* rules but a real
+ * free-text clause we couldn't safely parse — still "incomplete", not
+ * merely "no data"). So for incomplete benefits: a definite FAIL proven
+ * from the parsed rules still produces not_eligible (a rule that CAN fail
+ * on known data is trustworthy evidence), but a pass (or an already-unknown
+ * result) never promotes to likely_eligible — it stays unknown.
  */
-export function evaluateEligibility(
-  benefit: Pick<Benefit, "eligibility" | "eligibilityUnrestricted" | "eligibilityDataStatus">,
+export function evaluateEligibilityDetailed(
+  benefit: EligibilityBenefitInput,
   profile: UserProfile
-): EligibilityStatus {
+): EligibilityDiagnostics {
   const isUnrestricted = benefit.eligibilityUnrestricted === true || benefit.eligibilityDataStatus === "unrestricted";
 
   if (!benefit.eligibility) {
-    return isUnrestricted ? "likely_eligible" : "unknown";
+    return {
+      status: isUnrestricted ? "likely_eligible" : "unknown",
+      totalRules: 0,
+      resolvedRules: 0,
+      hasEvidence: false,
+      downgradedFromPass: false,
+    };
   }
 
-  const result = evaluateGroup(benefit.eligibility, profile);
+  const leaves: NodeResult[] = [];
+  const result = evaluateGroup(benefit.eligibility, profile, leaves);
   const normalized = result === "skip" ? "unknown" : result;
 
-  if (benefit.eligibilityDataStatus === "incomplete") {
-    return normalized === "fail" ? "not_eligible" : "unknown";
-  }
+  const resolvedRules = leaves.filter((r) => r === "pass" || r === "fail").length;
+  const isIncomplete = benefit.eligibilityDataStatus === "incomplete" || benefit.hasUnresolvedEligibility === true;
+  const downgradedFromPass = isIncomplete && normalized === "pass";
+  const status = isIncomplete ? (normalized === "fail" ? "not_eligible" : "unknown") : NODE_RESULT_TO_STATUS[normalized];
 
-  return NODE_RESULT_TO_STATUS[normalized];
+  return {
+    status,
+    totalRules: leaves.length,
+    resolvedRules,
+    hasEvidence: resolvedRules > 0,
+    downgradedFromPass,
+  };
+}
+
+export function evaluateEligibility(benefit: EligibilityBenefitInput, profile: UserProfile): EligibilityStatus {
+  return evaluateEligibilityDetailed(benefit, profile).status;
 }
