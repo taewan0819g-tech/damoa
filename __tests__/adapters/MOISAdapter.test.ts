@@ -119,3 +119,61 @@ describe("normalizeMOISServiceDetail eligibility", () => {
     expect(benefit.eligibilityDataStatus).toBe("incomplete");
   });
 });
+
+describe("신청기한 -> application.startDate/endDate/deadlineType", () => {
+  it("normalizeMOISServiceListItem maps a parseable date range into startDate/endDate", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 신청기한: "2025.04.01~2026.03.31" }));
+    expect(benefit.application).toEqual(
+      expect.objectContaining({
+        startDate: "2025-04-01",
+        endDate: "2026-03-31",
+        deadlineType: "date_range",
+      })
+    );
+  });
+
+  it("normalizeMOISServiceListItem tags 상시/연중/수시/채용시 text as open_ended without inventing dates", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 신청기한: "상시모집" }));
+    expect(benefit.application?.startDate).toBeUndefined();
+    expect(benefit.application?.endDate).toBeUndefined();
+    expect(benefit.application?.deadlineType).toBe("open_ended");
+  });
+
+  it("normalizeMOISServiceListItem tags 예산 소진 시 text as budget_exhaustion without inventing dates", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 신청기한: "예산 소진 시 조기 마감" }));
+    expect(benefit.application?.startDate).toBeUndefined();
+    expect(benefit.application?.endDate).toBeUndefined();
+    expect(benefit.application?.deadlineType).toBe("budget_exhaustion");
+  });
+
+  it("normalizeMOISServiceListItem leaves ambiguous free text unparsed (date_unknown-equivalent), never guessing a date", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 신청기한: "대출 약정희망일의 전월 25일까지" }));
+    expect(benefit.application?.startDate).toBeUndefined();
+    expect(benefit.application?.endDate).toBeUndefined();
+    expect(benefit.application?.deadlineType).toBe("unparsed");
+  });
+
+  it("normalizeMOISServiceListItem leaves a missing 신청기한 unparsed", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({}));
+    expect(benefit.application?.startDate).toBeUndefined();
+    expect(benefit.application?.endDate).toBeUndefined();
+    expect(benefit.application?.deadlineType).toBe("unparsed");
+  });
+
+  it("normalizeMOISServiceDetail maps a parseable date range into startDate/endDate too", () => {
+    const benefit = normalizeMOISServiceDetail(rawDetail({ 신청기한: "2026-05-04 ~ 2026-05-20" }));
+    expect(benefit.application).toEqual(
+      expect.objectContaining({
+        startDate: "2026-05-04",
+        endDate: "2026-05-20",
+        deadlineType: "date_range",
+      })
+    );
+  });
+
+  it("normalizeMOISServiceDetail tags open-ended text the same way as the list-item normalizer", () => {
+    const benefit = normalizeMOISServiceDetail(rawDetail({ 신청기한: "수시" }));
+    expect(benefit.application?.deadlineType).toBe("open_ended");
+    expect(benefit.application?.startDate).toBeUndefined();
+  });
+});

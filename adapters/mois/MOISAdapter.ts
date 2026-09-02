@@ -8,6 +8,7 @@ import type {
 } from "@/types/benefit";
 import { parseMOISUserScope } from "@/lib/eligibility/targetScope";
 import { extractEligibilityFromText } from "@/lib/eligibility/extraction/koreanEligibilityParser";
+import { parseMoisDeadline } from "@/lib/eligibility/extraction/moisDeadlineParser";
 
 /**
  * Raw record shapes confirmed live against the 행정안전부 "대한민국 공공서비스
@@ -207,6 +208,7 @@ function buildEligibility(
 
 export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEligibility?: EligibilityRuleGroup): Benefit {
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
+  const deadline = parseMoisDeadline(raw.신청기한);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
@@ -220,6 +222,9 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEli
     application: {
       officialUrl: raw.상세조회URL,
       sourceUrl: raw.상세조회URL,
+      startDate: deadline.startDate,
+      endDate: deadline.endDate,
+      deadlineType: deadline.deadlineType,
     },
     institution: { name: raw.소관기관명, type: mapInstitutionType(raw.소관기관유형) },
     tags: raw.서비스분야 ? [raw.서비스분야] : undefined,
@@ -230,6 +235,7 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEli
 
 export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, ageEligibility?: EligibilityRuleGroup): Benefit {
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
+  const deadline = parseMoisDeadline(raw.신청기한);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
@@ -244,6 +250,9 @@ export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, ageEligibi
       officialUrl: raw.온라인신청사이트URL,
       applicationUrl: raw.온라인신청사이트URL,
       sourceUrl: raw.온라인신청사이트URL,
+      startDate: deadline.startDate,
+      endDate: deadline.endDate,
+      deadlineType: deadline.deadlineType,
     },
     institution: { name: raw.소관기관명, type: "government" },
     requiredDocuments: splitDocumentList(raw.구비서류),

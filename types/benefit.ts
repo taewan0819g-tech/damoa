@@ -148,6 +148,20 @@ export interface BenefitApplication {
   officialUrl?: string;
   applicationUrl?: string;
   sourceUrl?: string;
+  /**
+   * Deterministic classification of why `startDate`/`endDate` are (or
+   * aren't) populated. Currently only produced by the MOIS adapter from
+   * 신청기한 (see lib/eligibility/extraction/moisDeadlineParser.ts):
+   * "date_range" means both dates were confidently parsed; "open_ended"
+   * (상시/연중/수시/채용시) and "budget_exhaustion" (예산 소진 시) mean the
+   * source explicitly says there's no fixed calendar deadline, not that we
+   * failed to find one; "unparsed" means the free text didn't match any
+   * known shape. This never changes how `classifyApplicationState` buckets
+   * the benefit (a missing endDate is still never treated as expired) — it
+   * only records *why*, for debugging/future UI use. Sources that don't
+   * produce this classification simply omit it.
+   */
+  deadlineType?: "date_range" | "open_ended" | "budget_exhaustion" | "unparsed";
 }
 
 export interface BenefitInstitution {

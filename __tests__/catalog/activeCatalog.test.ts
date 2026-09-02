@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyApplicationState, classifyCatalog } from "@/lib/catalog/activeCatalog";
+import { normalizeMOISServiceListItem } from "@/adapters/mois/MOISAdapter";
 import type { Benefit } from "@/types/benefit";
 
 const REF_DATE = new Date("2026-09-01T00:00:00Z");
@@ -107,5 +108,48 @@ describe("classifyCatalog", () => {
       [...classified.expired, ...classified.active, ...classified.upcoming, ...classified.dateUnknown].map((b) => b.id)
     );
     expect(allIds.size).toBe(benefits.length); // no duplicates
+  });
+});
+
+/**
+ * End-to-end check that MOIS's 신청기한 -> application.startDate/endDate
+ * mapping (lib/eligibility/extraction/moisDeadlineParser.ts) actually moves
+ * records into the correct bucket here, without this module needing any
+ * changes: a real parsed range participates in expired/active exactly like
+ * any other source, and the "explicit but dateless" open-ended/budget-
+ * exhaustion/unparsed cases all still land in date_unknown (never
+ * incorrectly expired) since classifyApplicationState only ever looks at
+ * startDate/endDate, not deadlineType.
+ */
+describe("MOIS 신청기한 wiring end-to-end", () => {
+  const rawBase = { 서비스ID: "1", 서비스명: "t", 소관기관명: "o" };
+
+  it("a parseable past date range now classifies as expired instead of date_unknown", () => {
+    const benefit = normalizeMOISServiceListItem({ ...rawBase, 신청기한: "2020.01.01~2020.01.31" });
+    expect(classifyApplicationState(benefit, REF_DATE)).toBe("expired");
+  });
+
+  it("a parseable currently-open date range (started, not yet ended) now classifies as active instead of date_unknown", () => {
+    // REF_DATE is 2026-09-01: start already passed, end is still in the future.
+    const benefit = normalizeMOISServiceListItem({ ...rawBase, 신청기한: "2026.08.01~2026.10.31" });
+    expect(classifyApplicationState(benefit, REF_DATE)).toBe("active");
+  });
+
+  it("상시 (open_ended) has no dates and stays date_unknown, never expired", () => {
+    const benefit = normalizeMOISServiceListItem({ ...rawBase, 신청기한: "상시모집" });
+    expect(benefit.application?.deadlineType).toBe("open_ended");
+    expect(classifyApplicationState(benefit, REF_DATE)).toBe("date_unknown");
+  });
+
+  it("예산 소진 시 (budget_exhaustion) has no dates and stays date_unknown, never expired", () => {
+    const benefit = normalizeMOISServiceListItem({ ...rawBase, 신청기한: "예산 소진 시 조기 마감" });
+    expect(benefit.application?.deadlineType).toBe("budget_exhaustion");
+    expect(classifyApplicationState(benefit, REF_DATE)).toBe("date_unknown");
+  });
+
+  it("ambiguous free text stays unparsed with no dates, still date_unknown (unchanged behavior)", () => {
+    const benefit = normalizeMOISServiceListItem({ ...rawBase, 신청기한: "전월 25일까지" });
+    expect(benefit.application?.deadlineType).toBe("unparsed");
+    expect(classifyApplicationState(benefit, REF_DATE)).toBe("date_unknown");
   });
 });
