@@ -520,5 +520,160 @@ describe("extractEligibilityFromText", () => {
       expect(result.rules.length).toBeGreaterThanOrEqual(2);
       expect(result.unresolvedClauses).toEqual([]);
     });
+
+    it("does NOT bail out when a 또는 occurrence is far from either extracted rule's trigger signal (real MOIS shape)", () => {
+      // Real excerpt (MOIS 304000000105): the "본인 또는 배우자" OR is about
+      // WHO gave birth, nowhere near the age or region trigger text — the
+      // clause-local check must not treat it as joining those dimensions.
+      const result = extractEligibilityFromText(
+        "f",
+        "본인 또는 배우자가 출산한 만 7세 미만의 아동을 양육하면서 신청일 기준으로 1년 전부터 계속하여 광진구에 주민등록을 두고 거주하는 장애인"
+      );
+      expect(result.rules.map((r) => r.field).sort()).toEqual(["age", "residence"]);
+      expect(result.unresolvedClauses).toEqual([]);
+    });
+  });
+});
+
+/**
+ * Phase 1 regression cases (region correctness hardening): false city-token
+ * matches on ordinary Korean words, the "주민등록법" statute-name false
+ * positive, and preserving the existing gazetteer-resolution behaviors these
+ * fixes must not disturb. See koreanEligibilityParser.ts section comments
+ * for the underlying design (word-boundary/lexical validation hierarchy,
+ * not an ever-growing blacklist).
+ */
+describe("Phase 1: region correctness hardening", () => {
+  describe("item A: false city-token matches on ordinary Korean words", () => {
+    it('"1인가구 거주자만 신청 가능" -> no region rule, no unresolved clause (인가구 is not a place, just N-person-household)', () => {
+      const result = extractEligibilityFromText("f", "1인가구 거주자만 신청 가능");
+      expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      expect(result.unresolvedClauses).toEqual([]);
+    });
+
+    it('"노동구제 대상자는 거주지와 무관하게 신청할 수 있습니다" -> no region rule, no unresolved clause (노동구 is only a substring of 노동구제)', () => {
+      const result = extractEligibilityFromText("f", "노동구제 대상자는 거주지와 무관하게 신청할 수 있습니다");
+      expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      expect(result.unresolvedClauses).toEqual([]);
+    });
+
+    it('"이천시 거주자" still resolves (preserves gazetteer-lone-city behavior)', () => {
+      const result = extractEligibilityFromText("f", "이천시 거주자만 신청 가능");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "경기도", city: "이천시" }]);
+    });
+
+    it('"서울특별시 중구 거주자" still resolves (preserves province-disambiguated short-district behavior)', () => {
+      const result = extractEligibilityFromText("f", "서울특별시 중구 거주자만 신청 가능");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "서울특별시", city: "중구" }]);
+    });
+
+    it('"중구 거주자" still stays unresolved (genuinely ambiguous across 5 metros, no province stated)', () => {
+      const result = extractEligibilityFromText("f", "중구 거주자만 신청 가능");
+      expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      expect(result.unresolvedClauses).toHaveLength(1);
+    });
+
+    it('"없는시 거주자" still stays unresolved (lexically a standalone place-like token, just not in the gazetteer)', () => {
+      const result = extractEligibilityFromText("f", "없는시 거주자만 신청 가능");
+      expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      expect(result.unresolvedClauses).toHaveLength(1);
+    });
+  });
+
+  describe("item B: 주민등록법 statute-name false positive", () => {
+    it('"주민등록법에 따른 대상자" -> no region rule (주민등록법 names a statute, not an applicant residence relation)', () => {
+      const result = extractEligibilityFromText("f", "주민등록법에 따른 대상자");
+      expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      expect(result.unresolvedClauses).toEqual([]);
+    });
+
+    it('"서울특별시에 주민등록을 둔 자" -> resolves to a 서울특별시 region rule', () => {
+      const result = extractEligibilityFromText("f", "서울특별시에 주민등록을 둔 자");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "서울특별시" }]);
+    });
+  });
+
+  describe("item C: asymmetric OR-window shared-subject-prefix false positive (frozen-snapshot regression)", () => {
+    it('"...거주하는 구민 또는 그 자녀로서 고등학교에 재학중인 학생" -> resolves residence (real MOIS 347000000105 shape; the OR joins WHO the applicant is, not two dimensions)', () => {
+      const result = extractEligibilityFromText(
+        "f",
+        "선발공고일 현재 1년 이상 달서구 관내 주소를 두고 거주하는 구민 또는 그 자녀로서 고등학교에 재학중인 학생"
+      );
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "대구광역시", city: "달서구" }]);
+      expect(result.unresolvedClauses).toEqual([]);
+    });
+
+    it('"대학생 또는 미취업자" (genuine cross-dimension OR) still bails out to unresolved under the tightened before-window', () => {
+      const result = extractEligibilityFromText("f", "대학생 또는 미취업자에 해당하는 자");
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toHaveLength(1);
+    });
+  });
+
+  describe("item D: no-space trailing continuations after a city token (거주/관내/여야)", () => {
+    it('"나주시거주 1년이상인 65세이상..." -> resolves residence with no space before 거주 (real MOIS 483000000103 shape)', () => {
+      const result = extractEligibilityFromText("f", "나주시거주 1년이상인 65세이상 의료급여수급자 및 차상위본인부담경감대상자");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "전라남도", city: "나주시" }]);
+    });
+
+    it('"과천시관내에 주민등록을 두고..." -> resolves residence with no space before 관내 (real MOIS 397000000124 shape)', () => {
+      const result = extractEligibilityFromText(
+        "f",
+        "신생아의 출산일을 기준으로 신생아의 부 또는 모가 과천시관내에 주민등록을 두고 180일 이상 계속 거주한 장애인가정"
+      );
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "경기도", city: "과천시" }]);
+    });
+
+    it('"여수시여야 지원 가능" -> resolves residence despite the contracted-copula "여" attaching with no space (city + 이어야)', () => {
+      const result = extractEligibilityFromText("f", "신청일 기준 주소지가 여수시여야 지원 가능");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "전라남도", city: "여수시" }]);
+    });
+  });
+
+  describe("item E: generalized 주소를 둔/주소를 두고 residence-signal phrasing", () => {
+    it('"종로구에 주소를 둔 사람" -> resolves residence (real MOIS 300000000143 shape; no "해당 지역에" prefix required)', () => {
+      const result = extractEligibilityFromText("f", "「주민등록법」에 따라 종로구에 주소를 둔 사람");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "서울특별시", city: "종로구" }]);
+    });
+
+    it('"달성군에 주소를 두고 있는 사람" -> resolves residence (real MOIS O00019700014 shape)', () => {
+      const result = extractEligibilityFromText("f", "주민등록표상 달성군에 주소를 두고 있는 사람을 말한다");
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "대구광역시", city: "달성군" }]);
+    });
+
+    it('"...주소를 두지 못하는 경우" (negated) does NOT count as an affirmative residence signal on its own', () => {
+      // "두지" is a distinct substring from both "주소를 둔" and "주소를 두고",
+      // so this negated phrasing must not be picked up as a false affirmative
+      // signal merely because it also contains "주소를".
+      const result = extractEligibilityFromText("f", "부 또는 모가 직장 등으로 인해 서천군에 주소를 두지 못하는 경우");
+      // The OR here ("부 또는 모") sits right next to the negated phrase, not
+      // an affirmative one — this assertion only pins down that "주소를 두지"
+      // itself isn't a new false-affirmative literal match.
+      expect(result.rules.every((r) => r.field !== "residence" || JSON.stringify(r.value).includes("서천군"))).toBe(
+        true
+      );
+    });
+  });
+
+  describe("item F: boundary-validated city-token check inside the OR safety net", () => {
+    it('"미취업 혹은 근로시간 주 30시간 미만" no longer falsely triggers a residence-field match via "근로시" (real MOIS 569000000390 shape)', () => {
+      const result = extractEligibilityFromText(
+        "f",
+        "(거주) 공고일 기준 세종시 거주(주민등록)된 자 (연령) 19~39세(청년) 구직(미취업)자 (근로) 미취업 혹은 근로시간 주 30시간 미만, 워크넷 구직등록자"
+      );
+      const fields = result.rules.map((r) => r.field).sort();
+      expect(fields).toEqual(["age", "employmentStatus", "residence"]);
+      const region = result.rules.find((r) => r.field === "residence");
+      expect(region?.value).toEqual([{ province: "세종특별자치시" }]);
+    });
   });
 });

@@ -204,10 +204,35 @@ function parseIncomeClause(text: string): { rule?: EligibilityRule; unresolved?:
 // "이천시청에서 지원" or "접수처: 이천시청" never reaches this logic at all,
 // since neither contains a residence keyword.
 // ---------------------------------------------------------------------------
-const RESIDENCE_SIGNAL_PHRASES = ["거주", "주민등록", "주소지", "해당 지역에 주소를 둔"];
+/**
+ * "주소를 둔"/"주소를 두고" ("[place]에 주소를 둔 사람" / "...주소를 두고 있는
+ * 사람") are the dominant real-MOIS phrasing for "has an address registered
+ * in [place]" — far more common than the old narrow literal "해당 지역에
+ * 주소를 둔" it replaces, which required that exact 4-character prefix and
+ * missed the overwhelming majority of real occurrences (e.g. "종로구에
+ * 주소를 둔 사람", "달성군에 주소를 두고 있는 사람"). Verified via a frozen-
+ * catalog frequency sweep: 352/352 "주소를 둔" and 403/403 "주소를 두고"
+ * occurrences are affirmative (no "않"/"아니"/"못" negation found nearby);
+ * the only negated form found, "주소를 두지" ("...두지 못하는", "...두지는
+ * 않았으나"), is a distinct substring neither literal matches.
+ */
+const RESIDENCE_SIGNAL_PHRASES = ["거주", "주소지", "주소를 둔", "주소를 두고"];
 /** "주민" alone is a safe residence signal, except as part of "주민센터" (community center), a false-positive collision. */
 const RESIDENCE_AMBIGUOUS_TOKEN = "주민";
 const RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION = "주민센터";
+/**
+ * "주민등록" (resident registration) is a genuine residence signal on its own
+ * ("주민등록을 둔", "주민등록이 되어 있는") — EXCEPT when it's actually naming a
+ * law/document/number rather than describing an applicant's residence
+ * relation: "주민등록법" (the Resident Registration ACT), "주민등록증" (the
+ * physical ID CARD), "주민등록표" (the registration RECORD/FORM), "주민등록번호"
+ * (the registration NUMBER), "주민등록증명서" (the registration CERTIFICATE) all
+ * name a statute or document, not a residence condition on the applicant.
+ * Phase 1 item B: "주민등록법에 따른 대상자" must NOT produce a region rule
+ * merely because it contains the substring "주민등록".
+ */
+const RESIDENCE_REGISTRATION_TOKEN = "주민등록";
+const RESIDENCE_REGISTRATION_DOCUMENT_SUFFIXES = ["법", "증", "표", "번호", "증명서"];
 
 const CITY_TOKEN_RE = /[가-힣]{2,6}(시|군|구)/;
 /**
@@ -237,7 +262,14 @@ const CITY_PROXIMITY_WINDOW = 20;
 // Longest-first so "서울특별시" matches before a shorter alias would.
 const PROVINCE_NAMES_DESC = [...PROVINCE_ALIAS_KEYS].sort((a, b) => b.length - a.length);
 
-/** Every index in `text` where a residence-signal phrase occurs (bare "주민" excluding "주민센터"). */
+/**
+ * Every index in `text` where a residence-signal phrase occurs: the plain
+ * phrase list, "주민등록" when it's NOT naming a law/document/number (see
+ * `RESIDENCE_REGISTRATION_DOCUMENT_SUFFIXES`), and bare "주민" when it's
+ * neither "주민센터" (institution) nor part of "주민등록" (handled above, so it
+ * isn't double-counted or wrongly re-included when the registration form was
+ * excluded as a document reference).
+ */
 function residenceSignalIndices(text: string): number[] {
   const indices: number[] = [];
   for (const phrase of RESIDENCE_SIGNAL_PHRASES) {
@@ -247,9 +279,22 @@ function residenceSignalIndices(text: string): number[] {
       idx = text.indexOf(phrase, idx + 1);
     }
   }
+
+  let regIdx = text.indexOf(RESIDENCE_REGISTRATION_TOKEN);
+  while (regIdx !== -1) {
+    const after = text.slice(regIdx + RESIDENCE_REGISTRATION_TOKEN.length);
+    const isDocumentName = RESIDENCE_REGISTRATION_DOCUMENT_SUFFIXES.some((suffix) => after.startsWith(suffix));
+    if (!isDocumentName) indices.push(regIdx);
+    regIdx = text.indexOf(RESIDENCE_REGISTRATION_TOKEN, regIdx + 1);
+  }
+
   let idx = text.indexOf(RESIDENCE_AMBIGUOUS_TOKEN);
   while (idx !== -1) {
-    if (text.slice(idx, idx + RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION.length) !== RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION) {
+    const isRegistrationForm =
+      text.slice(idx, idx + RESIDENCE_REGISTRATION_TOKEN.length) === RESIDENCE_REGISTRATION_TOKEN;
+    const isInstitution =
+      text.slice(idx, idx + RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION.length) === RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION;
+    if (!isRegistrationForm && !isInstitution) {
       indices.push(idx);
     }
     idx = text.indexOf(RESIDENCE_AMBIGUOUS_TOKEN, idx + 1);
@@ -314,6 +359,91 @@ function isHangulBoundaryOk(text: string, idx: number): boolean {
   return !/[가-힣]/.test(text[idx - 1]);
 }
 
+/**
+ * Closed set of characters that may directly follow a city/county/district
+ * token (no space, as is normal Korean grammar) WITHOUT invalidating the
+ * match: the first character of common case particles (조사) — "에"(서/는/도),
+ * "은","는","이","가","을","를","의","와","과","만","나","라"(도), "로"/"으"(로),
+ * "까"(지), "부"(터) — the attributive copula "인"/"일" ("...구인 학교",
+ * "...구일 경우"), the contracted copula "여" ("...시여야" = "시" + "이어야",
+ * "must be [city]" — verified 5/5-pure via a frozen-catalog frequency sweep
+ * of `<시|군|구>여...`, all exactly "시여야", no collisions), and "민" for the
+ * extremely common "구민"/"시민" ("district/city resident") compound.
+ * Deliberately does NOT include characters that are overwhelmingly the START
+ * of an unrelated word continuing past a coincidental 시/군/구 suffix (e.g.
+ * "시설", "시행", "시장", "구역", "구성", "구입", "군경") — those must be
+ * rejected, not whitelisted, which is exactly what lets "노동구제" ("구" +
+ * "제") fail this check while "종로구민" ("구" + "민") passes. Derived from a
+ * frequency sweep of the real MOIS catalog (see task history), not guessed.
+ */
+const TRAILING_BOUNDARY_OK_CHARS = new Set([
+  "에", "은", "는", "이", "가", "을", "를", "의", "와", "과",
+  "만", "나", "라", "로", "으", "까", "부", "인", "일", "민", "내", "여",
+]);
+
+/**
+ * Closed set of whole (multi-char) words that may directly follow a
+ * city/county/district token with NO space and still confirm — not just
+ * fail to invalidate — a genuine place mention: "거주" (e.g. "나주시거주",
+ * "청주시거주") and "관내" (e.g. "과천시관내", "홍천군관내"). Real MOIS text
+ * frequently drops the space before these two specific words. Verified via
+ * the same frozen-catalog frequency sweep used for `TRAILING_BOUNDARY_OK_CHARS`:
+ * every real `<시|군|구>거<...>` occurrence in the catalog is "거주" (8/8) and
+ * every real `<시|군|구>관<...>` occurrence is "관내" (4/4) — no observed
+ * collision with an unrelated word starting the same way (e.g. "관광",
+ * "관리"), so this is two specific confirmed words, not a growing blacklist
+ * of single characters.
+ */
+const TRAILING_BOUNDARY_OK_WORDS = ["거주", "관내"];
+
+/**
+ * True when the character immediately after a city-token match is a real
+ * word boundary: end of string, non-Hangul (space/punctuation/digit), or one
+ * of the closed-set trailing continuations above. False when the match is
+ * embedded inside a longer, unrelated Hangul word (e.g. the "구" in "노동구제"
+ * is directly followed by "제", which starts neither a known particle nor
+ * "민"/"내" — a real word-continuation collision, not a genuine place
+ * mention).
+ */
+function isTrailingBoundaryOk(text: string, endIdx: number): boolean {
+  const next = text[endIdx];
+  if (next === undefined) return true;
+  if (!/[가-힣]/.test(next)) return true;
+  if (TRAILING_BOUNDARY_OK_WORDS.some((w) => text.startsWith(w, endIdx))) return true;
+  return TRAILING_BOUNDARY_OK_CHARS.has(next);
+}
+
+/**
+ * True when a matched token starting with "인" is immediately preceded by a
+ * digit — the extremely common Korean household-size idiom "N인가구"/"N인
+ * 가구" (e.g. "1인가구", "3인가구"). `CITY_TOKEN_RE`'s stem-plus-구 shape
+ * greedily matches "인가구" (stem "인가" + suffix "구") right after the
+ * digit, but this is a person-counter phrase, never a place. Scoped
+ * narrowly to "digit directly before a token starting with 인" rather than a
+ * general blacklist of "가구"-like words, per the task's hierarchy
+ * preference (structural/lexical validation over an ever-growing list).
+ */
+function isDigitPersonCounterFalsePositive(text: string, idx: number, token: string): boolean {
+  return token[0] === "인" && idx > 0 && /[0-9]/.test(text[idx - 1]);
+}
+
+/**
+ * Single shared gate for "is this regex match a genuine, structurally-valid
+ * city/county/district token" — used identically by both the province+city
+ * path (`extractProvinceCitySpecs`) and the lone-city path
+ * (`findLoneCityCandidates`) so a match that fails here is uniformly treated
+ * as noise (silently skipped), never as a signal that reaches the
+ * rule-vs-unresolved decision at all.
+ */
+function isValidCityTokenBoundary(text: string, idx: number, token: string): boolean {
+  return (
+    isHangulBoundaryOk(text, idx) &&
+    !isDigitPersonCounterFalsePositive(text, idx, token) &&
+    !isInstitutionMention(text, idx + token.length) &&
+    isTrailingBoundaryOk(text, idx + token.length)
+  );
+}
+
 function findNextProvinceMention(text: string, searchFrom: number): { alias: string; index: number } | undefined {
   let best: { alias: string; index: number } | undefined;
   for (const name of PROVINCE_NAMES_DESC) {
@@ -353,10 +483,7 @@ function extractProvinceCitySpecs(
   }
 
   const firstAbsIndex = cursor + firstCityMatch.index;
-  if (firstCityMatch[0].length === 2 && !isHangulBoundaryOk(text, firstAbsIndex)) {
-    return { specs: [{ province }], consumedUntil: cursor };
-  }
-  if (isInstitutionMention(text, firstAbsIndex + firstCityMatch[0].length)) {
+  if (!isValidCityTokenBoundary(text, firstAbsIndex, firstCityMatch[0])) {
     return { specs: [{ province }], consumedUntil: cursor };
   }
 
@@ -371,8 +498,7 @@ function extractProvinceCitySpecs(
     const siblingMatch = afterDelimiter.match(CITY_TOKEN_COMBINED_RE);
     if (!siblingMatch || siblingMatch.index !== 0) break; // must be immediately adjacent, never guessed from further away
     const siblingAbsIndex = scanFrom + delimiterMatch[0].length;
-    if (siblingMatch[0].length === 2 && !isHangulBoundaryOk(text, siblingAbsIndex)) break;
-    if (isInstitutionMention(text, siblingAbsIndex + siblingMatch[0].length)) break;
+    if (!isValidCityTokenBoundary(text, siblingAbsIndex, siblingMatch[0])) break;
     specs.push(resolveCitySpec(province, siblingMatch[0]));
     scanFrom = siblingAbsIndex + siblingMatch[0].length;
   }
@@ -408,11 +534,18 @@ function findProvinceRegionSpecs(text: string): RegionSpec[] {
 
 /**
  * Resolves every lone city/county/district mention (no province anywhere in
- * the text) that sits near a residence-signal occurrence and isn't an
- * institution-name false positive ("이천시청"). All-or-nothing per token: an
- * unrecognized or genuinely cross-province-ambiguous city name (e.g.
- * 고성군, 중구) marks the whole clause unresolved rather than silently
- * dropping just that one entry from an OR'd list.
+ * the text) that sits near a residence-signal occurrence and passes
+ * structural boundary validation (`isValidCityTokenBoundary`) — i.e. isn't
+ * embedded inside a longer unrelated word ("노동구제"'s "노동구"), isn't a
+ * digit-prefixed person-counter ("1인가구"'s "인가구"), and isn't an
+ * institution-name false positive ("이천시청"). All-or-nothing per
+ * BOUNDARY-VALID token: a boundary-valid token that's either unrecognized by
+ * the gazetteer (e.g. "없는시" — genuinely place-shaped, standalone, just not
+ * in our data) or genuinely cross-province-ambiguous (e.g. 고성군, 중구)
+ * marks the whole clause unresolved rather than silently dropping just that
+ * one entry from an OR'd list — a token that FAILS boundary validation never
+ * reaches this decision at all, since it was never a real place mention to
+ * begin with.
  */
 function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresolvableToken: boolean } {
   const signalIndices = residenceSignalIndices(text);
@@ -425,14 +558,7 @@ function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresol
   while ((match = re.exec(text)) !== null) {
     const token = match[0];
     const idx = match.index;
-    // A 2-character match came from the short-district whitelist branch —
-    // reject it if it's not at a real word boundary (e.g. the "동구" inside
-    // "노동구제" is a substring collision, not a genuine district mention),
-    // same safety check applied to province aliases. This is noise, not an
-    // unresolvable-but-real signal, so it's silently skipped rather than
-    // flagged via `hadUnresolvableToken`.
-    if (token.length === 2 && !isHangulBoundaryOk(text, idx)) continue;
-    if (isInstitutionMention(text, idx + token.length)) continue;
+    if (!isValidCityTokenBoundary(text, idx, token)) continue;
     if (!isNearAnyIndex(idx, token.length, signalIndices)) continue;
 
     const provinces = resolveCityProvinces(token);
@@ -443,6 +569,11 @@ function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresol
         specs.push({ province: provinces[0], city: token });
       }
     } else {
+      // Either genuinely ambiguous (2+ real provinces, e.g. 중구) or a
+      // wholly-unrecognized-but-structurally-valid place-like token (0
+      // provinces, e.g. 없는시): both passed boundary validation, so both
+      // are real, residence-adjacent place-shaped mentions we can't safely
+      // resolve — reported as unresolved rather than guessed OR dropped.
       hadUnresolvableToken = true;
     }
   }
@@ -467,10 +598,18 @@ function parseRegionClause(text: string): { rule?: EligibilityRule; unresolved?:
       rule: { id: "text-region", field: "residence", operator: "region_in", value: specs, required: true },
     };
   }
-  // A real geographic signal exists (an unresolved/ambiguous city token, or
-  // some city-like token we couldn't safely place) but we can't turn it into
-  // a rule — report it rather than silently dropping it.
-  if (hadUnresolvableToken || CITY_TOKEN_COMBINED_RE.test(text)) return { unresolved: text };
+  // A real, boundary-validated geographic signal exists (an
+  // unresolved/ambiguous city token, or some structurally-valid city-like
+  // token we couldn't safely place) but we can't turn it into a rule —
+  // report it rather than silently dropping it. Deliberately does NOT fall
+  // back to a raw, unvalidated `CITY_TOKEN_COMBINED_RE.test(text)` scan
+  // (Phase 1 root-cause fix): that used to bypass every boundary/proximity/
+  // institution-exclusion check this function just applied, so a phantom
+  // substring match like "노동구" inside "노동구제" (already correctly
+  // rejected above) would still flip this clause to "unresolved" through
+  // the back door. `findLoneCityCandidates` is now the single source of
+  // truth for "did a genuine place-shaped token exist in this text at all".
+  if (hadUnresolvableToken) return { unresolved: text };
   return undefined;
 }
 
@@ -644,6 +783,140 @@ export function detectLogicalConnective(text: string): LogicalConnective {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 1 item C: clause-LOCAL cross-dimension OR safety net.
+//
+// The old safety net (see `extractEligibilityFromText` below, prior version)
+// asked one whole-document question — "does '또는'/'혹은'/... appear ANYWHERE
+// in this text?" — and, if so, discarded every independently-extracted rule
+// the moment 2+ were found, regardless of where in a long document the OR
+// word actually sat relative to those rules. On real MOIS text (which often
+// mixes an unrelated "본인 또는 배우자" or a numbered "1) ... 또는 2) ..."
+// sub-list far from the actual eligibility dimensions) that wiped genuine,
+// unrelated high-confidence rules for no real ambiguity reason.
+//
+// This replacement reasons at the OR-OCCURRENCE level instead: for each
+// individual OR-signal occurrence, look at a small character window AROUND
+// IT ONLY, and check whether 2+ of the fields we actually extracted rules
+// for have a trigger signal inside that window. Only THEN is there real
+// evidence that a specific OR is joining two of our extracted dimensions
+// together (e.g. "대학생 또는 미취업자" — both signals sit right next to the
+// same 또는) — never AND an explicit OR, but also never let an OR word that
+// happens to exist somewhere far away in the document silently discard
+// unrelated, unambiguous rules.
+//
+// The window is deliberately ASYMMETRIC, not a single ±N span. Real MOIS
+// text overwhelmingly uses one recurring shape that a symmetric window
+// mis-fires on: "<residence description> <주민/구민/시민/군민> 또는 그 자녀(로서)
+// <trailing clause that happens to mention education/age/...>" — e.g.
+// "달서구 관내 주소를 두고 거주하는 구민 또는 그 자녀로서 고등학교에 재학중인 학생".
+// Here "또는" joins two SUBJECT alternatives (the resident / the resident's
+// child) that are BOTH still governed by the same residence clause — it is
+// not actually crossing residence with education. But a wide symmetric
+// window picks up the residence trigger ("거주하는") sitting ~8 chars
+// *before* "구민 또는" and wrongly pairs it with the education trigger
+// ("학생") sitting well *after* "그 자녀로서" purely by proximity coincidence,
+// wiping a perfectly good residence rule. Genuine cross-dimension ORs (e.g.
+// "재학생 또는 영도구 관내 거주 대학생") never need to reach far to their LEFT —
+// the first disjunct's own trigger sits immediately before the OR word — so
+// shrinking only the BEFORE side filters out the shared-subject-prefix
+// false positives above without losing real detections. The AFTER side
+// stays wide because a disjunct's own trigger can legitimately sit a few
+// words into its noun phrase (as in "영도구 관내 거주 대학생").
+// ---------------------------------------------------------------------------
+const OR_WINDOW_BEFORE = 6;
+const OR_WINDOW_AFTER = 25;
+
+function findOrSignalOccurrences(text: string): number[] {
+  const indices: number[] = [];
+  for (const signal of OR_SIGNALS) {
+    let idx = text.indexOf(signal);
+    while (idx !== -1) {
+      indices.push(idx);
+      idx = text.indexOf(signal, idx + signal.length);
+    }
+  }
+  return indices;
+}
+
+/**
+ * Whether the given field's own high-confidence trigger substring/pattern
+ * (the same signal its own `parse*Clause` function keys off of) appears
+ * inside `window`. Deliberately reuses each field's real trigger rather than
+ * a generic keyword list, so this stays in lockstep with the extractors
+ * above instead of drifting into its own parallel NLP layer.
+ */
+/**
+ * Whether `window` contains a city/county/district token that would actually
+ * survive the SAME structural boundary validation the real region extractor
+ * uses (`isValidCityTokenBoundary`) — unlike a bare `CITY_TOKEN_COMBINED_RE`
+ * test, which also "matches" extremely common non-place false positives
+ * (e.g. "근로시간"'s "근로시", "반드시", "거주시", "신청시") that the real
+ * extractor already knows how to reject. Using the unguarded regex here let
+ * these false city-tokens masquerade as a residence signal purely inside the
+ * OR safety net, wrongly wiping unrelated, unambiguous rules (e.g. "미취업
+ * 혹은 근로시간 주 30시간 미만" wiping an age+region+employment record whose
+ * "또는"/"혹은" had nothing to do with residence at all).
+ */
+function hasBoundaryValidCityToken(window: string): boolean {
+  const re = new RegExp(CITY_TOKEN_COMBINED_RE.source, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(window)) !== null) {
+    if (isValidCityTokenBoundary(window, match.index, match[0])) return true;
+  }
+  return false;
+}
+
+function ruleFieldSignalPresent(field: string, window: string): boolean {
+  switch (field) {
+    case "age":
+      return /\d{1,3}\s*세\s*(이상|초과|이하|미만)/.test(window);
+    case "residence":
+      return (
+        RESIDENCE_SIGNAL_PHRASES.some((p) => window.includes(p)) ||
+        window.includes(RESIDENCE_REGISTRATION_TOKEN) ||
+        hasBoundaryValidCityToken(window) ||
+        PROVINCE_NAMES_DESC.some((p) => window.includes(p))
+      );
+    case "educationStatus":
+      return /대학원생|대학생|고등학생|학생/.test(window);
+    case "employmentStatus":
+      return /미취업|재직/.test(window);
+    case "homeowner":
+      return /무주택|주택\s*보유자/.test(window);
+    case "businessOwner":
+      return window.includes("사업자등록");
+    case "individualIncomeRange":
+    case "householdIncomeRange":
+      return /연\s?소득/.test(window);
+    case "childrenCount":
+      return /자녀\s*\d+\s*명/.test(window);
+    default:
+      return false;
+  }
+}
+
+/**
+ * True only when a SPECIFIC OR-signal occurrence has 2+ distinct
+ * already-extracted rule fields' trigger signals within its (asymmetric,
+ * see `OR_WINDOW_BEFORE`/`OR_WINDOW_AFTER` above) character window — i.e.
+ * this exact "또는"/"혹은"/... is plausibly joining two of the dimensions we
+ * extracted, not just co-existing somewhere in the same (possibly very
+ * long) document.
+ */
+function hasLocalCrossDimensionOr(text: string, rules: EligibilityRule[]): boolean {
+  const fields = [...new Set(rules.map((r) => r.field))];
+  if (fields.length < 2) return false;
+  for (const idx of findOrSignalOccurrences(text)) {
+    const start = Math.max(0, idx - OR_WINDOW_BEFORE);
+    const end = Math.min(text.length, idx + OR_WINDOW_AFTER);
+    const window = text.slice(start, end);
+    const presentFields = fields.filter((f) => ruleFieldSignalPresent(f, window));
+    if (presentFields.length >= 2) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Top-level entry point
 // ---------------------------------------------------------------------------
 export function extractEligibilityFromText(sourceField: string, rawText: string | undefined | null): ExtractionResult {
@@ -683,11 +956,16 @@ export function extractEligibilityFromText(sourceField: string, rawText: string 
   const children = parseChildrenClause(text);
   if (children) rules.push(withEvidence(children, sourceField, text));
 
-  // Safety net (section 16): if the clause explicitly reads as an OR across
-  // multiple independent dimensions, don't silently AND our independently-
+  // Safety net (section 16, Phase 1 item C): if a SPECIFIC OR occurrence in
+  // the text is plausibly joining two of the dimensions we just extracted
+  // (see `hasLocalCrossDimensionOr`), don't silently AND our independently-
   // extracted rules together — that could turn "A 또는 B" into a
-  // (wrong, stricter) "A AND B". Bail out to unresolved instead.
-  if (rules.length >= 2 && detectLogicalConnective(text) === "any") {
+  // (wrong, stricter) "A AND B". Bail out to unresolved instead. Scoped to
+  // the OR occurrence's local neighborhood rather than "does an OR word
+  // exist anywhere in this (possibly long) document", so an unrelated
+  // "본인 또는 배우자" or a numbered "1) ... 또는 2) ..." sub-list elsewhere in
+  // the text no longer wipes unrelated, unambiguous rules.
+  if (rules.length >= 2 && hasLocalCrossDimensionOr(text, rules)) {
     unresolvedClauses.push(text);
     return { rules: [], unresolvedClauses };
   }

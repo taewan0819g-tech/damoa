@@ -169,38 +169,43 @@ export const REGION_GOLD_SAMPLES_REAL: RegionGoldSampleReal[] = [
     note: "중구 어르신 영양더하기 카드 안내: real MOIS text where a 중구 district office publishes its OWN program without ever stating its province in the eligibility text itself. Even though a human reader familiar with the program name ('중구...카드 안내') might guess which 중구, the ELIGIBILITY TEXT alone is genuinely ambiguous (중구 exists in 5 metros) — correctly left unresolved rather than guessed from the program title.",
   },
 
-  // -- Known, pre-existing, out-of-scope limitations surfaced by real text ----
-  // (Included deliberately: these are REAL MOIS records where the CURRENT
-  // extractor's conservative "never guess" design produces `unresolved`
-  // for a reason that has nothing to do with region/gazetteer logic itself
-  // — a different, already-independently-flagged heuristic
-  // (`detectLogicalConnective`'s naive '또는' substring scan) over-triggers
-  // on numbered sub-clause markers like "①...또는 2)..." and wipes an
-  // otherwise-correctly-extracted region rule. This is intentionally
-  // documented here, not silently worked around, so a future fix to that
-  // heuristic has a real regression signal to flip.)
+  // -- Formerly-known-limitations, fixed by Phase 1 --------------------------
+  // (These three entries used to document real, out-of-scope extractor
+  // limitations: the whole-document `detectLogicalConnective` OR check and
+  // the raw unvalidated `주민등록법`-triggers-hasResidenceSignal bug. Phase 1
+  // item B (statute/document-name-aware residence-signal detection) and item
+  // C (clause-local, per-OR-occurrence cross-dimension check) fix both root
+  // causes — see `koreanEligibilityParser.ts`. Kept here, not deleted, with
+  // updated expectations, so a future regression on these exact real records
+  // still has a fixture to catch it.)
   {
-    id: "real-unresolved-known-limitation-numbered-list-or",
+    id: "real-rule-numbered-list-or-unrelated-subject",
     sourceServiceId: "304000000105",
     sourceField: "target",
     text: "본인 또는 배우자가 출산한 만 7세 미만의 아동을 양육하면서 신청일 기준으로 1년 전부터 계속하여 광진구에 주민등록을 두고 거주하는 장애인(2022.7. 조례개정)",
-    expectation: { outcome: "unresolved" },
-    note: "장애인가정 양육지원금 지급 (KNOWN LIMITATION, not a region-parser bug): 광진구 is unambiguous and would resolve to {서울특별시, 광진구} in isolation, and '7세 미만' would resolve to an age rule — but `detectLogicalConnective` sees the unrelated '본인 또는 배우자' (self-or-spouse) and classifies the whole clause as OR logic, so the cross-dimension safety net conservatively wipes both rules rather than risk mis-ANDing an OR'd clause. Safe (never wrong), but loses real coverage — a real candidate for improving `detectLogicalConnective` to recognize 'X 또는 Y' as a subject-level OR rather than a cross-dimension OR, in a future, separately-scoped change.",
+    expectation: { outcome: "rule", value: [{ province: "서울특별시", city: "광진구" }] },
+    note: "장애인가정 양육지원금 지급 (Phase 1 fix confirmed): 광진구 is unambiguous and correctly resolves to {서울특별시, 광진구}, and '7세 미만' resolves to an age rule. The unrelated '본인 또는 배우자' (self-or-spouse) OR is nowhere near either extracted signal (age/region trigger substrings), so the clause-local OR check (`hasLocalCrossDimensionOr`) correctly does NOT treat it as joining the age and region dimensions — previously the whole-document `detectLogicalConnective` check wiped both rules just because '또는' existed anywhere in the text.",
   },
   {
-    id: "real-unresolved-known-limitation-numbered-list-or-2",
+    id: "real-rule-numbered-list-or-unrelated-subject-2",
     sourceServiceId: "315000000268",
     sourceField: "target",
     text: "① 서울특별시 강서구에 주민등록이 되어 있는 자 ② 서울특별시 강서구의 주택을 임차한 사람 중 1) 특별법에 따라 국토교통부 장관이 결정한 전세사기피해자 또는 2) HUG 전세피해확인서 발급자(전세피해자) ③새로운 전·월세 주택으로 입주하여 「전세보증금 반환보증 보증료」 를 납부한 자 * 사업공고일 이전에 전세피해로 이미 전·월세 주택에 입주한 세대도 지원신청 가능 ※ 신청일 현재 무주택자인 자 ※ 정부, 타 자치단체에서 유사한 목적의 지원을 받은 경우 중복 지원 불가",
-    expectation: { outcome: "unresolved" },
-    note: "강서구 전세피해지원금(보증료) 지원 (KNOWN LIMITATION, not a region-parser bug): explicitly states '서울특별시 강서구' twice, which WOULD resolve cleanly to {서울특별시, 강서구} in isolation (confirmed by testing the sub-clause alone) — but the numbered-option '또는' between sub-items 1) and 2) trips the same over-broad OR heuristic as the entry above, this time wiping a region+homeowner('무주택') rule pair. Included as a second, independent real confirmation of the same known limitation.",
+    expectation: {
+      outcome: "rule",
+      value: [
+        { province: "서울특별시", city: "강서구" },
+        { province: "서울특별시", city: "강서구" },
+      ],
+    },
+    note: "강서구 전세피해지원금(보증료) 지원 (Phase 1 fix confirmed): explicitly states '서울특별시 강서구' twice (once per province mention, hence the duplicate spec — findProvinceRegionSpecs resolves each independent province mention on its own and does not cross-mention-dedupe, which is harmless for region_in matching), and '무주택자인 자' resolves to a homeowner:false rule. The numbered-option '또는' between sub-items 1) and 2) sits nowhere near either signal's trigger substring, so the clause-local OR check correctly leaves both rules intact — previously the whole-document OR check wiped both just because '또는' existed anywhere in the text.",
   },
   {
-    id: "real-unresolved-known-limitation-institution-plus-unrelated-signal",
+    id: "real-no-rule-statute-name-not-residence",
     sourceServiceId: "305000000157",
     sourceField: "target",
     text: "- 무인민원발급창구 이용 민원 ※ 동대문구 무인민원발급기 설치장소 : 동대문구청 홈페이지 확인 - 발급 민원증명 관련 법령·조례에 의한 수수료 면제 대상(예 : 주민등록법 시행규칙 제18조 제1항에 따른 수급자 면제)",
-    expectation: { outcome: "unresolved" },
-    note: "무인민원발급기 수수료 면제 (KNOWN LIMITATION, not a region-parser bug): the institution-mention guard correctly REJECTS '동대문구청' as a district-office address rather than a residence rule (working as intended, same as `real-no-rule-institution-mention-no-residence-signal` above) — but a citation of '주민등록법' (Resident Registration Act, a statute name) elsewhere in the same text contains the substring '주민등록' and trips `hasResidenceSignal`, so the clause doesn't short-circuit to no_rule the way the cleaner 광진구청 example does. End result is still safe (unresolved, never a wrong rule), just noisier than ideal — a real candidate for tightening the residence-signal detector to require it not be part of a legal-citation phrase, in a future, separately-scoped change.",
+    expectation: { outcome: "no_rule" },
+    note: "무인민원발급기 수수료 면제 (Phase 1 fix confirmed): the institution-mention guard correctly rejects '동대문구청' as a district-office address, same as `real-no-rule-institution-mention-no-residence-signal` above. Previously, a citation of '주민등록법' (Resident Registration Act, a statute name) elsewhere in the text contained the substring '주민등록' and incorrectly tripped `hasResidenceSignal`, producing a noisy 'unresolved' instead of cleanly short-circuiting to no_rule. Phase 1 item B's statute/document-name-aware residence-signal detection now excludes '주민등록법' (and '주민등록증'/'표'/'번호'/'증명서') from counting as a residence signal, so this clause never even reaches the region-token logic.",
   },
 ];
