@@ -1,5 +1,6 @@
 import type { UserProfile } from "@/types/profile";
 import { calculateAge } from "@/domain/profile/age";
+import { calculateMarriageDurationYears } from "@/domain/profile/marriageDuration";
 import { incomeBandToRange } from "@/lib/constants/incomeBands";
 
 /**
@@ -14,6 +15,16 @@ import { incomeBandToRange } from "@/lib/constants/incomeBands";
 export function resolveProfileField(profile: UserProfile, field: string): unknown {
   if (field === "age") {
     return calculateAge(profile.birthDate) ?? undefined;
+  }
+
+  /**
+   * Derived from `marriageDate` (see Phase 2 audit / `calculateMarriageDurationYears`)
+   * so "혼인신고일로부터 N년 이내"-style clauses can be expressed with the
+   * plain existing gte/lte/gt/lt operators instead of a bespoke date-diff
+   * operator — no unsafe string date arithmetic in the rule itself.
+   */
+  if (field === "marriageDurationYears") {
+    return calculateMarriageDurationYears(profile.marriageDate) ?? undefined;
   }
 
   if (field === "individualIncomeRange") {

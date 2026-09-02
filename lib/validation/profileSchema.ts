@@ -21,6 +21,11 @@ export const userProfileSchema = z.object({
   maritalStatus: z.enum(["single", "married", "divorced", "widowed"]).optional(),
   childrenCount: z.number().int().min(0, "자녀 수는 0 이상이어야 합니다.").optional(),
   householdSize: z.number().int().min(1).optional(),
+  marriageDate: isoDateString
+    .refine((value) => new Date(value) <= getNow(), { message: "혼인신고일은 미래일 수 없습니다." })
+    .optional(),
+  singleParent: z.boolean().optional(),
+  multiculturalFamily: z.boolean().optional(),
   employmentStatus: z
     .enum(["employed", "unemployed", "self_employed", "freelancer", "student", "other"])
     .optional(),

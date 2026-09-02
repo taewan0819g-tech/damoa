@@ -757,12 +757,205 @@ function parseBusinessClause(text: string): { rule?: EligibilityRule; unresolved
 }
 
 // ---------------------------------------------------------------------------
-// CHILDREN COUNT (sections 12, 35)
+// CHILDREN COUNT (sections 12, 35) — Phase 2 family/marital audit
 // ---------------------------------------------------------------------------
-function parseChildrenClause(text: string): EligibilityRule | undefined {
-  const match = text.match(/자녀\s*(\d+)\s*명\s*이상/);
+/**
+ * "자녀 N명 이상" / "자녀 N인 이상" — the cleanest bucket in the Phase 2 real-
+ * MOIS audit (31 matches / 30 distinct records, no observed false positives).
+ * Deliberately does NOT attempt to resolve bare "다자녀(가구)" with no
+ * accompanying number (350 matches / 346 records in the audit, the large
+ * majority with no numeric definition in the same text) — per the Phase 2
+ * spec, guessing a fixed 2 or 3 threshold for "다자녀" is exactly the kind of
+ * imagined-not-measured rule this project must not produce.
+ */
+const CHILDREN_COUNT_RE = /자녀\s*(\d+)\s*(?:명|인)\s*(이상|초과)/;
+const MULTI_CHILD_BARE_RE = /다자녀/;
+
+function parseChildrenClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
+  const match = text.match(CHILDREN_COUNT_RE);
+  if (match) {
+    const [full, countStr, word] = match;
+    const count = Number(countStr);
+    const matchIndex = text.indexOf(full);
+    const negated = isNegatedAfter(text, matchIndex + full.length);
+    const effectiveCount = word === "초과" ? count + 1 : count;
+    if (negated) {
+      // "자녀 2명 이상이 아닌" -> exact logical negation is "< 2".
+      return {
+        rule: { id: "text-children-lt", field: "childrenCount", operator: "lt", value: effectiveCount, required: true },
+      };
+    }
+    return {
+      rule: { id: "text-children-gte", field: "childrenCount", operator: "gte", value: effectiveCount, required: true },
+    };
+  }
+  // Bare "다자녀" with no explicit number found anywhere in this text: a real
+  // family signal we can't safely turn into a threshold.
+  if (MULTI_CHILD_BARE_RE.test(text)) return { unresolved: text };
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// MARITAL / FAMILY (Phase 2 audit) — 한부모, 다문화가족, 혼인기간 N년 이내.
+//
+// Reuses the exact "제외" negation + evidence conventions established above.
+// Per the audit, three buckets are the only ones with clean, direct-
+// applicant, high-volume real phrasing (see scripts/auditFamilyEligibilityFrozen.ts
+// output): 한부모(가족/가정) (660 records), 다문화가족 (156 records), and
+// 혼인(신고)?...N년 이내 (51 records, with real, VARYING thresholds — never a
+// fixed 5/7-year guess). Everything else audited (배우자, 출산/임신,
+// 세대/가구구성, bare 미혼/기혼, 새터민, 조손가족, 예비신혼부부) was found to be
+// either dominated by false positives relative to applicant eligibility, or
+// too low-volume / structurally unrepresentable with the current
+// MaritalStatus enum, and is intentionally left unimplemented this phase.
+// ---------------------------------------------------------------------------
+
+/**
+ * "미혼 여부와 관계없이" / "자녀 유무와 관계없이"-style phrasing must produce NO
+ * restriction at all (not even "unresolved") — the source text is explicitly
+ * stating the field does NOT gate eligibility, so surfacing it as an
+ * unresolved clause would misleadingly suggest there's a real ambiguous rule
+ * to chase down. Checked in a short window immediately after the keyword.
+ */
+const RELEVANCE_NEGATION_RE = /관계없이|무관하게|상관없이/;
+function statesFieldIrrelevant(text: string, matchEnd: number, window = 12): boolean {
+  return RELEVANCE_NEGATION_RE.test(text.slice(matchEnd, matchEnd + window));
+}
+
+/**
+ * Real MOIS eligibility text very often lists 한부모/다문화가족 as ONE of
+ * several alternative disadvantaged-status categories a person may qualify
+ * under (e.g. "국민기초생활 보장법에 따른 수급자 또는 차상위계층, 한부모가족지원법에
+ * 따른 지원대상자, 장애인연금법에 따른 수급자" — any ONE of several unrelated
+ * statuses is sufficient). None of those sibling categories (수급자,
+ * 차상위계층, 장애인연금, 국가유공자, ...) are things this parser's income/other
+ * extractors turn into a rule from this same categorical-membership phrasing
+ * (they require explicit numeric income text, not a legal-citation label),
+ * so the existing cross-dimension OR safety net (`hasLocalCrossDimensionOr`,
+ * which only fires when 2+ of our OWN extracted rule fields collide near an
+ * OR word) can't see this danger at all — a single-field extraction would
+ * sail through unguarded and wrongly turn "one of several qualifying
+ * categories" into a hard AND-required rule. This local guard closes that
+ * gap: if another known status-category token sits near the match, joined by
+ * a list delimiter, the clause is reported as unresolved instead.
+ */
+const SIBLING_STATUS_CATEGORY_RE = /수급자|차상위|장애인연금|국가유공자|새터민|북한이탈주민|조손/;
+const LIST_DELIMITER_RE = /또는|,|및|·/;
+function hasNearbySiblingStatusCategory(text: string, matchIndex: number, matchLength: number, window = 30): boolean {
+  const before = text.slice(Math.max(0, matchIndex - window), matchIndex);
+  const after = text.slice(matchIndex + matchLength, matchIndex + matchLength + window);
+  return (
+    (SIBLING_STATUS_CATEGORY_RE.test(before) && LIST_DELIMITER_RE.test(before)) ||
+    (SIBLING_STATUS_CATEGORY_RE.test(after) && LIST_DELIMITER_RE.test(after))
+  );
+}
+
+/**
+ * "제외" attaches to whatever clause it's grammatically part of — real MOIS
+ * text frequently starts an UNRELATED new bulleted clause with "제외" shortly
+ * after an earlier family-keyword mention (e.g. "...한부모가족 ○ 제외대상(중복
+ * 수혜 불가) - 장애인은..." — the exclusion is about a DIFFERENT category,
+ * 장애인, not 한부모가족). A bare short-window substring test can't tell these
+ * apart and would wrongly flip a real eligible-category mention into a false
+ * exclusion. Scoped to stop at the first bullet/list-break marker so only a
+ * "제외" that's still part of the SAME clause (immediately attached, at most a
+ * short particle away) counts.
+ */
+const EXCLUSION_BREAK_RE = /[○●◦▪‣·\-\n]/;
+function isExcludedAfter(text: string, endIndex: number, window = 8): boolean {
+  const after = text.slice(endIndex, endIndex + window);
+  const breakIdx = after.search(EXCLUSION_BREAK_RE);
+  const scoped = breakIdx === -1 ? after : after.slice(0, breakIdx);
+  return scoped.includes("제외");
+}
+
+const SINGLE_PARENT_RE = /한\s?부모\s?(?:가족|가정)?|미혼모|미혼부/g;
+
+function parseSingleParentClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
+  const re = new RegExp(SINGLE_PARENT_RE.source, "g");
+  const match = re.exec(text);
   if (!match) return undefined;
-  return { id: "text-children-gte", field: "childrenCount", operator: "gte", value: Number(match[1]), required: true };
+
+  if (statesFieldIrrelevant(text, match.index + match[0].length)) return undefined;
+
+  const negated = isNegatedAfter(text, match.index + match[0].length) || isExcludedAfter(text, match.index + match[0].length);
+  if (negated) {
+    return {
+      rule: { id: "text-single-parent-excl", field: "singleParent", operator: "eq", value: false, required: true },
+    };
+  }
+
+  if (hasNearbySiblingStatusCategory(text, match.index, match[0].length)) {
+    return { unresolved: text };
+  }
+
+  return {
+    rule: { id: "text-single-parent", field: "singleParent", operator: "eq", value: true, required: true },
+  };
+}
+
+const MULTICULTURAL_FAMILY_RE = /다문화\s?(?:가족|가정)/g;
+
+function parseMulticulturalFamilyClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
+  const re = new RegExp(MULTICULTURAL_FAMILY_RE.source, "g");
+  const match = re.exec(text);
+  if (!match) return undefined;
+
+  if (statesFieldIrrelevant(text, match.index + match[0].length)) return undefined;
+
+  const negated = isNegatedAfter(text, match.index + match[0].length) || isExcludedAfter(text, match.index + match[0].length);
+  if (negated) {
+    return {
+      rule: { id: "text-multicultural-excl", field: "multiculturalFamily", operator: "eq", value: false, required: true },
+    };
+  }
+
+  if (hasNearbySiblingStatusCategory(text, match.index, match[0].length)) {
+    return { unresolved: text };
+  }
+
+  return {
+    rule: { id: "text-multicultural", field: "multiculturalFamily", operator: "eq", value: true, required: true },
+  };
+}
+
+/**
+ * "혼인(신고)?(일)?...N년 (이내|미만|이하|초과|이상)" — also accepts "결혼" as a
+ * synonym root (real example: "결혼 7년 이하의 무주택 신혼부부"). The real audit
+ * confirmed genuinely DIFFERENT thresholds across policies (6 months, 1, 2,
+ * 3, 5, 7 years) — this pattern only ever extracts the number actually
+ * present in THIS text, never a guessed default.
+ */
+const MARRIAGE_DURATION_RE =
+  /(?:혼인|결혼)(?:신고)?\s*(?:일)?\s*(?:기준|로부터|후)?\s*[^.\n]{0,6}?(\d{1,2})\s*년\s*(이내|미만|이하|초과|이상)/;
+const NEWLYWED_BARE_RE = /신혼부부|예비\s*신혼부부/;
+
+function parseMarriageDurationClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
+  const match = text.match(MARRIAGE_DURATION_RE);
+  if (match) {
+    const [full, yearsStr, word] = match;
+    const years = Number(yearsStr);
+    const matchIndex = text.indexOf(full);
+    const negated = isNegatedAfter(text, matchIndex + full.length);
+    const effectiveWord = negated ? BOUNDARY_FLIP[word] : word;
+    switch (effectiveWord) {
+      case "이내":
+      case "이하":
+        return { rule: { id: "text-marriage-duration-lte", field: "marriageDurationYears", operator: "lte", value: years, required: true } };
+      case "미만":
+        return { rule: { id: "text-marriage-duration-lt", field: "marriageDurationYears", operator: "lt", value: years, required: true } };
+      case "이상":
+        return { rule: { id: "text-marriage-duration-gte", field: "marriageDurationYears", operator: "gte", value: years, required: true } };
+      case "초과":
+        return { rule: { id: "text-marriage-duration-gt", field: "marriageDurationYears", operator: "gt", value: years, required: true } };
+      default:
+        return undefined;
+    }
+  }
+  // "신혼부부"/"예비신혼부부" mentioned but this text never states its own
+  // duration threshold: real signal, no safe (never-guessed) resolution.
+  if (NEWLYWED_BARE_RE.test(text)) return { unresolved: text };
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -889,7 +1082,13 @@ function ruleFieldSignalPresent(field: string, window: string): boolean {
     case "householdIncomeRange":
       return /연\s?소득/.test(window);
     case "childrenCount":
-      return /자녀\s*\d+\s*명/.test(window);
+      return /자녀\s*\d+\s*(?:명|인)/.test(window);
+    case "singleParent":
+      return /한\s?부모|미혼모|미혼부/.test(window);
+    case "multiculturalFamily":
+      return /다문화\s?(?:가족|가정)/.test(window);
+    case "marriageDurationYears":
+      return /(?:혼인|결혼)(?:신고)?|신혼부부/.test(window);
     default:
       return false;
   }
@@ -954,7 +1153,20 @@ export function extractEligibilityFromText(sourceField: string, rawText: string 
   else if (business?.unresolved) unresolvedClauses.push(business.unresolved);
 
   const children = parseChildrenClause(text);
-  if (children) rules.push(withEvidence(children, sourceField, text));
+  if (children?.rule) rules.push(withEvidence(children.rule, sourceField, text));
+  else if (children?.unresolved) unresolvedClauses.push(children.unresolved);
+
+  const singleParent = parseSingleParentClause(text);
+  if (singleParent?.rule) rules.push(withEvidence(singleParent.rule, sourceField, text));
+  else if (singleParent?.unresolved) unresolvedClauses.push(singleParent.unresolved);
+
+  const multiculturalFamily = parseMulticulturalFamilyClause(text);
+  if (multiculturalFamily?.rule) rules.push(withEvidence(multiculturalFamily.rule, sourceField, text));
+  else if (multiculturalFamily?.unresolved) unresolvedClauses.push(multiculturalFamily.unresolved);
+
+  const marriageDuration = parseMarriageDurationClause(text);
+  if (marriageDuration?.rule) rules.push(withEvidence(marriageDuration.rule, sourceField, text));
+  else if (marriageDuration?.unresolved) unresolvedClauses.push(marriageDuration.unresolved);
 
   // Safety net (section 16, Phase 1 item C): if a SPECIFIC OR occurrence in
   // the text is plausibly joining two of the dimensions we just extracted

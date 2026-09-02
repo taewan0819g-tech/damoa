@@ -55,6 +55,37 @@ export interface UserProfile {
   childrenCount?: number;
   householdSize?: number;
 
+  /**
+   * ISO date the applicant's marriage was registered (혼인신고일). Added per
+   * Phase 2 family/marital audit: real MOIS "신혼부부" eligibility text
+   * defines its own duration threshold per policy (observed thresholds
+   * include 6 months, 1/2/3/5/7 years — never a single fixed convention), so
+   * a boolean "newlywed" field can't represent it. This date lets a
+   * reference-date-aware rule (see lib/eligibility/marriageDuration.ts)
+   * compute "혼인신고일로부터 N년 이내" per-policy instead of guessing a
+   * threshold. Optional — undefined means "unknown", never treated as
+   * ineligible.
+   */
+  marriageDate?: string;
+
+  /**
+   * Added per Phase 2 audit: "한부모(가족/가정)" is a legally defined (한부모
+   * 가족지원법) applicant category distinct from maritalStatus (a single
+   * parent can be divorced, widowed, or never-married) and appears in 660+
+   * real MOIS records as a direct eligibility qualifier. Not inferable from
+   * maritalStatus alone (a divorced/widowed person isn't necessarily raising
+   * a child), so kept as its own explicit flag.
+   */
+  singleParent?: boolean;
+
+  /**
+   * Added per Phase 2 audit: "다문화가족" (다문화가족지원법) is a legally
+   * defined family category (156+ real MOIS records) that isn't derivable
+   * from maritalStatus/nationality fields this profile doesn't otherwise
+   * capture.
+   */
+  multiculturalFamily?: boolean;
+
   employmentStatus?: EmploymentStatus;
   educationStatus?: EducationStatus;
 
