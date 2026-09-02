@@ -25,6 +25,13 @@ function profileWithAge(age: number, extra: Partial<UserProfile> = {}): UserProf
   return { birthDate: `${birthYear}-01-01`, ...extra };
 }
 
+/** ISO date string `monthsAgo` months before the current wall-clock date — mirrors ruleEngine.test.ts's helper. */
+function recentIsoDate(monthsAgo: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - monthsAgo);
+  return d.toISOString().slice(0, 10);
+}
+
 describe("buildCandidateIndex", () => {
   it("puts a benefit with no eligibility data at all into 'unconstrained'", () => {
     const b = benefit("no-rules");
@@ -300,6 +307,9 @@ const EDUCATION_STATUSES: UserProfile["educationStatus"][] = [
   "not_applicable",
 ];
 const HOUSING_TYPES: UserProfile["housingType"][] = ["own", "jeonse", "monthly_rent", "living_with_family", "other"];
+const MARITAL_STATUSES: UserProfile["maritalStatus"][] = ["single", "married", "divorced", "widowed"];
+/** Months-ago values spanning missing/recent/exactly-on-threshold/old, for randomized marriageDate coverage against a 1-year newlywed threshold. */
+const MARRIAGE_MONTHS_AGO = [3, 6, 11, 12, 13, 24, 36];
 
 /**
  * A large synthetic catalog exercising every dimension and every
@@ -307,8 +317,11 @@ const HOUSING_TYPES: UserProfile["housingType"][] = ["own", "jeonse", "monthly_r
  * between/gte/gt/lte/lt, income range_within / range_within_interval on
  * both individual and household fields, region_in across several
  * provinces, target_scope_in across individual/household/소상공인/법인,
- * employment eq + status_compat, education/housing/business eq, a
- * "some other field" rule that only classifies as "other", nested
+ * employment eq + status_compat, education/housing/business eq, the
+ * "family" dimension (maritalStatus eq/status_compat, childrenCount and
+ * householdSize gte/lt/between, singleParentFamily/multiculturalFamily eq,
+ * marriageDate marriage_duration_within — see checkpoint-3's family index),
+ * a genuinely unmodeled field that only classifies as "other", nested
  * all/any combinations, and unconstrained/eligibilityUnrestricted
  * benefits) — used to sweep the optimized (indexed) retrieval path
  * against the full-scan reference implementation for exact equivalence.
@@ -481,9 +494,77 @@ function buildSyntheticCatalog(): Benefit[] {
     })
   );
 
+  // --- family dimension (maritalStatus / childrenCount / householdSize / singleParentFamily / multiculturalFamily / marriageDate) ---
   benefits.push(
-    benefit("other-children-count", {
-      eligibility: { type: "all", rules: [{ id: "children", field: "childrenCount", operator: "gt", value: 1, required: true }] },
+    benefit("family-children-gte-2", {
+      eligibility: { type: "all", rules: [{ id: "children", field: "childrenCount", operator: "gte", value: 2, required: true }] },
+    })
+  );
+  benefits.push(
+    benefit("family-children-lt-1", {
+      eligibility: { type: "all", rules: [{ id: "children", field: "childrenCount", operator: "lt", value: 1, required: true }] },
+    })
+  );
+  benefits.push(
+    benefit("family-household-between", {
+      eligibility: { type: "all", rules: [{ id: "household", field: "householdSize", operator: "between", value: [2, 4], required: true }] },
+    })
+  );
+  for (const status of ["single", "married", "divorced", "widowed"] as const) {
+    benefits.push(
+      benefit(`family-marital-eq-${status}`, {
+        eligibility: { type: "all", rules: [{ id: "marital", field: "maritalStatus", operator: "eq", value: status, required: true }] },
+      })
+    );
+  }
+  benefits.push(
+    benefit("family-marital-status-compat-married", {
+      eligibility: {
+        type: "all",
+        rules: [
+          {
+            id: "marital",
+            field: "maritalStatus",
+            operator: "status_compat",
+            value: { passValues: ["married"], failValues: ["single"] },
+            required: true,
+          },
+        ],
+      },
+    })
+  );
+  benefits.push(
+    benefit("family-single-parent-true", {
+      eligibility: { type: "all", rules: [{ id: "sp", field: "singleParentFamily", operator: "eq", value: true, required: true }] },
+    })
+  );
+  benefits.push(
+    benefit("family-multicultural-true", {
+      eligibility: { type: "all", rules: [{ id: "mc", field: "multiculturalFamily", operator: "eq", value: true, required: true }] },
+    })
+  );
+  benefits.push(
+    benefit("family-newlywed-compound", {
+      eligibility: {
+        type: "all",
+        rules: [
+          { id: "marital", field: "maritalStatus", operator: "eq", value: "married", required: true },
+          {
+            id: "duration",
+            field: "marriageDate",
+            operator: "marriage_duration_within",
+            value: { years: 1, boundary: "lte" },
+            required: true,
+          },
+        ],
+      },
+    })
+  );
+
+  // A genuinely unmodeled field — exercises the true "other" catch-all dimension.
+  benefits.push(
+    benefit("other-unmodeled-field", {
+      eligibility: { type: "all", rules: [{ id: "x", field: "someUnmodeledField", operator: "eq", value: "x", required: true }] },
     })
   );
 
@@ -544,6 +625,36 @@ function handPickedProfiles(): UserProfile[] {
     { smeEmployee: true },
     { childrenCount: 3 },
     { childrenCount: 0 },
+    { childrenCount: 1 },
+    { childrenCount: 2 },
+    { childrenCount: 4 },
+    { householdSize: 1 },
+    { householdSize: 2 },
+    { householdSize: 3 },
+    { householdSize: 4 },
+    { householdSize: 5 },
+    { maritalStatus: "single" },
+    { maritalStatus: "married" },
+    { maritalStatus: "divorced" },
+    { maritalStatus: "widowed" },
+    { singleParentFamily: true },
+    { singleParentFamily: false },
+    { multiculturalFamily: true },
+    { multiculturalFamily: false },
+    { marriageDate: recentIsoDate(6) }, // recent — inside a 1-year newlywed window
+    { marriageDate: recentIsoDate(36) }, // old — outside a 1-year newlywed window
+    { marriageDate: recentIsoDate(12) }, // exactly on a 1-year threshold (boundary)
+    { maritalStatus: "married", marriageDate: recentIsoDate(6) }, // newlywed compound: both halves pass
+    { maritalStatus: "divorced", marriageDate: recentIsoDate(6) }, // newlywed compound: marital half fails
+    { maritalStatus: "married", marriageDate: recentIsoDate(36) }, // newlywed compound: duration half fails
+    {
+      maritalStatus: "married",
+      childrenCount: 2,
+      householdSize: 4,
+      singleParentFamily: false,
+      multiculturalFamily: false,
+      marriageDate: recentIsoDate(6),
+    },
     {
       ...profileWithAge(29),
       residence: { province: "경기도" },
@@ -594,6 +705,11 @@ function randomProfiles(count: number, seed: number): UserProfile[] {
       p.householdIncomeBand = pick(bands);
     }
     if (rand() < 0.3) p.childrenCount = Math.floor(rand() * 4);
+    if (rand() < 0.3) p.householdSize = 1 + Math.floor(rand() * 5);
+    if (rand() < 0.5) p.maritalStatus = pick(MARITAL_STATUSES);
+    if (rand() < 0.3) p.singleParentFamily = rand() < 0.5;
+    if (rand() < 0.3) p.multiculturalFamily = rand() < 0.5;
+    if (rand() < 0.4) p.marriageDate = recentIsoDate(pick(MARRIAGE_MONTHS_AGO));
     profiles.push(p);
   }
   return profiles;
@@ -636,6 +752,101 @@ describe("optimized (indexed) retrieval vs full-scan reference implementation �
       // And the indexed path must not admit anything the full scan wouldn't (no false positives either).
       for (const id of indexed) expect(fullScan.has(id)).toBe(true);
     }
+  });
+
+  describe("family dimension — full combination equivalence sweep (checkpoint-3 section E)", () => {
+    // Exhaustive cartesian product across every value named in the
+    // checkpoint-3 spec: maritalStatus (missing/single/married/divorced/
+    // widowed), childrenCount (missing/0/1/2/3/4), householdSize
+    // (missing/1/2/3/4/5), singleParentFamily (missing/true/false),
+    // multiculturalFamily (missing/true/false), marriageDate (missing/
+    // recent/exactly-on-threshold/old). For EVERY resulting profile, the
+    // optimized (indexed) candidate ID set must exactly equal the full-scan
+    // reference set — mismatch count must be ZERO.
+    const MARITAL_STATUS_VALUES: (UserProfile["maritalStatus"] | undefined)[] = [
+      undefined,
+      "single",
+      "married",
+      "divorced",
+      "widowed",
+    ];
+    const CHILDREN_COUNT_VALUES: (number | undefined)[] = [undefined, 0, 1, 2, 3, 4];
+    const HOUSEHOLD_SIZE_VALUES: (number | undefined)[] = [undefined, 1, 2, 3, 4, 5];
+    const BOOLEAN_OR_UNKNOWN: (boolean | undefined)[] = [undefined, true, false];
+    // "recent" (6mo, inside a 1yr window), "exactly-on-threshold" (12mo,
+    // the cutoff itself), "old" (36mo, outside a 1yr window), and missing.
+    const MARRIAGE_DATE_VALUES: (string | undefined)[] = [undefined, recentIsoDate(6), recentIsoDate(12), recentIsoDate(36)];
+
+    function* familyCombinations(): Generator<UserProfile> {
+      for (const maritalStatus of MARITAL_STATUS_VALUES) {
+        for (const childrenCount of CHILDREN_COUNT_VALUES) {
+          for (const householdSize of HOUSEHOLD_SIZE_VALUES) {
+            for (const singleParentFamily of BOOLEAN_OR_UNKNOWN) {
+              for (const multiculturalFamily of BOOLEAN_OR_UNKNOWN) {
+                for (const marriageDate of MARRIAGE_DATE_VALUES) {
+                  const profile: UserProfile = {};
+                  if (maritalStatus !== undefined) profile.maritalStatus = maritalStatus;
+                  if (childrenCount !== undefined) profile.childrenCount = childrenCount;
+                  if (householdSize !== undefined) profile.householdSize = householdSize;
+                  if (singleParentFamily !== undefined) profile.singleParentFamily = singleParentFamily;
+                  if (multiculturalFamily !== undefined) profile.multiculturalFamily = multiculturalFamily;
+                  if (marriageDate !== undefined) profile.marriageDate = marriageDate;
+                  yield profile;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    it("optimized candidate IDs exactly equal full-scan reference IDs for every combination (mismatch count === 0)", () => {
+      const catalog = buildSyntheticCatalog();
+      const index = buildCandidateIndex(catalog);
+      let combinationCount = 0;
+      const mismatches: { profile: UserProfile; indexed: string[]; fullScan: string[] }[] = [];
+      for (const profile of familyCombinations()) {
+        combinationCount += 1;
+        const indexed = getCandidateBenefits(index, profile).map((b) => b.id).sort();
+        const fullScan = getCandidateBenefitsFullScan(index, profile).map((b) => b.id).sort();
+        if (JSON.stringify(indexed) !== JSON.stringify(fullScan)) {
+          mismatches.push({ profile, indexed, fullScan });
+        }
+      }
+      // 5 * 6 * 6 * 3 * 3 * 4 = 6480 combinations swept.
+      expect(combinationCount).toBe(5 * 6 * 6 * 3 * 3 * 4);
+      expect(mismatches.length, `expected ZERO mismatches, found ${mismatches.length}: ${JSON.stringify(mismatches.slice(0, 3))}`).toBe(0);
+    });
+
+    it("also holds across the same family combinations layered onto a rich non-family profile (age/region/income/employment known too)", () => {
+      const catalog = buildSyntheticCatalog();
+      const index = buildCandidateIndex(catalog);
+      const richBase: UserProfile = {
+        ...profileWithAge(29),
+        residence: { province: "경기도" },
+        employmentStatus: "unemployed",
+        educationStatus: "university",
+        individualIncomeBand: "2000_3000",
+        housingType: "jeonse",
+        homeowner: false,
+        businessOwner: false,
+      };
+      let mismatchCount = 0;
+      let checked = 0;
+      // Sample every 37th combination (coprime-ish stride) for a fast but
+      // still broad independent sweep layered on a fully-populated profile.
+      let i = 0;
+      for (const familyProfile of familyCombinations()) {
+        if (i++ % 37 !== 0) continue;
+        checked += 1;
+        const profile: UserProfile = { ...richBase, ...familyProfile };
+        const indexed = getCandidateBenefits(index, profile).map((b) => b.id).sort();
+        const fullScan = getCandidateBenefitsFullScan(index, profile).map((b) => b.id).sort();
+        if (JSON.stringify(indexed) !== JSON.stringify(fullScan)) mismatchCount += 1;
+      }
+      expect(checked).toBeGreaterThan(100);
+      expect(mismatchCount).toBe(0);
+    });
   });
 });
 

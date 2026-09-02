@@ -4,6 +4,7 @@ import type {
   EligibilityRule,
   EligibilityRuleGroup,
   HousingType,
+  MaritalStatus,
   UserProfile,
 } from "@/types";
 import { evaluateRule, isGroup } from "./ruleEngine";
@@ -64,6 +65,30 @@ import { atLeast, atMost, lessThan, moreThan, type Interval } from "./interval";
  *     with zero rule evaluation needed for that (usually large) majority;
  *     only entries that DO mention the matching province get a precise
  *     `evaluateRule` check (for a possible city-level mismatch).
+ *   - family (maritalStatus / childrenCount / householdSize /
+ *     singleParentFamily / multiculturalFamily / marriageDate): a compound
+ *     "family" dimension (`FamilyIndex`), split by exactly how safely each
+ *     field can be indexed:
+ *       - `childrenCount` / `householdSize` are plain numbers, so they reuse
+ *         the SAME sorted-interval-index + binary-search technique as age
+ *         (`familyIndex.numericByField`, one `SortedIntervalIndex` per
+ *         field) — this is an exact, not approximate, narrowing because it
+ *         reuses `ageRuleToInterval`'s operator+value -> `Interval`
+ *         conversion verbatim.
+ *       - `maritalStatus` / `singleParentFamily` / `multiculturalFamily` are
+ *         finite-domain categorical fields (4-value enum / booleans), so
+ *         they reuse the same eq/status_compat reverse-value-index technique
+ *         as employment/education/etc. (`familyIndex.categoricalIndex`,
+ *         composite `"field:value"` key).
+ *       - `marriageDate` (checked only via the `marriage_duration_within`
+ *         operator) is DELIBERATELY NEVER indexed by an approximate date
+ *         structure — building a sorted-cutoff index would require
+ *         re-deriving the exact calendar-day cutoff math already centralized
+ *         in `domain/profile/marriageDuration.ts`, risking subtle drift for
+ *         a comparatively low-volume rule shape (see the Phase 2 family
+ *         audit). It always falls through to `familyIndex.dateAndUnknownFallback`,
+ *         scanned via the real `evaluateRule` whenever any family field is
+ *         known — correctness over speed, per the Phase 2 checkpoint-3 spec.
  *
  * Every one of these indexes is used ONLY to narrow down which entries get
  * a real `evaluateRule` call — the actual pass/fail *decision* always goes
@@ -111,7 +136,21 @@ export type IndexDimension =
   | "education"
   | "housing"
   | "business"
+  | "family"
   | "other";
+
+/**
+ * Every `UserProfile` field the "family" dimension covers (see the
+ * "family (maritalFamily)" section of the module docstring below).
+ */
+const FAMILY_FIELDS = new Set([
+  "maritalStatus",
+  "childrenCount",
+  "householdSize",
+  "marriageDate",
+  "singleParentFamily",
+  "multiculturalFamily",
+]);
 
 function classifyDimension(rule: EligibilityRule): IndexDimension {
   if (rule.field === "age") return "age";
@@ -129,6 +168,7 @@ function classifyDimension(rule: EligibilityRule): IndexDimension {
   if (rule.field === "educationStatus") return "education";
   if (rule.field === "homeowner" || rule.field === "housingType") return "housing";
   if (rule.field === "businessOwner") return "business";
+  if (FAMILY_FIELDS.has(rule.field)) return "family";
   return "other";
 }
 
@@ -362,6 +402,45 @@ function isStatusCompatSpec(value: unknown): value is { passValues: unknown[]; f
 }
 
 // ---------------------------------------------------------------------------
+// Family (maritalStatus / childrenCount / householdSize / singleParentFamily
+// / multiculturalFamily / marriageDate) — see the module docstring's "family
+// (maritalFamily)" section for the full design rationale.
+// ---------------------------------------------------------------------------
+
+/** Numeric family fields — reuse the exact same sorted-interval-index technique as age (see `numericByField` below). */
+const FAMILY_NUMERIC_FIELDS = new Set(["childrenCount", "householdSize"]);
+
+const MARITAL_STATUS_DOMAIN: readonly MaritalStatus[] = ["single", "married", "divorced", "widowed"];
+
+/** The known, finite value domain for every categorical family field an `eq`/`status_compat` rule can target. A field absent from this table (i.e. anything that isn't one of these three) falls to `dateAndUnknownFallback`. */
+const FAMILY_CATEGORICAL_DOMAIN: Record<string, readonly (string | boolean)[]> = {
+  maritalStatus: MARITAL_STATUS_DOMAIN,
+  singleParentFamily: BOOLEAN_DOMAIN,
+  multiculturalFamily: BOOLEAN_DOMAIN,
+};
+
+/** Which top-level UserProfile fields feed the family categorical sub-index — used both to build the reverse index and to know which profile fields to probe at query time. */
+export const FAMILY_CATEGORICAL_FIELDS: readonly string[] = ["maritalStatus", "singleParentFamily", "multiculturalFamily"];
+
+export interface FamilyIndex {
+  /** `childrenCount` / `householdSize` — one `SortedIntervalIndex` per field, same binary-search technique as age. */
+  numericByField: Map<string, SortedIntervalIndex>;
+  /** Numeric family rules whose operator this index doesn't know how to convert to an `Interval` (defensive; every numeric family rule produced today uses gte/lt, both convertible). */
+  numericFallback: ConstrainedEntry[];
+  /** `maritalStatus` / `singleParentFamily` / `multiculturalFamily` — reverse-value index, composite `"field:value"` key, same technique as employment/education/etc. */
+  categoricalIndex: Map<string, ConstrainedEntry[]>;
+  /** Categorical family rules whose operator isn't `eq`/`status_compat` (defensive; every categorical family rule produced today uses `eq`). */
+  categoricalFallback: ConstrainedEntry[];
+  /**
+   * `marriageDate` (`marriage_duration_within`) rules, plus any other
+   * family-field/operator shape this index doesn't recognize. Deliberately
+   * NEVER indexed — see the module docstring's "no approximate date
+   * indexing" rationale. Always resolved via the real `evaluateRule`.
+   */
+  dateAndUnknownFallback: ConstrainedEntry[];
+}
+
+// ---------------------------------------------------------------------------
 // Region: province-hierarchical index
 // ---------------------------------------------------------------------------
 
@@ -408,6 +487,7 @@ export interface CandidateIndex {
   categoricalIndex: Map<CategoricalDimension, Map<string, ConstrainedEntry[]>>;
   categoricalFallback: Map<CategoricalDimension, ConstrainedEntry[]>;
   targetScopeIndex: TargetScopeIndex;
+  familyIndex: FamilyIndex;
 }
 
 const EMPTY_DIMENSION_COUNTS: Record<IndexDimension, number> = {
@@ -419,6 +499,7 @@ const EMPTY_DIMENSION_COUNTS: Record<IndexDimension, number> = {
   education: 0,
   housing: 0,
   business: 0,
+  family: 0,
   other: 0,
 };
 
@@ -443,6 +524,11 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
   const targetScopeAlwaysFail: ConstrainedEntry[] = [];
   const targetScopeBusinessOwnerRelevant: ConstrainedEntry[] = [];
   const targetScopeFallback: ConstrainedEntry[] = [];
+  const familyNumericItemsByField = new Map<string, IntervalIndexItem[]>();
+  const familyNumericFallback: ConstrainedEntry[] = [];
+  const familyCategoricalIndex = new Map<string, ConstrainedEntry[]>();
+  const familyCategoricalFallback: ConstrainedEntry[] = [];
+  const familyDateAndUnknownFallback: ConstrainedEntry[] = [];
 
   function addCategorical(dim: CategoricalDimension, key: string, entry: ConstrainedEntry) {
     let byValue = categoricalIndex.get(dim);
@@ -459,6 +545,12 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
     const bucket = categoricalFallback.get(dim);
     if (bucket) bucket.push(entry);
     else categoricalFallback.set(dim, [entry]);
+  }
+
+  function addFamilyCategorical(key: string, entry: ConstrainedEntry) {
+    const bucket = familyCategoricalIndex.get(key);
+    if (bucket) bucket.push(entry);
+    else familyCategoricalIndex.set(key, [entry]);
   }
 
   for (const benefit of benefits) {
@@ -564,6 +656,41 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
         }
         continue;
       }
+
+      if (dim === "family") {
+        if (FAMILY_NUMERIC_FIELDS.has(rule.field)) {
+          // childrenCount / householdSize: reuse the field-agnostic
+          // operator+value -> Interval conversion age already uses.
+          const interval = ageRuleToInterval(rule);
+          if (interval) {
+            const list = familyNumericItemsByField.get(rule.field);
+            if (list) list.push({ entry, rule, interval });
+            else familyNumericItemsByField.set(rule.field, [{ entry, rule, interval }]);
+          } else {
+            familyNumericFallback.push(entry);
+          }
+        } else if (rule.field in FAMILY_CATEGORICAL_DOMAIN) {
+          // maritalStatus / singleParentFamily / multiculturalFamily.
+          if (rule.operator === "eq") {
+            const domain = FAMILY_CATEGORICAL_DOMAIN[rule.field];
+            for (const v of domain) {
+              if (v !== rule.value) addFamilyCategorical(`${rule.field}:${String(v)}`, entry);
+            }
+          } else if (rule.operator === "status_compat" && isStatusCompatSpec(rule.value)) {
+            for (const fv of rule.value.failValues) {
+              addFamilyCategorical(`${rule.field}:${String(fv)}`, entry);
+            }
+          } else {
+            familyCategoricalFallback.push(entry);
+          }
+        } else {
+          // marriageDate (marriage_duration_within) and any other
+          // unrecognized family-field/operator shape: deliberately never
+          // indexed — see FamilyIndex.dateAndUnknownFallback's docstring.
+          familyDateAndUnknownFallback.push(entry);
+        }
+        continue;
+      }
       // "other": intentionally left unindexed — see constrainedByDimension.get("other"),
       // the explicit conservative fallback bucket (section 4).
     }
@@ -583,6 +710,16 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
     fallback: targetScopeFallback,
   };
 
+  const familyNumericByField = new Map<string, SortedIntervalIndex>();
+  for (const [field, items] of familyNumericItemsByField) familyNumericByField.set(field, buildSortedIntervalIndex(items));
+  const familyIndex: FamilyIndex = {
+    numericByField: familyNumericByField,
+    numericFallback: familyNumericFallback,
+    categoricalIndex: familyCategoricalIndex,
+    categoricalFallback: familyCategoricalFallback,
+    dateAndUnknownFallback: familyDateAndUnknownFallback,
+  };
+
   return {
     builtAt: Date.now(),
     totalCount: benefits.length,
@@ -596,6 +733,7 @@ export function buildCandidateIndex(benefits: Benefit[]): CandidateIndex {
     categoricalIndex,
     categoricalFallback,
     targetScopeIndex,
+    familyIndex,
   };
 }
 
@@ -612,10 +750,13 @@ export interface CandidateRetrievalDiagnostics {
    * Number of entries touched WITHOUT a value-keyed index narrowing them
    * down first: the small per-dimension `fallback` buckets (rules whose
    * shape the index doesn't recognize — empty for every rule shape actually
-   * produced in this codebase today), the explicit "other" catch-all
-   * dimension (e.g. `childrenCount` rules), and the region "complement"
-   * membership checks (cheap Set lookups, not rule evaluations — see the
-   * module docstring). Exposed so retrieval never hides a remaining scan.
+   * produced in this codebase today, except the family dimension's
+   * `marriageDate`/`marriage_duration_within` bucket, which is intentionally
+   * ALWAYS unindexed), the explicit "other" catch-all dimension (any field
+   * not recognized by ANY dimension, e.g. a future/unmodeled field), and the
+   * region "complement" membership checks (cheap Set lookups, not rule
+   * evaluations — see the module docstring). Exposed so retrieval never
+   * hides a remaining scan.
    */
   fallbackScanCount: number;
   /** `unconstrained.length + surviving constrained.length` — the actual candidate count returned. */
@@ -741,6 +882,51 @@ export function getCandidateBenefitsWithDiagnostics(
       fallbackScanCount += fb.length;
       excludeIfAnyFails(fb, dim, profile, excluded);
     }
+  }
+
+  // --- family (maritalStatus / childrenCount / householdSize / singleParentFamily / multiculturalFamily / marriageDate) ---
+  let familyNumericKnown = false;
+  for (const [field, fieldIndex] of index.familyIndex.numericByField) {
+    const value = resolveProfileField(profile, field);
+    if (typeof value !== "number") continue;
+    familyNumericKnown = true;
+    const fails = queryIntervalFails(fieldIndex, value, scalarViolatesMin, scalarViolatesMax);
+    indexedLookupCount += fails.length;
+    for (const item of fails) {
+      if (excluded.has(item.entry.benefit)) continue;
+      if (evaluateRule(item.rule, profile) === "fail") excluded.add(item.entry.benefit);
+    }
+  }
+  if (familyNumericKnown) {
+    fallbackScanCount += index.familyIndex.numericFallback.length;
+    excludeIfAnyFails(index.familyIndex.numericFallback, "family", profile, excluded);
+  }
+
+  let familyCategoricalKnown = false;
+  for (const field of FAMILY_CATEGORICAL_FIELDS) {
+    const value = resolveProfileField(profile, field);
+    if (value === undefined) continue;
+    familyCategoricalKnown = true;
+    const key = `${field}:${String(value)}`;
+    const candidates = index.familyIndex.categoricalIndex.get(key) ?? [];
+    indexedLookupCount += candidates.length;
+    excludeIfAnyFails(candidates, "family", profile, excluded, field);
+  }
+  if (familyCategoricalKnown) {
+    fallbackScanCount += index.familyIndex.categoricalFallback.length;
+    excludeIfAnyFails(index.familyIndex.categoricalFallback, "family", profile, excluded);
+  }
+
+  // marriageDate (marriage_duration_within) is deliberately never indexed by
+  // an approximate date structure (see the module docstring); always
+  // resolved via the real evaluateRule / compareMarriageDurationToThreshold.
+  // Also catches any other family-field/operator shape this index doesn't
+  // otherwise recognize. Scanned whenever ANY family field is known — a
+  // broader (safe) gate, since this defensive bucket is always tiny.
+  const marriageDateKnown = resolveProfileField(profile, "marriageDate") !== undefined;
+  if (marriageDateKnown || familyNumericKnown || familyCategoricalKnown) {
+    fallbackScanCount += index.familyIndex.dateAndUnknownFallback.length;
+    excludeIfAnyFails(index.familyIndex.dateAndUnknownFallback, "family", profile, excluded);
   }
 
   // --- applicant scope (개인/가구/법인·시설·단체/소상공인) ---
