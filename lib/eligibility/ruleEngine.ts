@@ -10,6 +10,7 @@ import { matchRegion, type RegionSpec } from "./region";
 import { matchTargetScope, type TargetScope } from "./targetScope";
 import { compareRangeToInterval, isInterval } from "./interval";
 import { matchStatusCompat, type StatusCompatSpec } from "./employment";
+import { compareMarriageDurationToThreshold, type MarriageDurationSpec } from "@/domain/profile/marriageDuration";
 
 export type NodeResult = "pass" | "fail" | "unknown" | "skip";
 type CompareResult = "pass" | "fail" | "unknown";
@@ -85,6 +86,10 @@ function compare(operator: EligibilityRule["operator"], fieldValue: unknown, rul
     case "status_compat": {
       if (typeof ruleValue !== "object" || ruleValue === null) return "fail";
       return matchStatusCompat(fieldValue, ruleValue as StatusCompatSpec);
+    }
+    case "marriage_duration_within": {
+      if (typeof fieldValue !== "string" || typeof ruleValue !== "object" || ruleValue === null) return "fail";
+      return compareMarriageDurationToThreshold(fieldValue, ruleValue as MarriageDurationSpec);
     }
     default:
       return "fail";

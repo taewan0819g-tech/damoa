@@ -1,6 +1,5 @@
 import type { UserProfile } from "@/types/profile";
 import { calculateAge } from "@/domain/profile/age";
-import { calculateMarriageDurationYears } from "@/domain/profile/marriageDuration";
 import { incomeBandToRange } from "@/lib/constants/incomeBands";
 
 /**
@@ -11,20 +10,19 @@ import { incomeBandToRange } from "@/lib/constants/incomeBands";
  * plus dot-paths into nested profile objects (e.g. "residence.province").
  * Returns undefined for anything the user hasn't provided yet, which the
  * rule engine treats as unknown data.
+ *
+ * Note: "marriageDate" is intentionally NOT a derived field here — it
+ * resolves via the generic dot-path fallback below, returning the raw ISO
+ * string as-is. Marriage-DURATION rules (e.g. "혼인신고일로부터 1년 이내")
+ * compare that raw date against an exact calendar cutoff via the
+ * `marriage_duration_within` operator (see ruleEngine.ts's `compare()` and
+ * domain/profile/marriageDuration.ts) rather than resolving a pre-computed
+ * floored year count — a floored integer can silently misclassify someone
+ * married 1 year 11 months as "within 1 year".
  */
 export function resolveProfileField(profile: UserProfile, field: string): unknown {
   if (field === "age") {
     return calculateAge(profile.birthDate) ?? undefined;
-  }
-
-  /**
-   * Derived from `marriageDate` (see Phase 2 audit / `calculateMarriageDurationYears`)
-   * so "혼인신고일로부터 N년 이내"-style clauses can be expressed with the
-   * plain existing gte/lte/gt/lt operators instead of a bespoke date-diff
-   * operator — no unsafe string date arithmetic in the rule itself.
-   */
-  if (field === "marriageDurationYears") {
-    return calculateMarriageDurationYears(profile.marriageDate) ?? undefined;
   }
 
   if (field === "individualIncomeRange") {

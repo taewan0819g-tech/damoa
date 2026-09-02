@@ -3,6 +3,7 @@ import { normalizeProvince, PROVINCE_ALIAS_KEYS, type RegionSpec } from "../regi
 import { resolveCityProvinces, getShortDistrictNames } from "../regionGazetteer";
 import { intervalFromBoundaryWord } from "../interval";
 import { EMPLOYMENT_TARGET_SPECS } from "../employment";
+import type { MarriageDurationBoundary, MarriageDurationSpec } from "@/domain/profile/marriageDuration";
 
 /**
  * Deterministic Korean eligibility text parser.
@@ -869,28 +870,96 @@ function isExcludedAfter(text: string, endIndex: number, window = 8): boolean {
   return scoped.includes("제외");
 }
 
-const SINGLE_PARENT_RE = /한\s?부모\s?(?:가족|가정)?|미혼모|미혼부/g;
+/**
+ * "한(\s?)부모(\s?(?:가족|가정))?" — captures the space between 한/부모 (group 1)
+ * and any 가족/가정 suffix (group 2) so `isGenuineSingleParentMatch` below can
+ * apply the two real-audit-driven false-positive guards. Field renamed
+ * `singleParent` -> `singleParentFamily` (see types/profile.ts): real MOIS
+ * text qualifies BOTH the parent and their child under the same clause
+ * ("미혼한부모 및 그자녀"), so the field means family MEMBERSHIP, not "is
+ * themselves a parent".
+ */
+const SINGLE_PARENT_CORE_RE = /한(\s?)부모(\s?(?:가족|가정))?/g;
+const MIHONMO_BU_RE = /미혼모|미혼부/;
+
+/**
+ * Two real-audit-driven false positives for the "한부모" family (see the
+ * Phase 2 checkpoint-2 한부모 sub-bucket re-audit against the frozen
+ * snapshot):
+ *
+ * 1. "-한 부모" verb-ending collision: ONLY when 한/부모 are SPACE-separated
+ *    (the fused "한부모" spelling has zero observed false positives — every
+ *    real fused-prefix hit like "법정한부모"/"미혼한부모"/"청소년한부모" is
+ *    genuine), a preceding verb stem's "-한" ending directly abuts a
+ *    following "부모" noun with nothing but whitespace between them: "카드를
+ *    소지한 부모" (parents WHO HOLD a card), "아동을 입양한 부모" (parents WHO
+ *    ADOPTED a child), "출산한 부모" (parents WHO GAVE BIRTH), "위한 부모"
+ *    ("for parents"/"부모튜토리얼") — none of these are the legal 한부모
+ *    category, they're "한" as the tail of an unrelated preceding verb.
+ *    Filtered via `isHangulBoundaryOk`, the same word-boundary check the
+ *    region extractor already uses: a genuine "한 부모" mention is preceded
+ *    by whitespace/punctuation/string-start, never by another Hangul
+ *    character.
+ * 2. "한(부모| 부모) 이상" numeral idiom: "한 부모 이상과 학생이 ...주소를 둔자"
+ *    (real MOIS 540000000110/114/129, both the spaced 지원대상 spelling AND
+ *    the fused "한부모이상" 선정기준 spelling) means "one parent OR MORE", an
+ *    ordinary-language headcount, not the legal 한부모 category — the legal
+ *    term is a status label, "이상" never meaningfully follows it. Filtered
+ *    by checking for a following bare "이상" whenever no 가족/가정 suffix was
+ *    captured (a genuine "한부모가족"/"한부모가정" match can't collide with
+ *    this idiom).
+ */
+function isGenuineSingleParentMatch(text: string, match: RegExpExecArray): boolean {
+  const hasSpace = match[1] === " ";
+  const hasFamilySuffix = Boolean(match[2]);
+  if (hasSpace && !isHangulBoundaryOk(text, match.index)) return false;
+  if (!hasFamilySuffix) {
+    const endIdx = match.index + match[0].length;
+    if (/^\s?이상/.test(text.slice(endIdx, endIdx + 3))) return false;
+  }
+  return true;
+}
+
+function findSingleParentCoreMatch(text: string): RegExpExecArray | undefined {
+  const re = new RegExp(SINGLE_PARENT_CORE_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (isGenuineSingleParentMatch(text, m)) return m;
+  }
+  return undefined;
+}
 
 function parseSingleParentClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
-  const re = new RegExp(SINGLE_PARENT_RE.source, "g");
-  const match = re.exec(text);
-  if (!match) return undefined;
+  const core = findSingleParentCoreMatch(text);
+  const solo = MIHONMO_BU_RE.exec(text);
 
-  if (statesFieldIrrelevant(text, match.index + match[0].length)) return undefined;
+  let matchIndex: number;
+  let matchEnd: number;
+  if (core && (!solo || core.index <= solo.index)) {
+    matchIndex = core.index;
+    matchEnd = core.index + core[0].length;
+  } else if (solo) {
+    matchIndex = solo.index;
+    matchEnd = solo.index + solo[0].length;
+  } else {
+    return undefined;
+  }
 
-  const negated = isNegatedAfter(text, match.index + match[0].length) || isExcludedAfter(text, match.index + match[0].length);
+  if (statesFieldIrrelevant(text, matchEnd)) return undefined;
+
+  const negated = isNegatedAfter(text, matchEnd) || isExcludedAfter(text, matchEnd);
   if (negated) {
     return {
-      rule: { id: "text-single-parent-excl", field: "singleParent", operator: "eq", value: false, required: true },
+      rule: { id: "text-single-parent-excl", field: "singleParentFamily", operator: "eq", value: false, required: true },
     };
   }
 
-  if (hasNearbySiblingStatusCategory(text, match.index, match[0].length)) {
+  if (hasNearbySiblingStatusCategory(text, matchIndex, matchEnd - matchIndex)) {
     return { unresolved: text };
   }
 
   return {
-    rule: { id: "text-single-parent", field: "singleParent", operator: "eq", value: true, required: true },
+    rule: { id: "text-single-parent", field: "singleParentFamily", operator: "eq", value: true, required: true },
   };
 }
 
@@ -926,32 +995,91 @@ function parseMulticulturalFamilyClause(text: string): { rule?: EligibilityRule;
  * 3, 5, 7 years) — this pattern only ever extracts the number actually
  * present in THIS text, never a guessed default.
  */
-const MARRIAGE_DURATION_RE =
+const MARRIAGE_DURATION_YEARS_RE =
   /(?:혼인|결혼)(?:신고)?\s*(?:일)?\s*(?:기준|로부터|후)?\s*[^.\n]{0,6}?(\d{1,2})\s*년\s*(이내|미만|이하|초과|이상)/;
-const NEWLYWED_BARE_RE = /신혼부부|예비\s*신혼부부/;
 
-function parseMarriageDurationClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
-  const match = text.match(MARRIAGE_DURATION_RE);
+/**
+ * Month-based marriage-duration wording ("혼인신고일로부터 6개월 이내") is
+ * intentionally reported as `unresolved`, never a rule — a checkpoint-2
+ * targeted re-audit of the frozen snapshot found 14 real "N개월
+ * (이내|미만|이하|초과|이상)" occurrences near 혼인/결혼, and unlike the year-based
+ * bucket this is NOT a clean single-meaning bucket: it's dominated by (a)
+ * "N개월 이상 거주" — a RESIDENCE duration counted FROM the marriage date, not
+ * a marital-duration condition itself (real: "혼인신고일로부터 부부 모두 6개월
+ * 이상 보은군에 거주"), and (b) pre-marriage "N개월 이내 혼인신고 예정" text
+ * describing an INTENDED future marriage, not a current one (real: "결혼식 후
+ * 3개월 이내 혼인 신고 예정"). Guessing which reading applies from the text
+ * alone risks silently attaching the threshold to the wrong field (residence,
+ * not marriage) or asserting the applicant IS currently married when they're
+ * only planning to be — exactly the imagined-not-measured failure mode
+ * Phase 2 must avoid. So this pattern is detected (surfaced as a real,
+ * traceable signal) but never resolved into a rule.
+ */
+const MARRIAGE_DURATION_MONTHS_RE =
+  /(?:혼인|결혼)(?:신고)?\s*(?:일)?\s*(?:기준|로부터|후)?\s*[^.\n]{0,6}?(\d{1,2})\s*개월\s*(이내|미만|이하|초과|이상)/;
+
+const MARRIAGE_DURATION_WORD_TO_BOUNDARY: Record<string, MarriageDurationBoundary> = {
+  "이내": "lte",
+  "이하": "lte",
+  "미만": "lt",
+  "이상": "gte",
+  "초과": "gt",
+};
+
+const NEWLYWED_BARE_RE = /신혼부부/;
+/**
+ * A clearly-CURRENT "신혼부부" mention — excludes "예비신혼부부" (not yet
+ * married) via the negative lookbehind. Per Step 3: only a duration clause
+ * attached to a CURRENT 신혼부부 reading may additionally assert
+ * `maritalStatus == "married"` (a divorced/widowed applicant with a recent
+ * *historical* marriage date must not pass a current-신혼부부 gate just
+ * because their marriageDate alone satisfies the duration window).
+ * "예비신혼부부"/"혼인 예정"/an ambiguous OR-combination never reach this —
+ * they either don't match at all, or (혼인 예정 alone, no 신혼부부 word) simply
+ * never trigger the compound rule below.
+ */
+const NEWLYWED_CURRENT_RE = /(?<!예비\s?)신혼부부/;
+
+function parseMarriageDurationClause(text: string): { rules?: EligibilityRule[]; unresolved?: string } | undefined {
+  const match = text.match(MARRIAGE_DURATION_YEARS_RE);
   if (match) {
     const [full, yearsStr, word] = match;
     const years = Number(yearsStr);
     const matchIndex = text.indexOf(full);
     const negated = isNegatedAfter(text, matchIndex + full.length);
     const effectiveWord = negated ? BOUNDARY_FLIP[word] : word;
-    switch (effectiveWord) {
-      case "이내":
-      case "이하":
-        return { rule: { id: "text-marriage-duration-lte", field: "marriageDurationYears", operator: "lte", value: years, required: true } };
-      case "미만":
-        return { rule: { id: "text-marriage-duration-lt", field: "marriageDurationYears", operator: "lt", value: years, required: true } };
-      case "이상":
-        return { rule: { id: "text-marriage-duration-gte", field: "marriageDurationYears", operator: "gte", value: years, required: true } };
-      case "초과":
-        return { rule: { id: "text-marriage-duration-gt", field: "marriageDurationYears", operator: "gt", value: years, required: true } };
-      default:
-        return undefined;
+    const boundary = MARRIAGE_DURATION_WORD_TO_BOUNDARY[effectiveWord];
+    if (!boundary) return undefined;
+
+    const spec: MarriageDurationSpec = { years, boundary };
+    const durationRule: EligibilityRule = {
+      id: `text-marriage-duration-${boundary}`,
+      field: "marriageDate",
+      operator: "marriage_duration_within",
+      value: spec,
+      required: true,
+    };
+
+    // A clearly-CURRENT 신혼부부 condition with an explicit duration implies
+    // BOTH conditions must hold — the applicant must actually be currently
+    // married, not merely have a marriageDate on file from a since-ended
+    // marriage (see NEWLYWED_CURRENT_RE doc above).
+    if (NEWLYWED_CURRENT_RE.test(text)) {
+      const maritalRule: EligibilityRule = {
+        id: "text-marriage-duration-implies-married",
+        field: "maritalStatus",
+        operator: "eq",
+        value: "married",
+        required: true,
+      };
+      return { rules: [maritalRule, durationRule] };
     }
+
+    return { rules: [durationRule] };
   }
+
+  if (MARRIAGE_DURATION_MONTHS_RE.test(text)) return { unresolved: text };
+
   // "신혼부부"/"예비신혼부부" mentioned but this text never states its own
   // duration threshold: real signal, no safe (never-guessed) resolution.
   if (NEWLYWED_BARE_RE.test(text)) return { unresolved: text };
@@ -1083,12 +1211,22 @@ function ruleFieldSignalPresent(field: string, window: string): boolean {
       return /연\s?소득/.test(window);
     case "childrenCount":
       return /자녀\s*\d+\s*(?:명|인)/.test(window);
-    case "singleParent":
+    case "singleParentFamily":
       return /한\s?부모|미혼모|미혼부/.test(window);
     case "multiculturalFamily":
       return /다문화\s?(?:가족|가정)/.test(window);
-    case "marriageDurationYears":
+    case "marriageDate":
       return /(?:혼인|결혼)(?:신고)?|신혼부부/.test(window);
+    // "maritalStatus" deliberately has NO case here: it is never
+    // independently extracted from its own signal anywhere else in this
+    // file — the only rule this parser ever produces for it is the
+    // maritalStatus=="married" half of the marriage-duration compound rule
+    // above, which is always emitted TOGETHER with (never independently of)
+    // the marriageDate rule from the exact same regex match. Since the two
+    // fields aren't independently discoverable, they can't be "wrongly
+    // joined" by a distant, unrelated OR the way two genuinely independent
+    // dimensions could — so this safety net correctly never needs to reason
+    // about maritalStatus on its own.
     default:
       return false;
   }
@@ -1165,8 +1303,11 @@ export function extractEligibilityFromText(sourceField: string, rawText: string 
   else if (multiculturalFamily?.unresolved) unresolvedClauses.push(multiculturalFamily.unresolved);
 
   const marriageDuration = parseMarriageDurationClause(text);
-  if (marriageDuration?.rule) rules.push(withEvidence(marriageDuration.rule, sourceField, text));
-  else if (marriageDuration?.unresolved) unresolvedClauses.push(marriageDuration.unresolved);
+  if (marriageDuration?.rules) {
+    for (const r of marriageDuration.rules) rules.push(withEvidence(r, sourceField, text));
+  } else if (marriageDuration?.unresolved) {
+    unresolvedClauses.push(marriageDuration.unresolved);
+  }
 
   // Safety net (section 16, Phase 1 item C): if a SPECIFIC OR occurrence in
   // the text is plausibly joining two of the dimensions we just extracted

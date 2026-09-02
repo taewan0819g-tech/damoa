@@ -59,24 +59,38 @@ export interface UserProfile {
    * ISO date the applicant's marriage was registered (혼인신고일). Added per
    * Phase 2 family/marital audit: real MOIS "신혼부부" eligibility text
    * defines its own duration threshold per policy (observed thresholds
-   * include 6 months, 1/2/3/5/7 years — never a single fixed convention), so
-   * a boolean "newlywed" field can't represent it. This date lets a
-   * reference-date-aware rule (see lib/eligibility/marriageDuration.ts)
-   * compute "혼인신고일로부터 N년 이내" per-policy instead of guessing a
-   * threshold. Optional — undefined means "unknown", never treated as
+   * include 6 months, 1/2/3/5/7 years — never a single fixed convention).
+   * Kept as the raw date (never a pre-computed year count) so a
+   * reference-date-aware rule can compute "혼인신고일로부터 N년 이내" via an
+   * EXACT calendar cutoff (see domain/profile/marriageDuration.ts's
+   * `compareMarriageDurationToThreshold` and the `marriage_duration_within`
+   * rule operator) instead of a floored differenceInYears integer, which can
+   * silently misclassify e.g. someone married 1 year 11 months as "within 1
+   * year". Optional — undefined means "unknown", never treated as
    * ineligible.
    */
   marriageDate?: string;
 
   /**
    * Added per Phase 2 audit: "한부모(가족/가정)" is a legally defined (한부모
-   * 가족지원법) applicant category distinct from maritalStatus (a single
-   * parent can be divorced, widowed, or never-married) and appears in 660+
-   * real MOIS records as a direct eligibility qualifier. Not inferable from
+   * 가족지원법) family category distinct from maritalStatus (a single parent
+   * can be divorced, widowed, or never-married) and appears in 660+ real
+   * MOIS records as a direct eligibility qualifier. Not inferable from
    * maritalStatus alone (a divorced/widowed person isn't necessarily raising
    * a child), so kept as its own explicit flag.
+   *
+   * Named `singleParentFamily` (not `singleParent`) and means "the applicant
+   * belongs to / is covered as a member of a legally recognized single-parent
+   * family" — deliberately NOT scoped to "the applicant is themselves the
+   * parent". Real MOIS text frequently qualifies BOTH the parent and their
+   * child under the same 한부모(가족) clause (e.g. "미혼한부모 및 그자녀" — "an
+   * unmarried single parent AND their child" — real MOIS 307000000102), so a
+   * field named/scoped to "is a parent" would incorrectly read `false` for an
+   * eligible child applicant. See the Phase 2 checkpoint-2 audit for the full
+   * 한부모 sub-bucket breakdown (applicant-is-parent vs. child-of-family vs.
+   * statutory-citation-only vs. ordinary-language false positive).
    */
-  singleParent?: boolean;
+  singleParentFamily?: boolean;
 
   /**
    * Added per Phase 2 audit: "다문화가족" (다문화가족지원법) is a legally

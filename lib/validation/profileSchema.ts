@@ -24,7 +24,7 @@ export const userProfileSchema = z.object({
   marriageDate: isoDateString
     .refine((value) => new Date(value) <= getNow(), { message: "혼인신고일은 미래일 수 없습니다." })
     .optional(),
-  singleParent: z.boolean().optional(),
+  singleParentFamily: z.boolean().optional(),
   multiculturalFamily: z.boolean().optional(),
   employmentStatus: z
     .enum(["employed", "unemployed", "self_employed", "freelancer", "student", "other"])

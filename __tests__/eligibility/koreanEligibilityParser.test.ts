@@ -677,3 +677,133 @@ describe("Phase 1: region correctness hardening", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 2: marital/family eligibility — targeted synthetic regression tests
+// (task 6 of the Phase 2 checkpoint-2 spec). These are AUTHORED sentences
+// exercising specific parser behaviors in isolation, complementing (not
+// duplicating) the real-MOIS-excerpt gold fixture in
+// __tests__/fixtures/familyGoldSampleReal.ts / familyGoldSampleReal.test.ts.
+// If a change to the family/marital parsers flips one of these, check
+// whether it's an intentional improvement or a genuine regression.
+// ---------------------------------------------------------------------------
+describe("Phase 2: marital/family eligibility", () => {
+  describe('"한부모 및 그 자녀" — family membership covers both parent and child', () => {
+    it('"만 18세 미만 자녀를 둔 한부모 및 그 자녀를 지원합니다" -> singleParentFamily:true', () => {
+      const result = extractEligibilityFromText("f", "만 18세 미만 자녀를 둔 한부모 및 그 자녀를 지원합니다");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "singleParentFamily", operator: "eq", value: true })
+      );
+    });
+  });
+
+  describe('"한부모가족의 자녀" — child-scoped membership, not "is a parent"', () => {
+    it('"한부모가족의 자녀에게 학용품비를 지원한다" -> singleParentFamily:true', () => {
+      const result = extractEligibilityFromText("f", "한부모가족의 자녀에게 학용품비를 지원한다");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "singleParentFamily", operator: "eq", value: true })
+      );
+    });
+  });
+
+  describe('"미혼모"', () => {
+    it('"미혼모에게 출산용품을 지원한다" -> singleParentFamily:true', () => {
+      const result = extractEligibilityFromText("f", "미혼모에게 출산용품을 지원한다");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "singleParentFamily", operator: "eq", value: true })
+      );
+    });
+  });
+
+  describe('"미혼부"', () => {
+    it('"미혼부에게 양육비를 지원한다" -> singleParentFamily:true', () => {
+      const result = extractEligibilityFromText("f", "미혼부에게 양육비를 지원한다");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "singleParentFamily", operator: "eq", value: true })
+      );
+    });
+  });
+
+  describe('ordinary phrase containing "한 부모" that is NOT the legal category', () => {
+    it('"차량을 소지한 부모는 신청 대상에서 제외한다" -> no singleParentFamily rule (verb-ending "-한" + "부모", not the legal term)', () => {
+      const result = extractEligibilityFromText("f", "차량을 소지한 부모는 신청 대상에서 제외한다");
+      expect(result.rules.find((r) => r.field === "singleParentFamily")).toBeUndefined();
+    });
+
+    it('"본 사업은 한 부모 이상과 학생이 함께 거주해야 신청할 수 있다" -> no singleParentFamily rule ("이상" numeral idiom, not the legal term)', () => {
+      const result = extractEligibilityFromText("f", "본 사업은 한 부모 이상과 학생이 함께 거주해야 신청할 수 있다");
+      expect(result.rules.find((r) => r.field === "singleParentFamily")).toBeUndefined();
+    });
+  });
+
+  describe("single-parent category inside an OR list of unrelated statuses", () => {
+    it('"국민기초생활수급자 또는 차상위계층, 한부모가족 지원대상자 중 하나에 해당하는 자" -> no hard-AND singleParentFamily rule, reported unresolved instead', () => {
+      const result = extractEligibilityFromText(
+        "f",
+        "국민기초생활수급자 또는 차상위계층, 한부모가족 지원대상자 중 하나에 해당하는 자"
+      );
+      expect(result.rules.find((r) => r.field === "singleParentFamily")).toBeUndefined();
+      expect(result.unresolvedClauses.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("다문화가족 child/member wording", () => {
+    it('"다문화가족의 자녀는 우선 지원 대상이다" -> multiculturalFamily:true', () => {
+      const result = extractEligibilityFromText("f", "다문화가족의 자녀는 우선 지원 대상이다");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "multiculturalFamily", operator: "eq", value: true })
+      );
+    });
+  });
+
+  describe("신혼부부 + explicit duration -> compound maritalStatus + marriage-duration rule", () => {
+    it('"혼인신고일로부터 2년 이내인 신혼부부를 지원한다" -> maritalStatus:"married" AND marriageDate marriage_duration_within {years:2, boundary:"lte"}', () => {
+      const result = extractEligibilityFromText("f", "혼인신고일로부터 2년 이내인 신혼부부를 지원한다");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "maritalStatus", operator: "eq", value: "married" })
+      );
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({
+          field: "marriageDate",
+          operator: "marriage_duration_within",
+          value: { years: 2, boundary: "lte" },
+        })
+      );
+    });
+  });
+
+  describe("예비신혼부부 — not yet married, must not assert maritalStatus:married", () => {
+    it('"예비신혼부부도 신청할 수 있습니다" -> no marriageDate/maritalStatus rule, reported unresolved', () => {
+      const result = extractEligibilityFromText("f", "예비신혼부부도 신청할 수 있습니다");
+      expect(result.rules.find((r) => r.field === "marriageDate")).toBeUndefined();
+      expect(result.rules.find((r) => r.field === "maritalStatus")).toBeUndefined();
+      expect(result.unresolvedClauses.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("bare 신혼부부 without any duration definition", () => {
+    it('"신혼부부에게 전세자금을 지원한다" -> no marriageDate/maritalStatus rule (no threshold to extract), reported unresolved', () => {
+      const result = extractEligibilityFromText("f", "신혼부부에게 전세자금을 지원한다");
+      expect(result.rules.find((r) => r.field === "marriageDate")).toBeUndefined();
+      expect(result.rules.find((r) => r.field === "maritalStatus")).toBeUndefined();
+      expect(result.unresolvedClauses.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("bare 다자녀 without an explicit number", () => {
+    it('"다자녀 가구에게 우선순위를 부여한다" -> no childrenCount rule (no number to extract), reported unresolved', () => {
+      const result = extractEligibilityFromText("f", "다자녀 가구에게 우선순위를 부여한다");
+      expect(result.rules.find((r) => r.field === "childrenCount")).toBeUndefined();
+      expect(result.unresolvedClauses.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("자녀 2명 이상", () => {
+    it('"자녀 2명 이상을 양육하는 가구" -> childrenCount gte 2', () => {
+      const result = extractEligibilityFromText("f", "자녀 2명 이상을 양육하는 가구");
+      expect(result.rules).toContainEqual(
+        expect.objectContaining({ field: "childrenCount", operator: "gte", value: 2 })
+      );
+    });
+  });
+});

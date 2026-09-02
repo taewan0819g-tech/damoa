@@ -18,6 +18,13 @@ function profileWithAge(age: number): UserProfile {
   return { birthDate: `${birthYear}-01-01` };
 }
 
+/** ISO date string `monthsAgo` months before the current wall-clock date. */
+function recentIsoDate(monthsAgo: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - monthsAgo);
+  return d.toISOString().slice(0, 10);
+}
+
 describe("evaluateEligibility", () => {
   it("returns unknown for a benefit with no eligibility rules and no unrestricted flag (the core bug fix)", () => {
     const status = evaluateEligibility(makeBenefit({}), {});
@@ -219,6 +226,74 @@ describe("evaluateEligibility", () => {
     it("never guesses for a freelancer — resolves to unknown rather than pass or fail", () => {
       const status = evaluateEligibility(makeBenefit({ eligibility: employmentGroup("unemployed") }), {
         employmentStatus: "freelancer",
+      });
+      expect(status).toBe("unknown");
+    });
+  });
+
+  describe("newlywed compound rule (maritalStatus==married AND marriage_duration_within, end-to-end)", () => {
+    // Mirrors exactly what the parser emits for a clearly-CURRENT "신혼부부
+    // ... 혼인신고일이 1년 이내" clause (see koreanEligibilityParser.ts's
+    // parseMarriageDurationClause / NEWLYWED_CURRENT_RE): a divorced/widowed
+    // applicant with a recent historical marriage date must NOT pass on the
+    // marriageDate condition alone — maritalStatus must also currently be
+    // "married".
+    const newlywedGroup: EligibilityRuleGroup = {
+      type: "all",
+      rules: [
+        { id: "marital", field: "maritalStatus", operator: "eq", value: "married", required: true },
+        {
+          id: "duration",
+          field: "marriageDate",
+          operator: "marriage_duration_within",
+          value: { years: 1, boundary: "lte" },
+          required: true,
+        },
+      ],
+    };
+
+    it("married + recent marriageDate -> likely_eligible (PASS)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: newlywedGroup }), {
+        maritalStatus: "married",
+        marriageDate: recentIsoDate(6), // 6 months ago, within a 1-year window
+      });
+      expect(status).toBe("likely_eligible");
+    });
+
+    it("married + old marriageDate -> not_eligible (FAIL, duration condition fails)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: newlywedGroup }), {
+        maritalStatus: "married",
+        marriageDate: recentIsoDate(36), // 3 years ago, outside a 1-year window
+      });
+      expect(status).toBe("not_eligible");
+    });
+
+    it("divorced + recent historical marriageDate -> not_eligible (FAIL, maritalStatus condition fails — the core bug this compound rule fixes)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: newlywedGroup }), {
+        maritalStatus: "divorced",
+        marriageDate: recentIsoDate(6),
+      });
+      expect(status).toBe("not_eligible");
+    });
+
+    it("widowed + recent historical marriageDate -> not_eligible (FAIL, maritalStatus condition fails)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: newlywedGroup }), {
+        maritalStatus: "widowed",
+        marriageDate: recentIsoDate(6),
+      });
+      expect(status).toBe("not_eligible");
+    });
+
+    it("missing maritalStatus -> unknown (never guessed as pass or fail)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: newlywedGroup }), {
+        marriageDate: recentIsoDate(6),
+      });
+      expect(status).toBe("unknown");
+    });
+
+    it("missing marriageDate -> unknown (never guessed as pass or fail)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: newlywedGroup }), {
+        maritalStatus: "married",
       });
       expect(status).toBe("unknown");
     });

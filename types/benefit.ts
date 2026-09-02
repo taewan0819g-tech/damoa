@@ -101,7 +101,20 @@ export type RuleOperator =
    * Ignores `field` (always evaluated against the whole profile) — kept for
    * documentation/evidence purposes only.
    */
-  | "target_scope_in";
+  | "target_scope_in"
+  /**
+   * Reference-date-aware, EXACT calendar-date comparison of a marriage
+   * duration threshold (e.g. "혼인신고일로부터 1년 이내"). `field` is always
+   * `"marriageDate"` (the raw ISO date, NOT a floored year count — see
+   * domain/profile/marriageDuration.ts for why a floored
+   * `differenceInYears` integer can silently misclassify e.g. someone
+   * married 1 year 11 months as within a "1년 이내" window). `value` is a
+   * `MarriageDurationSpec` (`{years, boundary}`); the resolved field value
+   * must be the profile's raw `marriageDate` string. See
+   * `compareMarriageDurationToThreshold` for the exact
+   * subYears(referenceDate, years)-cutoff semantics per boundary word.
+   */
+  | "marriage_duration_within";
 
 /**
  * Where a rule came from. Never expose this in end-user UI — it exists so
