@@ -152,7 +152,7 @@ const FAMILY_FIELDS = new Set([
   "multiculturalFamily",
 ]);
 
-function classifyDimension(rule: EligibilityRule): IndexDimension {
+export function classifyDimension(rule: EligibilityRule): IndexDimension {
   if (rule.field === "age") return "age";
   if (rule.operator === "region_in") return "region";
   if (rule.operator === "target_scope_in") return "targetScope";
