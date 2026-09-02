@@ -1,6 +1,6 @@
 import type { EligibilityRule } from "@/types/benefit";
 import { normalizeProvince, PROVINCE_ALIAS_KEYS, type RegionSpec } from "../region";
-import { resolveCityProvinces } from "../regionGazetteer";
+import { resolveCityProvinces, getShortDistrictNames } from "../regionGazetteer";
 import { intervalFromBoundaryWord } from "../interval";
 import { EMPLOYMENT_TARGET_SPECS } from "../employment";
 
@@ -210,6 +210,25 @@ const RESIDENCE_AMBIGUOUS_TOKEN = "주민";
 const RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION = "주민센터";
 
 const CITY_TOKEN_RE = /[가-힣]{2,6}(시|군|구)/;
+/**
+ * Real 2-character (1-char-stem) district names — 중구, 동구, 서구, 남구,
+ * 북구 — that `CITY_TOKEN_RE`'s 2-6 character stem minimum structurally
+ * cannot match. Matched via an exact whitelist (derived from the gazetteer
+ * itself, see `getShortDistrictNames`) rather than a widened regex, so
+ * common non-geographic 2-character words ending in 시/군/구 (가구, 인구,
+ * 요구, 지구, 축구, 야구, ...) never get treated as a city candidate.
+ */
+const SHORT_DISTRICT_NAMES = getShortDistrictNames();
+const SHORT_DISTRICT_ALTERNATION = SHORT_DISTRICT_NAMES.join("|");
+/**
+ * Combined city-token matcher: the original long-form pattern OR an exact
+ * short-district whitelist match. Any match with `[0].length === 2` came
+ * from the short-district branch (the long-form branch requires a minimum
+ * 3-character total match) — that discriminator is used below to apply an
+ * extra word-boundary safety check specific to the much-more-collision-prone
+ * short tokens, without touching the existing long-form matching behavior.
+ */
+const CITY_TOKEN_COMBINED_RE = new RegExp(`(?:${CITY_TOKEN_RE.source})|(?:${SHORT_DISTRICT_ALTERNATION})`);
 /** List-item delimiter directly between two sibling cities under the same province, e.g. "이천시, 여주시". */
 const CITY_LIST_DELIMITER_RE = /^\s*(또는|,|·)\s*/;
 /** Proximity window (characters) within which a lone city token must sit next to a residence-signal occurrence. */
@@ -259,29 +278,38 @@ function isInstitutionMention(text: string, matchEndIndex: number): boolean {
 }
 
 /**
- * Resolves a city token against `province` via the gazetteer. Only keeps the
- * city if it's an unambiguous member of that exact province — a mismatch
- * (garbled text, or a same-named city in a different province) or an
- * unrecognized token safely falls back to the broader, still-correct
- * province-only spec rather than asserting a wrong city-level restriction.
+ * Resolves a city token against `province` via the gazetteer. Keeps the city
+ * whenever `province` is one of the token's known real provinces — even if
+ * the token ALSO exists in other, unrelated provinces (e.g. 중구 is real in
+ * 서울/부산/대구/인천/대전), because the caller already supplied the province
+ * from an explicit adjacent mention in the same text ("서울특별시 중구"), so
+ * there's nothing left to guess: the text itself disambiguated it. A true
+ * mismatch (garbled text, or a same-named city that does NOT belong to the
+ * stated province) or a wholly unrecognized token safely falls back to the
+ * broader, still-correct province-only spec rather than asserting a wrong
+ * city-level restriction.
  */
 function resolveCitySpec(province: string, cityToken: string | undefined): RegionSpec {
   if (!cityToken) return { province };
   const cityProvinces = resolveCityProvinces(cityToken);
-  if (cityProvinces.length === 1 && cityProvinces[0] === province) {
+  if (cityProvinces.includes(province)) {
     return { province, city: cityToken };
   }
   return { province };
 }
 
 /**
- * True when the province-alias match starting at `idx` sits at a real word
- * boundary rather than being embedded inside a longer city/county/district
- * name — e.g. the alias "대구" is NOT a genuine province mention inside
- * "해운대구" (it's the tail end of a single 4-character district name), but
- * IS genuine on its own or after a space/punctuation/string-start.
+ * True when the match starting at `idx` sits at a real word boundary rather
+ * than being embedded inside a longer name — e.g. the province alias "대구"
+ * is NOT a genuine province mention inside "해운대구" (it's the tail end of a
+ * single 4-character district name), but IS genuine on its own or after a
+ * space/punctuation/string-start. Also used to gate the much shorter (and
+ * therefore much more collision-prone) 2-character short-district tokens —
+ * e.g. rejecting a spurious "동구" match inside "노동구제" (labor relief),
+ * where "동구" is not a district mention at all, just a substring split
+ * across the real words "노동" + "구제".
  */
-function isProvinceAliasBoundaryOk(text: string, idx: number): boolean {
+function isHangulBoundaryOk(text: string, idx: number): boolean {
   if (idx === 0) return true;
   return !/[가-힣]/.test(text[idx - 1]);
 }
@@ -290,7 +318,7 @@ function findNextProvinceMention(text: string, searchFrom: number): { alias: str
   let best: { alias: string; index: number } | undefined;
   for (const name of PROVINCE_NAMES_DESC) {
     let idx = text.indexOf(name, searchFrom);
-    while (idx !== -1 && !isProvinceAliasBoundaryOk(text, idx)) {
+    while (idx !== -1 && !isHangulBoundaryOk(text, idx)) {
       idx = text.indexOf(name, idx + 1);
     }
     if (idx === -1) continue;
@@ -319,12 +347,15 @@ function extractProvinceCitySpecs(
 ): { specs: RegionSpec[]; consumedUntil: number } {
   const cursor = mention.index + mention.alias.length;
   const after = text.slice(cursor, cursor + 12);
-  const firstCityMatch = after.match(CITY_TOKEN_RE);
+  const firstCityMatch = after.match(CITY_TOKEN_COMBINED_RE);
   if (!firstCityMatch || firstCityMatch.index === undefined) {
     return { specs: [{ province }], consumedUntil: cursor };
   }
 
   const firstAbsIndex = cursor + firstCityMatch.index;
+  if (firstCityMatch[0].length === 2 && !isHangulBoundaryOk(text, firstAbsIndex)) {
+    return { specs: [{ province }], consumedUntil: cursor };
+  }
   if (isInstitutionMention(text, firstAbsIndex + firstCityMatch[0].length)) {
     return { specs: [{ province }], consumedUntil: cursor };
   }
@@ -337,9 +368,10 @@ function extractProvinceCitySpecs(
     const delimiterMatch = rest.match(CITY_LIST_DELIMITER_RE);
     if (!delimiterMatch) break;
     const afterDelimiter = rest.slice(delimiterMatch[0].length);
-    const siblingMatch = afterDelimiter.match(CITY_TOKEN_RE);
+    const siblingMatch = afterDelimiter.match(CITY_TOKEN_COMBINED_RE);
     if (!siblingMatch || siblingMatch.index !== 0) break; // must be immediately adjacent, never guessed from further away
     const siblingAbsIndex = scanFrom + delimiterMatch[0].length;
+    if (siblingMatch[0].length === 2 && !isHangulBoundaryOk(text, siblingAbsIndex)) break;
     if (isInstitutionMention(text, siblingAbsIndex + siblingMatch[0].length)) break;
     specs.push(resolveCitySpec(province, siblingMatch[0]));
     scanFrom = siblingAbsIndex + siblingMatch[0].length;
@@ -388,11 +420,18 @@ function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresol
   const seen = new Set<string>();
   let hadUnresolvableToken = false;
 
-  const re = new RegExp(CITY_TOKEN_RE.source, "g");
+  const re = new RegExp(CITY_TOKEN_COMBINED_RE.source, "g");
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     const token = match[0];
     const idx = match.index;
+    // A 2-character match came from the short-district whitelist branch —
+    // reject it if it's not at a real word boundary (e.g. the "동구" inside
+    // "노동구제" is a substring collision, not a genuine district mention),
+    // same safety check applied to province aliases. This is noise, not an
+    // unresolvable-but-real signal, so it's silently skipped rather than
+    // flagged via `hadUnresolvableToken`.
+    if (token.length === 2 && !isHangulBoundaryOk(text, idx)) continue;
     if (isInstitutionMention(text, idx + token.length)) continue;
     if (!isNearAnyIndex(idx, token.length, signalIndices)) continue;
 
@@ -431,7 +470,7 @@ function parseRegionClause(text: string): { rule?: EligibilityRule; unresolved?:
   // A real geographic signal exists (an unresolved/ambiguous city token, or
   // some city-like token we couldn't safely place) but we can't turn it into
   // a rule — report it rather than silently dropping it.
-  if (hadUnresolvableToken || CITY_TOKEN_RE.test(text)) return { unresolved: text };
+  if (hadUnresolvableToken || CITY_TOKEN_COMBINED_RE.test(text)) return { unresolved: text };
   return undefined;
 }
 

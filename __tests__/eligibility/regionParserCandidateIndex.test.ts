@@ -10,10 +10,12 @@ import type { UserProfile } from "@/types/profile";
  * reference implementation, for the exact shapes the new gazetteer-backed
  * extraction now produces: a single gazetteer-resolved city, a multi-region
  * OR list (both province-list and same-province sibling-city-list forms),
- * and a province+city pair. This is the property the task calls out
- * explicitly: the optimized path must never remove a policy the full
- * deterministic rule engine would accept (no false-negative regression from
- * the region parser change), for any profile.
+ * a province+city pair, and (this session's addition) a 1-character-stem
+ * short-district ("중구") disambiguated by an explicit parent province. This
+ * is the property the task calls out explicitly: the optimized path must
+ * never remove a policy the full deterministic rule engine would accept (no
+ * false-negative regression from the region parser change), for any
+ * profile — re-confirmed here specifically for the short-district fix.
  */
 function benefitFromRegionText(id: string, text: string): Benefit {
   const { rules } = extractEligibilityFromText("지원대상", text);
@@ -39,6 +41,10 @@ function catalog(): Benefit[] {
     benefitFromRegionText("lone-city-list", "이천시, 여주시 거주자만 신청 가능"),
     benefitFromRegionText("collision-fix", "경기도 광주시 거주자만 신청 가능"),
     benefitFromRegionText("nationwide-no-rule", "전국 거주자 누구나 신청 가능"),
+    // 1-character-stem short district, disambiguated by an explicit parent
+    // province in the same clause — the real-world MOIS shape from task
+    // item 1's canonical example ("서울특별시 중구 거주자").
+    benefitFromRegionText("short-district-with-province", "서울특별시 중구 거주자만 신청 가능"),
   ];
 }
 
@@ -52,6 +58,14 @@ const RESIDENCE_PROFILES: UserProfile[] = [
   { residence: { province: "서울특별시" } },
   { residence: { province: "부산광역시" } },
   { residence: { province: "광주광역시" } },
+  // Short-district disambiguation sweep: 중구 exists in 5 different metros
+  // (서울/부산/대구/인천/대전) — only the 서울특별시 resident should match
+  // "short-district-with-province"; same district name in a different
+  // metro must NOT match.
+  { residence: { province: "서울특별시", city: "중구" } },
+  { residence: { province: "부산광역시", city: "중구" } },
+  { residence: { province: "대구광역시", city: "중구" } },
+  { residence: { city: "중구" } },
 ];
 
 describe("region-parser-produced eligibility vs candidate index — no false-negative regression", () => {
@@ -88,5 +102,33 @@ describe("region-parser-produced eligibility vs candidate index — no false-neg
     const index = buildCandidateIndex(catalog());
     const ids = getCandidateBenefits(index, {}).map((b) => b.id);
     expect(ids).toContain("nationwide-no-rule");
+  });
+
+  it("via the indexed path, a 서울특별시/중구 resident matches the short-district benefit but a same-name 중구 in a different metro does not", () => {
+    const index = buildCandidateIndex(catalog());
+    const seoulJungGu = new Set(
+      getCandidateBenefits(index, { residence: { province: "서울특별시", city: "중구" } }).map((b) => b.id)
+    );
+    expect(seoulJungGu.has("short-district-with-province")).toBe(true);
+
+    const busanJungGu = new Set(
+      getCandidateBenefits(index, { residence: { province: "부산광역시", city: "중구" } }).map((b) => b.id)
+    );
+    expect(busanJungGu.has("short-district-with-province")).toBe(false);
+
+    const daeguJungGu = new Set(
+      getCandidateBenefits(index, { residence: { province: "대구광역시", city: "중구" } }).map((b) => b.id)
+    );
+    expect(daeguJungGu.has("short-district-with-province")).toBe(false);
+
+    // A profile with the bare district name but no province is
+    // under-specified — the candidate index conservatively INCLUDES it
+    // (can't rule it out) rather than guessing which 중구 was meant, which
+    // is the correct direction of error for a candidate-retrieval funnel:
+    // never silently exclude a policy the full evaluator might still
+    // accept. Exact full-scan-vs-indexed equivalence for this profile is
+    // covered by the sweep above.
+    const noProvince = new Set(getCandidateBenefits(index, { residence: { city: "중구" } }).map((b) => b.id));
+    expect(noProvince.has("short-district-with-province")).toBe(true);
   });
 });

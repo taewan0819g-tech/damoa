@@ -308,6 +308,42 @@ describe("extractEligibilityFromText", () => {
       expect(result.rules).toEqual([]);
       expect(result.unresolvedClauses).toEqual([]);
     });
+
+    it("resolves a real short (1-char-stem) district when paired with an explicit province — 서울특별시 중구", () => {
+      const { rules } = extractEligibilityFromText("f", "서울특별시 중구 거주자만 신청 가능");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "서울특별시", city: "중구" }] }));
+    });
+
+    it("resolves other real short districts (동구/서구/남구/북구) when paired with an explicit province", () => {
+      expect(extractEligibilityFromText("f", "대전광역시 동구 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "대전광역시", city: "동구" }] })
+      );
+      expect(extractEligibilityFromText("f", "인천광역시 서구 주민등록을 두고 있는 자").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "인천광역시", city: "서구" }] })
+      );
+      expect(extractEligibilityFromText("f", "광주광역시 남구 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "광주광역시", city: "남구" }] })
+      );
+      expect(extractEligibilityFromText("f", "울산광역시 북구 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "울산광역시", city: "북구" }] })
+      );
+    });
+
+    it("still refuses to guess a bare short district with no province context — 중구 exists in 5 metros", () => {
+      const result = extractEligibilityFromText("f", "중구 거주자만 신청 가능");
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual(["중구 거주자만 신청 가능"]);
+    });
+
+    it("a short-district match that isn't at a word boundary (e.g. immediately glued onto a province name with no separator) safely falls back to province-only rather than guessing", () => {
+      // No real MOIS text is formatted this way (province and city are
+      // always space-separated), but if it were, `isHangulBoundaryOk`
+      // rejects the glued-on short token and `extractProvinceCitySpecs`
+      // falls back to the still-correct, broader province-only spec instead
+      // of risking a wrong city assertion.
+      const { rules } = extractEligibilityFromText("f", "서울특별시중구 거주자만 신청 가능");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "서울특별시" }] }));
+    });
   });
 
   // ---------------------------------------------------------------------

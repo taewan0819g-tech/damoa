@@ -17,10 +17,75 @@
  * 동구 (부산/대구/인천/광주/대전/울산), 서구 (부산/대구/인천/광주/대전),
  * 남구 (부산/대구/광주/울산), 북구 (부산/대구/광주/울산), 강서구 (서울/부산).
  *
+ * ---------------------------------------------------------------------------
+ * PROVENANCE — this is HAND-CURATED reference data, not the long-term source
+ * of truth. See `GAZETTEER_METADATA` below for machine-readable version
+ * info. Do not assume this file is complete or auto-refreshed.
+ *
  * Source: standard 시/군/구 (기초자치단체) rosters as of the 2023 군위군
- * (경상북도 -> 대구광역시) transfer. Not sourced from any live API — this is
- * static reference geography, not eligibility content.
+ * (경상북도 -> 대구광역시) transfer, transcribed by hand and checked against
+ * the 17 provinces' publicly known city/county/district counts. Not sourced
+ * from any live API or scrape — this is static reference geography, not
+ * eligibility content, and it intentionally contains ONLY real, verifiable
+ * administrative names (no fuzzy/ML-derived entries).
+ *
+ * AUTHORITATIVE SOURCE FOR A FUTURE DETERMINISTIC REGENERATION (investigated,
+ * not yet integrated — see GAZETTEER_METADATA.candidateAuthoritativeSources):
+ * the Korean Ministry of the Interior and Safety (행정안전부) publishes the
+ * 법정동코드 (legal-dong code) standard table via 행정표준코드관리시스템
+ * (code.go.kr), which is mirrored on the public open-data portal
+ * (data.go.kr) both as a downloadable file and an OpenAPI endpoint —
+ * e.g. dataset "행정안전부_행정표준코드_법정동코드"
+ * (https://www.data.go.kr/data/15077871/openapi.do) and the full-code
+ * download "행정안전부_행정표준코드_전체코드_다운로드"
+ * (https://www.data.go.kr/data/15092039/fileData.do). Each row carries
+ * 시도명/시군구명 (and finer 읍면동/리 levels we don't need), which is exactly
+ * the province->city mapping this file hand-encodes. A follow-up script
+ * could fetch that table, collapse it to the unique 시도/시군구 pairs, and
+ * regenerate `CITY_GAZETTEER` deterministically — but that requires a
+ * data.go.kr API key/registration and a verification pass (matching every
+ * row against `PROVINCE_ALIAS_KEYS` in region.ts, confirming no accidental
+ * drops of valid 시/군/구), which is out of scope for this change. This file
+ * is NOT scraped or auto-generated; it stays hand-curated until that
+ * follow-up is done and reviewed.
+ * ---------------------------------------------------------------------------
  */
+
+/**
+ * Machine-readable provenance for this static dataset. Bump `version` any
+ * time `CITY_GAZETTEER` changes (an added/removed/renamed 시/군/구, a
+ * province transfer like the 2023 군위군 move). `authoritative: false` is
+ * load-bearing documentation: this table is a hand-curated approximation of
+ * the real administrative roster, good enough for the parser's safety-net
+ * use case (never assert a wrong region, fall back to unresolved when
+ * unsure) but NOT a substitute for the government's own code table if this
+ * data is ever needed for a purpose that requires legal precision.
+ */
+export const GAZETTEER_METADATA = {
+  version: "2023-07-gunwi-transfer.1",
+  effectiveAsOf: "2023-07-01", // 군위군 경상북도 -> 대구광역시 transfer date
+  sourceType: "manual" as const,
+  source:
+    "Hand-transcribed from standard 시/군/구 (기초자치단체) rosters; cross-checked against known per-province city/county/district counts. Not fetched from a live API.",
+  authoritative: false,
+  candidateAuthoritativeSources: [
+    {
+      name: "행정안전부_행정표준코드_법정동코드 (data.go.kr OpenAPI)",
+      url: "https://www.data.go.kr/data/15077871/openapi.do",
+      note: "Row-level 시도명/시군구명/법정동코드 fields; requires data.go.kr API key registration.",
+    },
+    {
+      name: "행정안전부_행정표준코드_전체코드_다운로드 (data.go.kr file download)",
+      url: "https://www.data.go.kr/data/15092039/fileData.do",
+      note: "Full standard-code table as a downloadable file; no API key needed for the file itself.",
+    },
+    {
+      name: "행정표준코드관리시스템 (code.go.kr)",
+      url: "https://www.code.go.kr/",
+      note: "The 행정안전부 system of record these datasets are mirrored from.",
+    },
+  ],
+} as const;
 
 const CITY_GAZETTEER: Record<string, string[]> = {
   "서울특별시": [
@@ -127,4 +192,35 @@ export function isUnambiguousCity(city: string): boolean {
 /** Every province's full list of cities/counties/districts, for structural self-checks and other reuse. */
 export function getGazetteer(): Readonly<Record<string, readonly string[]>> {
   return CITY_GAZETTEER;
+}
+
+/** Lazily-built cache for `getShortDistrictNames`. */
+let shortDistrictNames: string[] | undefined;
+
+/**
+ * Every gazetteer city/county/district name that is exactly 2 characters
+ * long (a 1-character stem + 시/군/구 suffix — e.g. 중구, 동구, 서구, 남구,
+ * 북구). Derived from `CITY_GAZETTEER` itself rather than hardcoded, so it
+ * stays in sync if the gazetteer ever changes.
+ *
+ * This exists so the eligibility text parser can recognize these REAL short
+ * district names (which a generic "2+ character stem" city-token regex
+ * structurally cannot match) via an exact whitelist lookup, instead of
+ * widening that regex to match any 1-character stem — which would also
+ * match extremely common, non-geographic Korean 2-character words ending in
+ * 시/군/구 (가구 "household", 인구 "population", 요구 "demand", 지구 "zone",
+ * 축구/야구 "soccer/baseball") and create unwanted false-positive noise. An
+ * exact match against this curated list carries none of that risk: every
+ * name here is verified real geography, nothing else.
+ */
+export function getShortDistrictNames(): string[] {
+  if (shortDistrictNames) return shortDistrictNames;
+  const set = new Set<string>();
+  for (const cities of Object.values(CITY_GAZETTEER)) {
+    for (const city of cities) {
+      if (city.length === 2) set.add(city);
+    }
+  }
+  shortDistrictNames = [...set];
+  return shortDistrictNames;
 }

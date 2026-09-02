@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getGazetteer, isUnambiguousCity, resolveCityProvinces } from "@/lib/eligibility/regionGazetteer";
+import {
+  GAZETTEER_METADATA,
+  getGazetteer,
+  getShortDistrictNames,
+  isUnambiguousCity,
+  resolveCityProvinces,
+} from "@/lib/eligibility/regionGazetteer";
 import { normalizeProvince } from "@/lib/eligibility/region";
 
 describe("regionGazetteer structural self-checks", () => {
@@ -58,5 +64,47 @@ describe("resolveCityProvinces", () => {
     expect(isUnambiguousCity("이천시")).toBe(true);
     expect(isUnambiguousCity("고성군")).toBe(false);
     expect(isUnambiguousCity("없는시")).toBe(false);
+  });
+});
+
+describe("GAZETTEER_METADATA", () => {
+  it("documents this dataset as non-authoritative, hand-curated reference data", () => {
+    expect(GAZETTEER_METADATA.authoritative).toBe(false);
+    expect(GAZETTEER_METADATA.sourceType).toBe("manual");
+    expect(GAZETTEER_METADATA.version.length).toBeGreaterThan(0);
+    expect(GAZETTEER_METADATA.source.length).toBeGreaterThan(0);
+  });
+
+  it("lists at least one candidate authoritative source with a name and URL", () => {
+    expect(GAZETTEER_METADATA.candidateAuthoritativeSources.length).toBeGreaterThan(0);
+    for (const candidate of GAZETTEER_METADATA.candidateAuthoritativeSources) {
+      expect(candidate.name.length).toBeGreaterThan(0);
+      expect(candidate.url.startsWith("https://")).toBe(true);
+    }
+  });
+});
+
+describe("getShortDistrictNames", () => {
+  it("returns exactly the real 2-character (1-char stem + 시/군/구) gazetteer entries", () => {
+    const shortNames = getShortDistrictNames();
+    expect(shortNames.sort()).toEqual(["남구", "동구", "북구", "서구", "중구"].sort());
+  });
+
+  it("every returned name is a real, resolvable gazetteer entry with at least one province", () => {
+    for (const name of getShortDistrictNames()) {
+      expect(name).toHaveLength(2);
+      expect(resolveCityProvinces(name).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("is derived from CITY_GAZETTEER, not hardcoded separately (stays in sync)", () => {
+    const gazetteer = getGazetteer();
+    const expected = new Set<string>();
+    for (const cities of Object.values(gazetteer)) {
+      for (const city of cities) {
+        if (city.length === 2) expected.add(city);
+      }
+    }
+    expect(new Set(getShortDistrictNames())).toEqual(expected);
   });
 });
