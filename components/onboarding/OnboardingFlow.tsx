@@ -15,6 +15,7 @@ import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
 import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, type CurrentStatusOption } from "@/domain/profile/currentStatus";
+import { TRI_STATE_OPTIONS, booleanFromTriState, type TriStateChoice } from "@/lib/constants/triState";
 import type { BenefitCategory } from "@/types/benefit";
 import type { HousingType, IncomeBand, MaritalStatus, UserProfile } from "@/types/profile";
 
@@ -36,6 +37,9 @@ interface Draft {
   householdIncomeBand?: IncomeBand;
   maritalStatus?: MaritalStatus;
   childrenCount: string;
+  marriageDate: string;
+  singleParentFamily?: TriStateChoice;
+  multiculturalFamily?: TriStateChoice;
   housingType?: HousingType;
   homeowner: boolean;
   interests: BenefitCategory[];
@@ -47,6 +51,7 @@ const INITIAL_DRAFT: Draft = {
   city: "",
   householdSize: "",
   childrenCount: "",
+  marriageDate: "",
   homeowner: false,
   interests: [],
 };
@@ -84,6 +89,9 @@ export function OnboardingFlow() {
       householdIncomeBand: draft.householdIncomeBand,
       maritalStatus: draft.maritalStatus,
       childrenCount: draft.childrenCount ? Number(draft.childrenCount) : undefined,
+      marriageDate: draft.maritalStatus === "married" && draft.marriageDate ? draft.marriageDate : undefined,
+      singleParentFamily: booleanFromTriState(draft.singleParentFamily),
+      multiculturalFamily: booleanFromTriState(draft.multiculturalFamily),
       housingType: draft.housingType,
       homeowner: draft.homeowner,
       interests: draft.interests.length > 0 ? draft.interests : undefined,
@@ -245,6 +253,36 @@ export function OnboardingFlow() {
               placeholder="예: 0"
               value={draft.childrenCount}
               onChange={(e) => patch({ childrenCount: e.target.value })}
+            />
+          </div>
+          {draft.maritalStatus === "married" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="marriageDate">혼인신고일 (선택 입력)</Label>
+              <Input
+                id="marriageDate"
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={draft.marriageDate}
+                onChange={(e) => patch({ marriageDate: e.target.value })}
+              />
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="singleParentFamily">한부모가족에 해당하시나요? (선택 입력)</Label>
+            <OptionList
+              name="singleParentFamily"
+              options={TRI_STATE_OPTIONS}
+              value={draft.singleParentFamily}
+              onChange={(v) => patch({ singleParentFamily: v })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="multiculturalFamily">다문화가족에 해당하시나요? (선택 입력)</Label>
+            <OptionList
+              name="multiculturalFamily"
+              options={TRI_STATE_OPTIONS}
+              value={draft.multiculturalFamily}
+              onChange={(v) => patch({ multiculturalFamily: v })}
             />
           </div>
         </div>

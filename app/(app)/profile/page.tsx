@@ -18,6 +18,7 @@ import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
+import { TRI_STATE_OPTIONS, booleanFromTriState, triStateFromBoolean } from "@/lib/constants/triState";
 import type { HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
@@ -183,7 +184,11 @@ export default function ProfilePage() {
           name="maritalStatus"
           options={MARITAL_OPTIONS}
           value={profile.maritalStatus}
-          onChange={(value) => updateProfile({ maritalStatus: value })}
+          onChange={(value) =>
+            // Clearing marriageDate when switching away from "married" avoids
+            // leaving a stale marriage date attached to a non-married status.
+            updateProfile({ maritalStatus: value, marriageDate: value === "married" ? profile.marriageDate : undefined })
+          }
         />
         <Field label="자녀 수" htmlFor="childrenCount">
           <Input
@@ -198,6 +203,35 @@ export default function ProfilePage() {
             }
           />
         </Field>
+        {profile.maritalStatus === "married" && (
+          <Field label="혼인신고일 (선택 입력)" htmlFor="marriageDate">
+            <Input
+              id="marriageDate"
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={profile.marriageDate ?? ""}
+              onChange={(e) => updateProfile({ marriageDate: e.target.value || undefined })}
+            />
+          </Field>
+        )}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="singleParentFamily">한부모가족에 해당하시나요? (선택 입력)</Label>
+          <OptionList
+            name="singleParentFamily"
+            options={TRI_STATE_OPTIONS}
+            value={triStateFromBoolean(profile.singleParentFamily)}
+            onChange={(v) => updateProfile({ singleParentFamily: booleanFromTriState(v) })}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="multiculturalFamily">다문화가족에 해당하시나요? (선택 입력)</Label>
+          <OptionList
+            name="multiculturalFamily"
+            options={TRI_STATE_OPTIONS}
+            value={triStateFromBoolean(profile.multiculturalFamily)}
+            onChange={(v) => updateProfile({ multiculturalFamily: booleanFromTriState(v) })}
+          />
+        </div>
       </Section>
 
       <Section title="주거정보">
