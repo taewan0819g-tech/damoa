@@ -1,4 +1,4 @@
-import { isValid, parseISO, subYears } from "date-fns";
+import { isValid, parseISO, startOfDay, subYears } from "date-fns";
 import { getNow } from "@/lib/dates/now";
 
 /**
@@ -42,6 +42,23 @@ export interface MarriageDurationSpec {
  * `marriageDate` — mirroring `calculateAge`'s null-for-unusable-data
  * convention — so missing/bad profile data can never be treated as
  * disqualifying.
+ *
+ * DATE-ONLY vs TIME-OF-DAY (checkpoint-3 fix): eligibility here is
+ * calendar-DATE based, not hour/minute based. `marriageDate` is a
+ * date-only string ("2025-09-02") that `parseISO` interprets as LOCAL
+ * midnight, but the default `referenceDate` is `getNow()` -> `new Date()`,
+ * which carries the CURRENT time of day. Comparing an unnormalized
+ * `referenceDate` against `parsed` therefore lets the wall-clock hour shift
+ * the cutoff within the current day: e.g. evaluating at 2026-09-02 20:00
+ * against a "1년 이내" (<=1 year) policy computes
+ * `cutoff = subYears(2026-09-02T20:00, 1) = 2025-09-02T20:00`, which
+ * WRONGLY fails a marriageDate of exactly `2025-09-02` (parsed as
+ * `2025-09-02T00:00`) even though the two dates are exactly 1 calendar year
+ * apart. Both `parsed` and `referenceDate` are normalized to local midnight
+ * via `startOfDay` BEFORE computing the cutoff, so the comparison is always
+ * calendar-day-exact regardless of what time of day it's evaluated.
+ * Deliberately NOT done via a UTC ISO-string conversion, which would risk
+ * shifting the calendar day itself for timezones behind UTC.
  */
 export function compareMarriageDurationToThreshold(
   marriageDate: string | undefined,
@@ -49,11 +66,14 @@ export function compareMarriageDurationToThreshold(
   referenceDate: Date = getNow()
 ): "pass" | "fail" | "unknown" {
   if (!marriageDate) return "unknown";
-  const parsed = parseISO(marriageDate);
-  if (!isValid(parsed)) return "unknown";
-  if (parsed > referenceDate) return "unknown";
+  const parsedRaw = parseISO(marriageDate);
+  if (!isValid(parsedRaw)) return "unknown";
 
-  const cutoff = subYears(referenceDate, spec.years);
+  const parsed = startOfDay(parsedRaw);
+  const referenceDay = startOfDay(referenceDate);
+  if (parsed > referenceDay) return "unknown";
+
+  const cutoff = subYears(referenceDay, spec.years);
   switch (spec.boundary) {
     case "lte":
       return parsed >= cutoff ? "pass" : "fail";

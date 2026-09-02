@@ -74,8 +74,9 @@ export interface UserProfile {
   /**
    * Added per Phase 2 audit: "한부모(가족/가정)" is a legally defined (한부모
    * 가족지원법) family category distinct from maritalStatus (a single parent
-   * can be divorced, widowed, or never-married) and appears in 660+ real
-   * MOIS records as a direct eligibility qualifier. Not inferable from
+   * can be divorced, widowed, or never-married) and appears in 650+ real
+   * MOIS records (904+ matches; see scripts/auditFamilyEligibilityFrozen.ts's
+   * refined 한부모 bucket) as a direct eligibility qualifier. Not inferable from
    * maritalStatus alone (a divorced/widowed person isn't necessarily raising
    * a child), so kept as its own explicit flag.
    *

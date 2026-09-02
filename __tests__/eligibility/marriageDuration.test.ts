@@ -119,6 +119,54 @@ describe("compareMarriageDurationToThreshold", () => {
     });
   });
 
+  describe("date-only vs time-of-day boundary (checkpoint-3 fix)", () => {
+    // Mirrors the exact scenario in the function's own doc comment: evaluating
+    // late in the day must NOT shift the cutoff within the current calendar
+    // day. Reference is 2026-09-02 20:30 LOCAL (deliberately non-midnight).
+    const REF_EVENING = new Date(2026, 8, 2, 20, 30); // 2026-09-02T20:30 local
+
+    it('marriageDate exactly 1 calendar year before a non-midnight reference -> PASS under "이내" (inclusive)', () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      // Without startOfDay normalization, cutoff would be 2025-09-02T20:30,
+      // which is AFTER parsed (2025-09-02T00:00), wrongly failing this case.
+      expect(compareMarriageDurationToThreshold("2025-09-02", spec, REF_EVENING)).toBe("pass");
+    });
+
+    it('the same exact-1-year boundary FAILS under "미만" (strict) with a non-midnight reference', () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lt" };
+      expect(compareMarriageDurationToThreshold("2025-09-02", spec, REF_EVENING)).toBe("fail");
+    });
+
+    it("marriageDate one day inside the window (2025-09-03) -> PASS for 1년 이내, non-midnight reference", () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      expect(compareMarriageDurationToThreshold("2025-09-03", spec, REF_EVENING)).toBe("pass");
+    });
+
+    it("marriageDate one day outside the window (2025-09-01) -> FAIL for 1년 이내, non-midnight reference", () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      expect(compareMarriageDurationToThreshold("2025-09-01", spec, REF_EVENING)).toBe("fail");
+    });
+
+    it("leap-year cutoff still resolves correctly when the reference carries a non-midnight time", () => {
+      // Reference: 2024-02-29 (leap day) at 23:45 local. cutoff = subYears of
+      // the DAY-NORMALIZED reference (2024-02-29T00:00) by 1 year, which
+      // date-fns clamps to 2023-02-28 (non-leap year has no Feb 29).
+      const leapRefEvening = new Date(2024, 1, 29, 23, 45);
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      expect(compareMarriageDurationToThreshold("2023-02-28", spec, leapRefEvening)).toBe("pass");
+      expect(compareMarriageDurationToThreshold("2023-02-27", spec, leapRefEvening)).toBe("fail");
+    });
+
+    it("a future marriageDate (later the same day as a non-midnight reference) still resolves to unknown, not a guessed pass/fail", () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      // marriageDate "2026-09-03" is calendar-after REF_EVENING's day
+      // (2026-09-02), even though REF_EVENING's raw Date timestamp (20:30)
+      // is later in the day than 2026-09-03T00:00 would be on its own day —
+      // day-level comparison is what must govern here.
+      expect(compareMarriageDurationToThreshold("2026-09-03", spec, REF_EVENING)).toBe("unknown");
+    });
+  });
+
   describe("missing/invalid/future marriageDate -> unknown, never fail", () => {
     const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
 

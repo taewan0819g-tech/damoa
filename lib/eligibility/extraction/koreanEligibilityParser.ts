@@ -802,7 +802,8 @@ function parseChildrenClause(text: string): { rule?: EligibilityRule; unresolved
 // Reuses the exact "제외" negation + evidence conventions established above.
 // Per the audit, three buckets are the only ones with clean, direct-
 // applicant, high-volume real phrasing (see scripts/auditFamilyEligibilityFrozen.ts
-// output): 한부모(가족/가정) (660 records), 다문화가족 (156 records), and
+// output): 한부모(가족/가정) (650 records, refined; 904 matches), 다문화가족
+// (156 records), and
 // 혼인(신고)?...N년 이내 (51 records, with real, VARYING thresholds — never a
 // fixed 5/7-year guess). Everything else audited (배우자, 출산/임신,
 // 세대/가구구성, bare 미혼/기혼, 새터민, 조손가족, 예비신혼부부) was found to be
