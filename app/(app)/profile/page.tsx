@@ -18,7 +18,8 @@ import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
-import { TRI_STATE_OPTIONS, booleanFromTriState, triStateFromBoolean } from "@/lib/constants/triState";
+import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, triStateFromBoolean } from "@/lib/constants/triState";
+import { todayLocalDateString } from "@/lib/dates/localDate";
 import type { HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
@@ -78,7 +79,7 @@ export default function ProfilePage() {
             id="birthDate"
             type="date"
             value={profile.birthDate ?? ""}
-            max={new Date().toISOString().slice(0, 10)}
+            max={todayLocalDateString()}
             onChange={(e) => updateProfile({ birthDate: e.target.value || undefined })}
           />
         </Field>
@@ -208,7 +209,7 @@ export default function ProfilePage() {
             <Input
               id="marriageDate"
               type="date"
-              max={new Date().toISOString().slice(0, 10)}
+              max={todayLocalDateString()}
               value={profile.marriageDate ?? ""}
               onChange={(e) => updateProfile({ marriageDate: e.target.value || undefined })}
             />
@@ -239,17 +240,17 @@ export default function ProfilePage() {
           name="housingType"
           options={HOUSING_OPTIONS}
           value={profile.housingType}
-          onChange={(value) => updateProfile({ housingType: value, homeowner: value === "own" ? true : profile.homeowner })}
+          onChange={(value) => updateProfile({ housingType: value })}
         />
-        <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3.5 text-sm font-medium text-foreground">
-          <input
-            type="checkbox"
-            checked={profile.homeowner ?? false}
-            onChange={(e) => updateProfile({ homeowner: e.target.checked })}
-            className="size-4 accent-accent"
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="homeowner">주택을 소유하고 있나요? (선택 입력)</Label>
+          <OptionList
+            name="homeowner"
+            options={HOMEOWNER_TRI_STATE_OPTIONS}
+            value={triStateFromBoolean(profile.homeowner)}
+            onChange={(v) => updateProfile({ homeowner: booleanFromTriState(v) })}
           />
-          주택을 소유하고 있어요
-        </label>
+        </div>
       </Section>
 
       <Section title="관심분야">

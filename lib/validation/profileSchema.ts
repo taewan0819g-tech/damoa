@@ -1,12 +1,19 @@
 import { z } from "zod";
 import { getNow } from "@/lib/dates/now";
+import { isValidCalendarDateString, isTodayOrPastLocalDateString } from "@/lib/dates/localDate";
 
-const isoDateString = z
+/**
+ * Strict `YYYY-MM-DD` calendar-date string: rejects malformed input AND
+ * impossible calendar dates (e.g. "2026-02-30", "2025-02-29" — not a leap
+ * year) rather than letting JS `Date`'s auto-normalizing constructor
+ * silently turn them into a different, valid date. See lib/dates/localDate.ts.
+ */
+const dateOnlyString = z
   .string()
-  .refine((value) => !Number.isNaN(Date.parse(value)), { message: "유효하지 않은 날짜입니다." });
+  .refine((value) => isValidCalendarDateString(value), { message: "유효하지 않은 날짜입니다." });
 
-export const birthDateSchema = isoDateString.refine(
-  (value) => new Date(value) <= getNow(),
+export const birthDateSchema = dateOnlyString.refine(
+  (value) => isTodayOrPastLocalDateString(value, getNow()),
   { message: "생년월일은 미래일 수 없습니다." }
 );
 
@@ -21,8 +28,8 @@ export const userProfileSchema = z.object({
   maritalStatus: z.enum(["single", "married", "divorced", "widowed"]).optional(),
   childrenCount: z.number().int().min(0, "자녀 수는 0 이상이어야 합니다.").optional(),
   householdSize: z.number().int().min(1).optional(),
-  marriageDate: isoDateString
-    .refine((value) => new Date(value) <= getNow(), { message: "혼인신고일은 미래일 수 없습니다." })
+  marriageDate: dateOnlyString
+    .refine((value) => isTodayOrPastLocalDateString(value, getNow()), { message: "혼인신고일은 미래일 수 없습니다." })
     .optional(),
   singleParentFamily: z.boolean().optional(),
   multiculturalFamily: z.boolean().optional(),

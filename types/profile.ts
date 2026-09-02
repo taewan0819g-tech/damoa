@@ -116,6 +116,16 @@ export interface UserProfile {
   householdIncomeBand?: IncomeBand;
 
   housingType?: HousingType;
+  /**
+   * `undefined` means "not yet answered" and must never be treated as
+   * `false` — the onboarding/profile UI offers a genuine three-way choice
+   * (소유하고 있어요/소유하고 있지 않아요/잘 모르겠어요, see
+   * `HOMEOWNER_TRI_STATE_OPTIONS` in lib/constants/triState.ts), the same
+   * pattern as `singleParentFamily`/`multiculturalFamily`. Also deliberately
+   * NEVER inferred from `housingType`: a person can rent their current
+   * residence (`housingType: "jeonse"`/`"monthly_rent"`) while owning
+   * another property elsewhere, so housingType alone can't determine this.
+   */
   homeowner?: boolean;
   housingDeposit?: number;
   monthlyRent?: number;

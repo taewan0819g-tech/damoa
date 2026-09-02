@@ -18,6 +18,21 @@ export const TRI_STATE_OPTIONS: { value: TriStateChoice; label: string }[] = [
   { value: "unknown", label: "잘 모르겠어요" },
 ];
 
+/**
+ * Same three-way choice/semantics as `TRI_STATE_OPTIONS`, with wording for
+ * the `homeowner` field specifically ("주택을 소유하고 있나요?" — housing
+ * ownership is a factual yes/no/unknown, not a "해당해요"-style category
+ * match). Backed by the exact same `TriStateChoice` type and
+ * `triStateFromBoolean`/`booleanFromTriState` conversion functions — reused,
+ * not reimplemented — so `homeowner` gets the identical "never default
+ * missing to false" guarantee as singleParentFamily/multiculturalFamily.
+ */
+export const HOMEOWNER_TRI_STATE_OPTIONS: { value: TriStateChoice; label: string }[] = [
+  { value: "yes", label: "소유하고 있어요" },
+  { value: "no", label: "소유하고 있지 않아요" },
+  { value: "unknown", label: "잘 모르겠어요" },
+];
+
 /** `undefined` (not yet answered) has no selected option — never pre-selects "unknown". */
 export function triStateFromBoolean(value: boolean | undefined): TriStateChoice | undefined {
   if (value === true) return "yes";

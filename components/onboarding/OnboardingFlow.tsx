@@ -15,7 +15,8 @@ import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
 import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, type CurrentStatusOption } from "@/domain/profile/currentStatus";
-import { TRI_STATE_OPTIONS, booleanFromTriState, type TriStateChoice } from "@/lib/constants/triState";
+import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, type TriStateChoice } from "@/lib/constants/triState";
+import { todayLocalDateString } from "@/lib/dates/localDate";
 import type { BenefitCategory } from "@/types/benefit";
 import type { HousingType, IncomeBand, MaritalStatus, UserProfile } from "@/types/profile";
 
@@ -41,7 +42,15 @@ interface Draft {
   singleParentFamily?: TriStateChoice;
   multiculturalFamily?: TriStateChoice;
   housingType?: HousingType;
-  homeowner: boolean;
+  /**
+   * Genuine three-way choice — the same triState pattern as
+   * singleParentFamily/multiculturalFamily: "not yet answered" (undefined)
+   * must never be silently treated as "does not own a home". Also
+   * deliberately NEVER inferred from housingType — a person can rent their
+   * current residence while owning another property, so "own"/"jeonse"/etc.
+   * says nothing definitive about homeowner status.
+   */
+  homeowner?: TriStateChoice;
   interests: BenefitCategory[];
 }
 
@@ -52,7 +61,6 @@ const INITIAL_DRAFT: Draft = {
   householdSize: "",
   childrenCount: "",
   marriageDate: "",
-  homeowner: false,
   interests: [],
 };
 
@@ -93,7 +101,7 @@ export function OnboardingFlow() {
       singleParentFamily: booleanFromTriState(draft.singleParentFamily),
       multiculturalFamily: booleanFromTriState(draft.multiculturalFamily),
       housingType: draft.housingType,
-      homeowner: draft.homeowner,
+      homeowner: booleanFromTriState(draft.homeowner),
       interests: draft.interests.length > 0 ? draft.interests : undefined,
     };
     setProfile(profile);
@@ -120,7 +128,7 @@ export function OnboardingFlow() {
               id="birthDate"
               type="date"
               value={draft.birthDate}
-              max={new Date().toISOString().slice(0, 10)}
+              max={todayLocalDateString()}
               onChange={(e) => patch({ birthDate: e.target.value })}
             />
             {draft.birthDate !== "" && !birthDateValid && (
@@ -261,7 +269,7 @@ export function OnboardingFlow() {
               <Input
                 id="marriageDate"
                 type="date"
-                max={new Date().toISOString().slice(0, 10)}
+                max={todayLocalDateString()}
                 value={draft.marriageDate}
                 onChange={(e) => patch({ marriageDate: e.target.value })}
               />
@@ -305,17 +313,17 @@ export function OnboardingFlow() {
             name="housingType"
             options={HOUSING_OPTIONS}
             value={draft.housingType}
-            onChange={(v) => patch({ housingType: v, homeowner: v === "own" ? true : draft.homeowner })}
+            onChange={(v) => patch({ housingType: v })}
           />
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-surface px-4 py-3.5 text-sm font-medium text-foreground">
-            <input
-              type="checkbox"
-              checked={draft.homeowner}
-              onChange={(e) => patch({ homeowner: e.target.checked })}
-              className="size-4 accent-accent"
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="homeowner">주택을 소유하고 있나요? (선택 입력)</Label>
+            <OptionList
+              name="homeowner"
+              options={HOMEOWNER_TRI_STATE_OPTIONS}
+              value={draft.homeowner}
+              onChange={(v) => patch({ homeowner: v })}
             />
-            주택을 소유하고 있어요
-          </label>
+          </div>
         </div>
       </StepShell>
     );
