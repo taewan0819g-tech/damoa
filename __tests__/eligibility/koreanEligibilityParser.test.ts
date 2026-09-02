@@ -192,10 +192,121 @@ describe("extractEligibilityFromText", () => {
       );
     });
 
-    it("reports a lone city/county/district mention (no province context) as unresolved", () => {
-      const result = extractEligibilityFromText("f", "강남구에 거주하는 자");
+    it("resolves a lone city/county/district mention (no province context) via the gazetteer", () => {
+      const { rules } = extractEligibilityFromText("f", "강남구에 거주하는 자");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          field: "residence",
+          operator: "region_in",
+          value: [{ province: "서울특별시", city: "강남구" }],
+        })
+      );
+    });
+
+    it("resolves 이천시/수원시/성남시/해운대구 (the task's canonical gazetteer examples)", () => {
+      expect(extractEligibilityFromText("f", "이천시 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "경기도", city: "이천시" }] })
+      );
+      expect(extractEligibilityFromText("f", "수원시 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "경기도", city: "수원시" }] })
+      );
+      expect(extractEligibilityFromText("f", "성남시 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "경기도", city: "성남시" }] })
+      );
+      expect(extractEligibilityFromText("f", "해운대구 거주자만 신청 가능").rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "부산광역시", city: "해운대구" }] })
+      );
+    });
+
+    it("resolves the exact 경기도 이천시 example from the task spec", () => {
+      const { rules } = extractEligibilityFromText("f", "경기도 이천시 거주 청년");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "이천시" }] }));
+    });
+
+    it("resolves an OR'd list of provinces", () => {
+      const { rules } = extractEligibilityFromText("f", "서울특별시 또는 경기도 거주자만 신청 가능");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({ value: [{ province: "서울특별시" }, { province: "경기도" }] })
+      );
+    });
+
+    it("resolves a comma-delimited list of sibling cities under the same province", () => {
+      const { rules } = extractEligibilityFromText("f", "경기도 이천시, 여주시 거주자만 신청 가능");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          value: [
+            { province: "경기도", city: "이천시" },
+            { province: "경기도", city: "여주시" },
+          ],
+        })
+      );
+    });
+
+    it("resolves a comma-delimited list of lone cities (no province) via the gazetteer", () => {
+      const { rules } = extractEligibilityFromText("f", "이천시, 여주시 거주자만 신청 가능");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          value: expect.arrayContaining([
+            { province: "경기도", city: "이천시" },
+            { province: "경기도", city: "여주시" },
+          ]),
+        })
+      );
+    });
+
+    it("nationwide/general residence text produces no region rule at all", () => {
+      const result = extractEligibilityFromText("f", "전국 거주자 누구나 신청 가능");
       expect(result.rules).toEqual([]);
-      expect(result.unresolvedClauses).toEqual(["강남구에 거주하는 자"]);
+      expect(result.unresolvedClauses).toEqual([]);
+    });
+
+    it("does not treat an organization/office mention as a residence condition (no residence keyword present)", () => {
+      for (const text of ["이천시청에서 지원하는 사업입니다", "이천시에서 사업 시행", "접수처: 이천시청"]) {
+        const result = extractEligibilityFromText("f", text);
+        expect(result.rules).toEqual([]);
+        expect(result.unresolvedClauses).toEqual([]);
+      }
+    });
+
+    it("excludes an institution mention (OO시청) even when a real residence requirement is present in the same text", () => {
+      const { rules } = extractEligibilityFromText(
+        "f",
+        "이천시 거주자만 신청 가능하며, 접수처는 이천시청입니다."
+      );
+      expect(rules).toHaveLength(1);
+      expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "이천시" }] }));
+    });
+
+    it("reports a genuinely cross-province-ambiguous lone city (고성군) as unresolved rather than guessing", () => {
+      const result = extractEligibilityFromText("f", "고성군 거주자만 신청 가능");
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual(["고성군 거주자만 신청 가능"]);
+    });
+
+    it("reports an unrecognized lone city-like token as unresolved rather than guessing", () => {
+      const result = extractEligibilityFromText("f", "없는시 거주자만 신청 가능");
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual(["없는시 거주자만 신청 가능"]);
+    });
+
+    it("a user residing in the allowed province's broader area is compatible with a province-only rule (hierarchy check via matchRegion)", () => {
+      const { rules } = extractEligibilityFromText("f", "경기도 거주자만 신청 가능");
+      const rule = rules[0] as { value: { province: string; city?: string }[] };
+      expect(rule.value).toEqual([{ province: "경기도" }]);
+    });
+
+    it("does not misparse 경기도 광주시 as the 광주광역시 alias (leftmost-province-mention fix)", () => {
+      const { rules } = extractEligibilityFromText("f", "경기도 광주시 거주자만 신청 가능");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "광주시" }] }));
+    });
+
+    it("resolves bare 주민 as a residence signal, excluding the 주민센터 false-positive collision", () => {
+      const { rules } = extractEligibilityFromText("f", "이천시 주민만 신청 가능");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "이천시" }] }));
+
+      const result = extractEligibilityFromText("f", "이천시 주민센터에서 접수합니다");
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([]);
     });
   });
 

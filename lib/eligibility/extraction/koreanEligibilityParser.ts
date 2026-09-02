@@ -1,5 +1,6 @@
 import type { EligibilityRule } from "@/types/benefit";
 import { normalizeProvince, PROVINCE_ALIAS_KEYS, type RegionSpec } from "../region";
+import { resolveCityProvinces } from "../regionGazetteer";
 import { intervalFromBoundaryWord } from "../interval";
 import { EMPLOYMENT_TARGET_SPECS } from "../employment";
 
@@ -189,47 +190,249 @@ function parseIncomeClause(text: string): { rule?: EligibilityRule; unresolved?:
 
 // ---------------------------------------------------------------------------
 // REGION (sections 9, 10, 33, 35)
+//
+// Two source signals feed a region rule:
+//  - a province (optionally + a city within it), e.g. "경기도 이천시 거주자"
+//  - a LONE city/county/district with no province in the same text, resolved
+//    deterministically via the curated gazetteer (regionGazetteer.ts), e.g.
+//    "이천시 거주자" -> 경기도/이천시. A city name that the gazetteer can't
+//    place, or that genuinely exists in 2+ provinces (고성군, 중구, ...), is
+//    never guessed — it's reported as unresolved instead.
+//
+// Only fires when the text expresses an APPLICANT RESIDENCE requirement
+// (see `hasResidenceSignal`) — a bare organization/location mention like
+// "이천시청에서 지원" or "접수처: 이천시청" never reaches this logic at all,
+// since neither contains a residence keyword.
 // ---------------------------------------------------------------------------
-const RESIDENCE_KEYWORDS = ["거주", "주민등록"];
+const RESIDENCE_SIGNAL_PHRASES = ["거주", "주민등록", "주소지", "해당 지역에 주소를 둔"];
+/** "주민" alone is a safe residence signal, except as part of "주민센터" (community center), a false-positive collision. */
+const RESIDENCE_AMBIGUOUS_TOKEN = "주민";
+const RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION = "주민센터";
+
 const CITY_TOKEN_RE = /[가-힣]{2,6}(시|군|구)/;
+/** List-item delimiter directly between two sibling cities under the same province, e.g. "이천시, 여주시". */
+const CITY_LIST_DELIMITER_RE = /^\s*(또는|,|·)\s*/;
+/** Proximity window (characters) within which a lone city token must sit next to a residence-signal occurrence. */
+const CITY_PROXIMITY_WINDOW = 20;
 
 // Longest-first so "서울특별시" matches before a shorter alias would.
 const PROVINCE_NAMES_DESC = [...PROVINCE_ALIAS_KEYS].sort((a, b) => b.length - a.length);
 
-function findProvinceMention(text: string): { alias: string; index: number } | undefined {
-  for (const name of PROVINCE_NAMES_DESC) {
-    const idx = text.indexOf(name);
-    if (idx !== -1) return { alias: name, index: idx };
+/** Every index in `text` where a residence-signal phrase occurs (bare "주민" excluding "주민센터"). */
+function residenceSignalIndices(text: string): number[] {
+  const indices: number[] = [];
+  for (const phrase of RESIDENCE_SIGNAL_PHRASES) {
+    let idx = text.indexOf(phrase);
+    while (idx !== -1) {
+      indices.push(idx);
+      idx = text.indexOf(phrase, idx + 1);
+    }
   }
-  return undefined;
+  let idx = text.indexOf(RESIDENCE_AMBIGUOUS_TOKEN);
+  while (idx !== -1) {
+    if (text.slice(idx, idx + RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION.length) !== RESIDENCE_AMBIGUOUS_TOKEN_EXCLUSION) {
+      indices.push(idx);
+    }
+    idx = text.indexOf(RESIDENCE_AMBIGUOUS_TOKEN, idx + 1);
+  }
+  return indices;
+}
+
+function hasResidenceSignal(text: string): boolean {
+  return residenceSignalIndices(text).length > 0;
+}
+
+function isNearAnyIndex(tokenIndex: number, tokenLength: number, signalIndices: number[]): boolean {
+  return signalIndices.some((si) => {
+    const gapAfterToken = si - (tokenIndex + tokenLength); // signal occurs after the token
+    const gapAfterSignal = tokenIndex - si; // token occurs after the signal
+    return (
+      (gapAfterToken >= 0 && gapAfterToken <= CITY_PROXIMITY_WINDOW) ||
+      (gapAfterSignal >= 0 && gapAfterSignal <= CITY_PROXIMITY_WINDOW)
+    );
+  });
+}
+
+/** True when a city-like token is immediately followed by "청" (시청/군청/구청 = a government office name, not a residence). */
+function isInstitutionMention(text: string, matchEndIndex: number): boolean {
+  return text.slice(matchEndIndex, matchEndIndex + 1) === "청";
+}
+
+/**
+ * Resolves a city token against `province` via the gazetteer. Only keeps the
+ * city if it's an unambiguous member of that exact province — a mismatch
+ * (garbled text, or a same-named city in a different province) or an
+ * unrecognized token safely falls back to the broader, still-correct
+ * province-only spec rather than asserting a wrong city-level restriction.
+ */
+function resolveCitySpec(province: string, cityToken: string | undefined): RegionSpec {
+  if (!cityToken) return { province };
+  const cityProvinces = resolveCityProvinces(cityToken);
+  if (cityProvinces.length === 1 && cityProvinces[0] === province) {
+    return { province, city: cityToken };
+  }
+  return { province };
+}
+
+/**
+ * True when the province-alias match starting at `idx` sits at a real word
+ * boundary rather than being embedded inside a longer city/county/district
+ * name — e.g. the alias "대구" is NOT a genuine province mention inside
+ * "해운대구" (it's the tail end of a single 4-character district name), but
+ * IS genuine on its own or after a space/punctuation/string-start.
+ */
+function isProvinceAliasBoundaryOk(text: string, idx: number): boolean {
+  if (idx === 0) return true;
+  return !/[가-힣]/.test(text[idx - 1]);
+}
+
+function findNextProvinceMention(text: string, searchFrom: number): { alias: string; index: number } | undefined {
+  let best: { alias: string; index: number } | undefined;
+  for (const name of PROVINCE_NAMES_DESC) {
+    let idx = text.indexOf(name, searchFrom);
+    while (idx !== -1 && !isProvinceAliasBoundaryOk(text, idx)) {
+      idx = text.indexOf(name, idx + 1);
+    }
+    if (idx === -1) continue;
+    if (!best || idx < best.index || (idx === best.index && name.length > best.alias.length)) {
+      best = { alias: name, index: idx };
+    }
+  }
+  return best;
+}
+
+/**
+ * For one province mention, resolves its immediately-following city (if
+ * any), then extends through a clean, delimiter-adjacent list of sibling
+ * cities under the SAME province ("경기도 이천시, 여주시 거주자"). Stops the
+ * moment the list pattern breaks rather than guessing further — an
+ * incomplete-but-correct extraction is fine, a wrong one is not. Returns
+ * `consumedUntil` so the caller's scan for the NEXT province mention resumes
+ * after every character absorbed here — otherwise a city that happens to
+ * also be a valid province alias (e.g. "광주시" in "경기도 광주시") would be
+ * double-counted as an independent second province mention.
+ */
+function extractProvinceCitySpecs(
+  text: string,
+  mention: { alias: string; index: number },
+  province: string
+): { specs: RegionSpec[]; consumedUntil: number } {
+  const cursor = mention.index + mention.alias.length;
+  const after = text.slice(cursor, cursor + 12);
+  const firstCityMatch = after.match(CITY_TOKEN_RE);
+  if (!firstCityMatch || firstCityMatch.index === undefined) {
+    return { specs: [{ province }], consumedUntil: cursor };
+  }
+
+  const firstAbsIndex = cursor + firstCityMatch.index;
+  if (isInstitutionMention(text, firstAbsIndex + firstCityMatch[0].length)) {
+    return { specs: [{ province }], consumedUntil: cursor };
+  }
+
+  const specs: RegionSpec[] = [resolveCitySpec(province, firstCityMatch[0])];
+  let scanFrom = firstAbsIndex + firstCityMatch[0].length;
+
+  for (;;) {
+    const rest = text.slice(scanFrom);
+    const delimiterMatch = rest.match(CITY_LIST_DELIMITER_RE);
+    if (!delimiterMatch) break;
+    const afterDelimiter = rest.slice(delimiterMatch[0].length);
+    const siblingMatch = afterDelimiter.match(CITY_TOKEN_RE);
+    if (!siblingMatch || siblingMatch.index !== 0) break; // must be immediately adjacent, never guessed from further away
+    const siblingAbsIndex = scanFrom + delimiterMatch[0].length;
+    if (isInstitutionMention(text, siblingAbsIndex + siblingMatch[0].length)) break;
+    specs.push(resolveCitySpec(province, siblingMatch[0]));
+    scanFrom = siblingAbsIndex + siblingMatch[0].length;
+  }
+
+  return { specs, consumedUntil: scanFrom };
+}
+
+/**
+ * Single left-to-right pass over the whole text: finds every genuine
+ * province mention (respecting word boundaries), resolves each one's
+ * city/sibling-list, and advances the scan cursor past everything just
+ * consumed before looking for the next mention. Returns `[]` when no
+ * genuine province mention exists anywhere (the caller then falls back to
+ * gazetteer-backed lone-city resolution).
+ */
+function findProvinceRegionSpecs(text: string): RegionSpec[] {
+  const specs: RegionSpec[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const mention = findNextProvinceMention(text, cursor);
+    if (!mention) break;
+    const province = normalizeProvince(mention.alias);
+    if (!province) {
+      cursor = mention.index + mention.alias.length;
+      continue;
+    }
+    const result = extractProvinceCitySpecs(text, mention, province);
+    specs.push(...result.specs);
+    cursor = result.consumedUntil;
+  }
+  return specs;
+}
+
+/**
+ * Resolves every lone city/county/district mention (no province anywhere in
+ * the text) that sits near a residence-signal occurrence and isn't an
+ * institution-name false positive ("이천시청"). All-or-nothing per token: an
+ * unrecognized or genuinely cross-province-ambiguous city name (e.g.
+ * 고성군, 중구) marks the whole clause unresolved rather than silently
+ * dropping just that one entry from an OR'd list.
+ */
+function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresolvableToken: boolean } {
+  const signalIndices = residenceSignalIndices(text);
+  const specs: RegionSpec[] = [];
+  const seen = new Set<string>();
+  let hadUnresolvableToken = false;
+
+  const re = new RegExp(CITY_TOKEN_RE.source, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const token = match[0];
+    const idx = match.index;
+    if (isInstitutionMention(text, idx + token.length)) continue;
+    if (!isNearAnyIndex(idx, token.length, signalIndices)) continue;
+
+    const provinces = resolveCityProvinces(token);
+    if (provinces.length === 1) {
+      const key = `${provinces[0]}|${token}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        specs.push({ province: provinces[0], city: token });
+      }
+    } else {
+      hadUnresolvableToken = true;
+    }
+  }
+
+  return { specs, hadUnresolvableToken };
 }
 
 function parseRegionClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
-  if (!RESIDENCE_KEYWORDS.some((k) => text.includes(k))) return undefined;
+  if (!hasResidenceSignal(text)) return undefined;
 
-  const provinceMention = findProvinceMention(text);
-  if (!provinceMention) {
-    // A lone city/county/district name with no province context: real, but
-    // we don't maintain a city->province gazetteer (verified unreliable —
-    // see MOIS/Youth field audit notes), so this is left unresolved rather
-    // than guessed.
-    if (CITY_TOKEN_RE.test(text)) return { unresolved: text };
-    return undefined;
+  const provinceSpecs = findProvinceRegionSpecs(text);
+  if (provinceSpecs.length > 0) {
+    return {
+      rule: { id: "text-region", field: "residence", operator: "region_in", value: provinceSpecs, required: true },
+    };
   }
 
-  const province = normalizeProvince(provinceMention.alias);
-  if (!province) return undefined;
-
-  const after = text.slice(
-    provinceMention.index + provinceMention.alias.length,
-    provinceMention.index + provinceMention.alias.length + 12
-  );
-  const cityMatch = after.match(CITY_TOKEN_RE);
-  const spec: RegionSpec = cityMatch ? { province, city: cityMatch[0] } : { province };
-
-  return {
-    rule: { id: "text-region", field: "residence", operator: "region_in", value: [spec], required: true },
-  };
+  // No province mention anywhere: try gazetteer-backed lone-city resolution.
+  const { specs, hadUnresolvableToken } = findLoneCityCandidates(text);
+  if (specs.length > 0 && !hadUnresolvableToken) {
+    return {
+      rule: { id: "text-region", field: "residence", operator: "region_in", value: specs, required: true },
+    };
+  }
+  // A real geographic signal exists (an unresolved/ambiguous city token, or
+  // some city-like token we couldn't safely place) but we can't turn it into
+  // a rule — report it rather than silently dropping it.
+  if (hadUnresolvableToken || CITY_TOKEN_RE.test(text)) return { unresolved: text };
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
