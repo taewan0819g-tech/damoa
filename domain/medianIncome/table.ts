@@ -64,40 +64,55 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
     effectiveFrom: "2021-01-01",
     householdValues: { 1: 1827831, 2: 3088079, 3: 3983950, 4: 4876290, 5: 5757373, 6: 6628603, 7: 7497198 },
     eightPlusFormula: { perPersonIncrementKrw: 7497198 - 6628603 },
+    sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
-    note: "2021년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수 검증됨.",
+    note:
+      "2021년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
+      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09).",
   },
   {
     year: 2022,
     effectiveFrom: "2022-01-01",
     householdValues: { 1: 1944812, 2: 3260085, 3: 4194701, 4: 5121080, 5: 6024515, 6: 6907004, 7: 7780592 },
     eightPlusFormula: { perPersonIncrementKrw: 7780592 - 6907004 },
+    sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
-    note: "2022년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수 검증됨.",
+    note:
+      "2022년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
+      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09).",
   },
   {
     year: 2023,
     effectiveFrom: "2023-01-01",
     householdValues: { 1: 2077892, 2: 3456155, 3: 4434816, 4: 5400964, 5: 6330688, 6: 7227981, 7: 8107515 },
     eightPlusFormula: { perPersonIncrementKrw: 8107515 - 7227981 },
+    sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
-    note: "2023년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수 검증됨.",
+    note:
+      "2023년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
+      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09).",
   },
   {
     year: 2024,
     effectiveFrom: "2024-01-01",
     householdValues: { 1: 2228445, 2: 3682609, 3: 4714657, 4: 5729913, 5: 6695735, 6: 7618369, 7: 8514994 },
     eightPlusFormula: { perPersonIncrementKrw: 8514994 - 7618369 },
+    sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
-    note: "2024년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수 검증됨.",
+    note:
+      "2024년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
+      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09).",
   },
   {
     year: 2025,
     effectiveFrom: "2025-01-01",
     householdValues: { 1: 2392013, 2: 3932658, 3: 5025353, 4: 6097773, 5: 7108192, 6: 8064805, 7: 8988428 },
     eightPlusFormula: { perPersonIncrementKrw: 8988428 - 8064805 },
+    sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
-    note: "2025년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수 검증됨.",
+    note:
+      "2025년도 기준 중위소득 (보건복지부 고시). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
+      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09).",
   },
   {
     year: 2026,
@@ -108,25 +123,34 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
     status: "verified",
     note:
       "2026년도 기준 중위소득 (보건복지부 고시 제2025-135호, 시행 2026-01-01). 1~7인 전 가구원수를 " +
-      "mohw.go.kr 공식 페이지에서 직접 확인함 (6.51% 인상, 역대 최대).",
+      "mohw.go.kr 공식 '연도별 기준중위소득' 페이지에서 직접 확인함 (6.51% 인상, 역대 최대; " +
+      "재확인: checkpoint-4 provenance pass, 2026-09).",
   },
   {
     year: 2027,
     effectiveFrom: "2027-01-01",
-    // 1~6인만 확인됨 (beminor.com 및 독립된 2차 소스 교차검증, 값 일치). 7인 가구
-    // 금액은 조사 시점에 신뢰 가능한 소스에서 확인하지 못해 UNKNOWN으로 남김 —
-    // 6.70% 인상률은 4인 가구 헤드라인 수치일 뿐이고 가구원수별로 인상률이 다르므로
-    // 6인 값에 일률적으로 곱해 7인 값을 추정하지 않음. eightPlusFormula 역시 7인 값
-    // 없이는 검증 불가하므로 생략.
+    // 1~6인만 확인됨. 7인 가구 금액은 조사 시점(2026-09)에 어떤 정부 소스에서도
+    // 확인하지 못해 UNKNOWN으로 남김 — 6.70% 인상률은 4인 가구 헤드라인 수치일 뿐이고
+    // 가구원수별로 인상률이 다르므로 6인 값에 일률적으로 곱해 7인 값을 추정하지 않음.
+    // eightPlusFormula 역시 7인 값 없이는 검증 불가하므로 생략. mohw.go.kr의 공식
+    // '연도별 기준중위소득' 요약 페이지(위 2021-2026 entries의 sourceUrl)는 조사 시점
+    // 기준 아직 2027 행을 추가하지 않은 상태였다 (2026년까지만 게시) — 그 페이지가
+    // 갱신되면 7인 값과 함께 재검증할 것.
     householdValues: { 1: 2736042, 2: 4480645, 3: 5718091, 4: 6929885, 5: 8063019, 6: 9129201 },
-    sourceUrl: "https://www.beminor.com/news/articleView.html?idxno=30205",
+    sourceUrl: "https://www.korea.kr/news/policyNewsView.do?newsId=148968956",
     publishedAt: "2026-07-28",
     status: "partial",
     note:
       "2026-07-28 제80차 중앙생활보장위원회 심의·의결로 확정 (4인 가구 기준 6.70% 인상, " +
-      "제도 도입 이후 역대 최대). 1~6인 가구 금액은 beminor.com 보도와 독립된 2차 집계 " +
-      "소스가 일치하여 신뢰도 높음. 7인 가구 금액 및 8인 이상 산정식은 조사 시점 기준 " +
-      "권위 있는 소스로 확인되지 않아 UNKNOWN으로 유지 — 정식 고시문 게시 후 재확인 필요.",
+      "제도 도입 이후 역대 최대 — 종전 최고치였던 2026년도 6.51%를 재차 경신). 1인(2,736,042원) " +
+      "과 4인(6,929,885원) 가구 금액은 대한민국 정책브리핑(korea.kr, 문화체육관광부 국민소통실 " +
+      "운영 정부 포털 — 정부 보도자료를 직접 게재)에서 명시적으로 확인함; 나머지 2·3·5·6인 " +
+      "가구 금액은 beminor.com(비마이너, 스스로 '보건복지부 보도자료'를 출처로 명시) 보도값과 " +
+      "일치하며 이 값들은 정부 공식 sourceUrl에서 직접 재확인되지 않았음 — status가 " +
+      "'announced'가 아니라 'partial'로 남아있는 이유. 7인 가구 금액 및 8인 이상 산정식은 " +
+      "조사 시점(2026-09) 기준 어떤 소스에서도 확인되지 않아 UNKNOWN으로 유지 — mohw.go.kr의 " +
+      "공식 '연도별 기준중위소득' 페이지(2021-2026 entries가 가리키는 sourceUrl)가 2027 행으로 " +
+      "갱신되면 전체를 재검증할 것.",
   },
 ];
 

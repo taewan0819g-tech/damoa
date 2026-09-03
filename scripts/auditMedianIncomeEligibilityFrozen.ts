@@ -40,18 +40,69 @@
  *      scales with the applicant's own household), "fixed" (exactly one
  *      distinct size number nearby), "ambiguous" (2+ DISTINCT size numbers
  *      nearby — table-like, never assumed safe).
- * The corrected `safelyComparableCandidates` filter now requires
+ * At checkpoint-3 the `safelyComparableCandidates` filter required
  * `incomeMetric === "household_income" && householdSizeMode !== "ambiguous"`
- * (see below) — this is intentionally narrower than the old filter and is
- * expected to (and does) produce a smaller count. See the printed
- * before/after comparison at the bottom of this script's output.
+ * — narrower than the original filter, but itself superseded by the
+ * checkpoint-4 revision below (which additionally drops "fixed" and
+ * fraction-form hits). See the checkpoint-4 doc comment further down and the
+ * printed delta trail at the bottom of this script's output for the current,
+ * final filter definition.
  *
  * Production code (lib/eligibility/extraction/koreanEligibilityParser.ts's
  * `parseMedianIncomeClause`) implements the SAME priority-ordered
- * disqualifier logic as this audit (건강보험료 > 소득인정액 > 개인/본인 소득 >
- * boundary+percent required > household-size-number ambiguity), so this
- * script's bucket boundaries are a direct cross-check of the production
- * parser's real-world behavior, not an independent heuristic.
+ * disqualifier logic as this audit (건강보험료 > 소득인정액 > 가구원수 테이블 마커 >
+ * 개인/본인 소득 > boundary+percent required > household-size-number
+ * ambiguity), so this script's bucket boundaries are a direct cross-check of
+ * the production parser's real-world behavior, not an independent heuristic.
+ *
+ * Checkpoint-4 revision (Phase 3 finalization, section 15): re-synced this
+ * audit's "safely comparable" filter and disqualifier regexes against the
+ * FINAL, corrected production parser (koreanEligibilityParser.ts as of this
+ * commit) after several production-only fixes landed post-checkpoint-3 that
+ * this audit had NOT yet mirrored:
+ *   1. `fixed_reference_household` is no longer ever auto-inferred by
+ *      production — a manual review of all 16 real "exactly one nearby
+ *      household-size number" hits (docs/median-income-fixed-reference-review.md)
+ *      found only 7/15 distinct services were genuinely fixed-reference, the
+ *      rest being either a truncated table view or an incidental target-
+ *      population size. Production now treats ANY nearby household-size
+ *      number (one OR several) as unresolved. The checkpoint-3
+ *      `safelyComparableCandidates` filter still counted "fixed" (16 hits) as
+ *      safe — WRONG as of this revision. Fixed: the safe filter now requires
+ *      `householdSizeMode === "profile"` exactly (not merely `!== "ambiguous"`).
+ *   2. Production added an adjacency-scoped "본인-label" disqualifier
+ *      (`MEDIAN_INCOME_INDIVIDUAL_LABEL_RE`) catching phrasing like "(본인)
+ *      기준중위소득 120% 이하" that general individual-income wording checks
+ *      (bare "개인소득"/"본인 소득") miss. Real examples 서비스ID 627000000136
+ *      (대구시 청년 지원 — separately ALSO has a genuine "(가구) 기준중위소득
+ *      140% 이하" household clause in the same record) and 628000000748 were
+ *      previously MISCLASSIFIED by this audit as bucket A (safe household
+ *      income) — confirmed by inspecting the checkpoint-3 JSON report. Fixed:
+ *      bucket G's `individualIncomeNearby` signal now also fires on this
+ *      adjacency pattern.
+ *   3. Production added an explicit per-household-size TABLE MARKER
+ *      disqualifier (`MEDIAN_INCOME_TABLE_MARKER_RE`, e.g. "가구원 수에 따라
+ *      기준금액 상이", real example 서비스ID 641000000164) that this audit had
+ *      no equivalent bucket for at all — such hits fell through to bucket A
+ *      or F depending on other signals. Fixed: new bucket H, checked at the
+ *      same unconditional-disqualifier priority tier as insurance/소득인정액.
+ *   4. Production's metric-disqualifier regex is whitespace-tolerant
+ *      (matches "소득 인정액", "소득인 정액", "건 강 보험 료" — real MOIS typo/
+ *      spacing variants) where this audit's `SODEUK_INJEONGAEK_RE`/
+ *      `INSURANCE_RE` were plain literal-substring checks. Fixed: both
+ *      regexes now mirror production's tolerant version exactly.
+ *   5. Fraction notation ("100분의 50") is explicitly, deliberately NOT
+ *      extracted by production (see the doc comment above
+ *      `MEDIAN_INCOME_PERCENT_RE` in koreanEligibilityParser.ts — a review of
+ *      all 12 real fraction-notation hits found most reference a DIFFERENT,
+ *      disqualifying metric the disqualifier regex only catches with the
+ *      whitespace-tolerant fix in point 4). This audit already tracked
+ *      `fractionForm` as a signal but still counted such hits toward the safe
+ *      total. Fixed: `safelyComparableCandidates` now excludes every
+ *      fraction-form hit, reported separately as `fractionFormSafeExcluded`.
+ * None of these were "600 safe" to begin with once corrected — see the
+ * checkpoint-4 headline below, which intentionally does NOT lead with the
+ * stale checkpoint-3 figure.
  */
 import fs from "fs";
 
@@ -90,18 +141,45 @@ const YEAR_RE = /(20\d{2})\s*년/;
 // (a headcount condition, not a household-size anchor) never counts.
 const HOUSEHOLD_SIZE_RE = /(\d{1,2})\s*인\s*(?:가구|가족|기준)/g;
 const KRW_AMOUNT_RE = /[\d,]{4,}\s*원/;
-const SODEUK_INJEONGAEK_RE = /소득인정액/;
-const INSURANCE_RE = /건강보험료|건보료/;
+// Checkpoint-4: widened to whitespace-tolerant, mirroring production's
+// MEDIAN_INCOME_METRIC_DISQUALIFIER_RE exactly (real MOIS typo/spacing
+// variants: "소득 인정액", "소득인 정액", "건 강 보험 료" — a plain literal-
+// substring check misses all of these).
+const SODEUK_INJEONGAEK_RE = /소득\s*인\s*정\s*액/;
+const INSURANCE_RE = /건\s*강?\s*겅\s*보험\s*료|건강\s*보험\s*료|건보료/;
 const CATEGORY_STATUS_RE = /기초생활수급자|수급자|차상위|기초수급/;
 const MONTHLY_RE = /월\s*(?:소득|기준)|월별/;
 const ANNUAL_RE = /연\s*(?:소득|소득액)/;
 const OR_STRUCTURE_RE = /또는|이거나/;
 const AND_STRUCTURE_RE = /그리고|이면서|이고\s/;
 // Mirrors production's MEDIAN_INCOME_METRIC_DISQUALIFIERS individual-income
-// entries exactly (개인소득/본인소득/본인 소득) — deliberately NOT bare "본인"
-// (far too common/unrelated on its own, e.g. "본인 확인", "본인 명의") and NOT
-// bare "신청자" (identifies WHO applies, not WHICH income metric is meant).
-const INDIVIDUAL_INCOME_METRIC_RE = /개인\s*소득|본인\s*소득|본인의\s*소득/;
+// entries exactly (개인소득/본인소득/본인의 소득/종합소득) — deliberately NOT
+// bare "본인" (far too common/unrelated on its own, e.g. "본인 확인", "본인
+// 명의") and NOT bare "신청자" (identifies WHO applies, not WHICH income
+// metric is meant). Checkpoint-4: added 종합\s*소득 (종합소득, e.g. "종합소득
+// 금액") to match production's disqualifier list exactly.
+const INDIVIDUAL_INCOME_METRIC_RE = /개인\s*소득|본인\s*소득|본인의\s*소득|종합\s*소득/;
+// Checkpoint-4 (new): mirrors production's MEDIAN_INCOME_INDIVIDUAL_LABEL_RE
+// — an adjacency-scoped "(본인) 기준중위소득"/"본인 중위소득" pattern that the
+// general INDIVIDUAL_INCOME_METRIC_RE above misses (it never matches bare
+// "본인" without a following "소득"). Because this pattern spans across the
+// anchor match itself ("...중위소득" is part of the pattern), it must be
+// tested against a CONTINUOUS anchor-inclusive window, not the before+after
+// `window` used everywhere else in this file — see `continuousWindow` in
+// `extractSignals`. Real examples that were previously misclassified as
+// bucket-A "safe household income" without this check: 서비스ID
+// 627000000136 ("(본인) 기준중위소득 120% 이하") and 628000000748 ("본인 기준
+// 중위소득 130%이하").
+const MEDIAN_INCOME_INDIVIDUAL_LABEL_RE = /본인\s*\)?\s*(?:기준\s*)?중위\s*소득/;
+// Checkpoint-4 (new): mirrors production's MEDIAN_INCOME_TABLE_MARKER_RE — an
+// explicit "this varies by household size" / "per household-size table"
+// marker phrase (가구원 수에 따라/가구원수별/가구 규모별) that is an
+// unconditional disqualifier regardless of any percent/boundary word found
+// nearby, since the actual comparable figure is impossible to resolve
+// without picking the right row of an embedded table this script (and
+// production) never parses. Real example: 서비스ID 641000000164 (경기도형
+// 긴급복지지원, "가구원 수에 따라 기준금액 상이").
+const MEDIAN_INCOME_TABLE_MARKER_RE = /가구\s*원?\s*수\s*(?:에\s*따라|별)|가구\s*규모\s*별/;
 const HOUSEHOLD_REF_RE = /가구|세대/;
 
 interface Signals {
@@ -127,7 +205,17 @@ interface Signals {
   sodeukInjeongaekNearby: boolean;
   insuranceNearby: boolean;
   categoryStatusNearby: boolean;
+  /**
+   * True if EITHER the general individual-income wording regex
+   * (`INDIVIDUAL_INCOME_METRIC_RE`) OR the adjacency-scoped 본인-label regex
+   * (`MEDIAN_INCOME_INDIVIDUAL_LABEL_RE`, checkpoint-4) matched. Kept as a
+   * single combined signal (rather than two separate booleans) because both
+   * mean the exact same thing downstream: "this is not a household-income
+   * metric" — production disqualifies on either with no distinction either.
+   */
   individualIncomeNearby: boolean;
+  /** Checkpoint-4 (new): production's MEDIAN_INCOME_TABLE_MARKER_RE match — an unconditional per-household-size-table disqualifier, feeds bucket H. */
+  tableMarkerNearby: boolean;
   monthlyWording: boolean;
   annualWording: boolean;
   orStructure: boolean;
@@ -142,6 +230,13 @@ function extractSignals(text: string, matchIndex: number, matchLen: number): Sig
   const before = text.slice(start, matchIndex);
   const after = text.slice(matchIndex + matchLen, end);
   const window = before + after;
+  // Checkpoint-4 (new): anchor-INCLUSIVE window, needed only for regexes
+  // whose pattern spans across the anchor match text itself (currently just
+  // MEDIAN_INCOME_INDIVIDUAL_LABEL_RE, which ends in "중위소득"). Every other
+  // signal below intentionally uses the anchor-EXCLUSIVE `window` above so
+  // the anchor's own "중위소득"/"기준중위소득" text never accidentally
+  // satisfies an unrelated nearby-wording check.
+  const continuousWindow = text.slice(start, end);
 
   const pctM = PERCENT_RE.exec(after) ?? PERCENT_RE.exec(before);
   const fracM = FRACTION_RE.exec(after) ?? FRACTION_RE.exec(before);
@@ -164,7 +259,9 @@ function extractSignals(text: string, matchIndex: number, matchLen: number): Sig
     sodeukInjeongaekNearby: SODEUK_INJEONGAEK_RE.test(window),
     insuranceNearby: INSURANCE_RE.test(window),
     categoryStatusNearby: CATEGORY_STATUS_RE.test(window),
-    individualIncomeNearby: INDIVIDUAL_INCOME_METRIC_RE.test(window),
+    individualIncomeNearby:
+      INDIVIDUAL_INCOME_METRIC_RE.test(window) || MEDIAN_INCOME_INDIVIDUAL_LABEL_RE.test(continuousWindow),
+    tableMarkerNearby: MEDIAN_INCOME_TABLE_MARKER_RE.test(window),
     monthlyWording: MONTHLY_RE.test(window),
     annualWording: ANNUAL_RE.test(window),
     orStructure: OR_STRUCTURE_RE.test(window),
@@ -184,6 +281,7 @@ function extractSignals(text: string, matchIndex: number, matchLen: number): Sig
 type IncomeMetric =
   | "health_insurance_premium"
   | "recognized_income"
+  | "table_reference"
   | "individual_income"
   | "category_status"
   | "household_income"
@@ -192,6 +290,11 @@ type IncomeMetric =
 function classifyIncomeMetric(s: Signals): IncomeMetric {
   if (s.insuranceNearby) return "health_insurance_premium";
   if (s.sodeukInjeongaekNearby) return "recognized_income";
+  // Checkpoint-4 (new): table-marker disqualifier, checked at the same
+  // unconditional-disqualifier priority tier as insurance/소득인정액 above —
+  // mirrors production checking MEDIAN_INCOME_TABLE_MARKER_RE alongside
+  // MEDIAN_INCOME_METRIC_DISQUALIFIER_RE in a single combined `||` check.
+  if (s.tableMarkerNearby) return "table_reference";
   if (s.individualIncomeNearby) return "individual_income";
   if (s.categoryStatusNearby && s.percent === undefined && !s.fractionForm) return "category_status";
   if ((s.percent !== undefined || s.fractionForm) && s.boundaryWord) return "household_income";
@@ -207,22 +310,27 @@ function classifyIncomeMetric(s: Signals): IncomeMetric {
 //      even if it also mentions 가구/이하 wording)
 //   B. 소득인정액 THRESHOLD             (asset-adjusted recognized income is
 //      never plain household income, checked before A/D/G)
-//   G. INDIVIDUAL / APPLICANT-SCOPED INCOME (개인소득/본인(의) 소득 — a
-//      DIFFERENT metric than household income, checked before A/D)
+//   H. PER-HOUSEHOLD-SIZE TABLE MARKER (checkpoint-4, new: "가구원 수에 따라"/
+//      "가구 규모별" — an unconditional disqualifier, checked at the same
+//      priority tier as B/C above, before G/D/A)
+//   G. INDIVIDUAL / APPLICANT-SCOPED INCOME (개인소득/본인(의)/종합소득 소득, or
+//      the adjacency-scoped "(본인) 기준중위소득" label — a DIFFERENT metric
+//      than household income, checked before D/A)
 //   D. CATEGORY / STATUS REFERENCE      (기초생활수급자/차상위 status where no
 //      independently comparable threshold is present alongside)
 //   A. DIRECT HOUSEHOLD-INCOME THRESHOLD (percent/fraction + boundary word,
-//      no insurance/소득인정액/individual-income override, not purely a
-//      status reference)
+//      no insurance/소득인정액/table-marker/individual-income override, not
+//      purely a status reference)
 //   E. DESCRIPTIVE / NON-ELIGIBILITY MENTION (no boundary word / no percent
 //      structure — reads as background description, not a testable rule)
 //   F. AMBIGUOUS / OTHER                (fallback)
 // ---------------------------------------------------------------------------
-type Bucket = "A" | "B" | "C" | "D" | "E" | "F" | "G";
+type Bucket = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
 
 function classify(s: Signals): Bucket {
   if (s.insuranceNearby) return "C";
   if (s.sodeukInjeongaekNearby) return "B";
+  if (s.tableMarkerNearby) return "H";
   if (s.individualIncomeNearby) return "G";
   if (s.categoryStatusNearby && s.percent === undefined && !s.fractionForm) return "D";
   if ((s.percent !== undefined || s.fractionForm) && s.boundaryWord) return "A";
@@ -238,6 +346,7 @@ const BUCKET_LABELS: Record<Bucket, string> = {
   E: "E. DESCRIPTIVE / NON-ELIGIBILITY MENTION",
   F: "F. AMBIGUOUS / OTHER",
   G: "G. INDIVIDUAL / APPLICANT-SCOPED INCOME",
+  H: "H. PER-HOUSEHOLD-SIZE TABLE MARKER",
 };
 
 interface Hit {
@@ -255,15 +364,16 @@ function excerptAround(text: string, index: number, len: number, pad = 40): stri
   return text.slice(start, end).replace(/\s+/g, " ").trim();
 }
 
-const BUCKET_KEYS: Bucket[] = ["A", "B", "C", "D", "E", "F", "G"];
+const BUCKET_KEYS: Bucket[] = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const allHits: Hit[] = [];
-const bucketHits: Record<Bucket, Hit[]> = { A: [], B: [], C: [], D: [], E: [], F: [], G: [] };
+const bucketHits: Record<Bucket, Hit[]> = { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [] };
 const bucketServiceIds: Record<Bucket, Set<string>> = {
-  A: new Set(), B: new Set(), C: new Set(), D: new Set(), E: new Set(), F: new Set(), G: new Set(),
+  A: new Set(), B: new Set(), C: new Set(), D: new Set(), E: new Set(), F: new Set(), G: new Set(), H: new Set(),
 };
 const incomeMetricCounts: Record<IncomeMetric, number> = {
   health_insurance_premium: 0,
   recognized_income: 0,
+  table_reference: 0,
   individual_income: 0,
   category_status: 0,
   household_income: 0,
@@ -354,12 +464,33 @@ for (const row of rows) {
 //    modelable — "profile" via `scales_with_profile_household`, "fixed" via
 //    `fixed_reference_household` + `fixedHouseholdSize` — only 2+ distinct
 //    nearby household-size numbers are unsafe)
-const OLD_SAFELY_COMPARABLE_COUNT = 588; // first (pre-review) checkpoint's reported figure, for the delta explanation below
+// Checkpoint-4 revision: neither prior checkpoint's figure is reported as the
+// headline anymore — both are kept ONLY as delta-explanation trail entries.
+const CHECKPOINT2_SAFELY_COMPARABLE_COUNT = 588; // first (pre-review) checkpoint's reported figure
+const CHECKPOINT3_SAFELY_COMPARABLE_COUNT = 600; // checkpoint-3's reported figure (incomeMetric-aware, but still counted "fixed" + fraction-form hits as safe)
+
+// Checkpoint-4, CORRECTED "safely comparable" filter: a hit is only a
+// candidate for reuse against existing profile household-income data when
+// ALL THREE hold:
+//  - incomeMetric === "household_income" (bucket B/C/D/G/H are ALL excluded
+//    by construction, since only bucket A ever produces this incomeMetric)
+//  - householdSizeMode === "profile" EXACTLY (checkpoint-4 fix #1: "fixed"
+//    is no longer counted as safe — production never auto-infers
+//    `fixed_reference_household` from text alone; see the module doc comment)
+//  - !fractionForm (checkpoint-4 fix #5: fraction notation, e.g. "100분의
+//    50", is explicitly unsupported by production and must never count as
+//    a safely comparable rule)
 const safelyComparableCandidates = allHits.filter(
-  (h) => h.incomeMetric === "household_income" && h.signals.householdSizeMode !== "ambiguous"
+  (h) => h.incomeMetric === "household_income" && h.signals.householdSizeMode === "profile" && !h.signals.fractionForm
 );
-const safelyComparableFixedCount = safelyComparableCandidates.filter((h) => h.signals.householdSizeMode === "fixed").length;
-const safelyComparableProfileCount = safelyComparableCandidates.filter((h) => h.signals.householdSizeMode === "profile").length;
+// Diagnostic-only counts (NOT part of the safe total) explaining exactly what
+// checkpoint-3's more permissive filter used to include:
+const fixedModeExcludedCount = allHits.filter(
+  (h) => h.incomeMetric === "household_income" && h.signals.householdSizeMode === "fixed"
+).length;
+const fractionFormSafeExcluded = allHits.filter(
+  (h) => h.incomeMetric === "household_income" && h.signals.householdSizeMode === "profile" && h.signals.fractionForm
+).length;
 const bucketAAmbiguousHouseholdSizeCount = bucketHits.A.filter((h) => h.signals.householdSizeMode === "ambiguous").length;
 
 // ---------------------------------------------------------------------------
@@ -370,7 +501,7 @@ console.log(`Records with median-income signal (union): ${anySignalServiceIds.si
 console.log(`Total anchor hits (matchCount, uncapped): ${allHits.length}`);
 console.log(`Distinct service IDs with ANY median-income anchor hit: ${anySignalServiceIds.size}`);
 
-console.log("\n=== Bucket counts (A-G) ===");
+console.log("\n=== Bucket counts (A-H) ===");
 console.table(
   BUCKET_KEYS.map((b) => ({
     bucket: BUCKET_LABELS[b],
@@ -379,7 +510,7 @@ console.table(
   }))
 );
 
-console.log("\n=== incomeMetric distribution (checkpoint-3, NEW) ===");
+console.log("\n=== incomeMetric distribution ===");
 console.table(Object.entries(incomeMetricCounts).map(([metric, count]) => ({ metric, count })));
 
 console.log("\n=== 기준-prefixed vs bare 중위소득 ===");
@@ -415,29 +546,34 @@ console.log(monthlyVsAnnual);
 console.log("\n=== OR / AND structure ===");
 console.log(orAndStructureCount);
 
-console.log(`\n=== Safely-comparable-against-existing-householdIncomeRange candidate count (checkpoint-3, CORRECTED) ===`);
+console.log(`\n=== Safely-comparable-against-existing-householdIncomeRange candidate count (CHECKPOINT-4, FINAL) ===`);
 console.log(
-  `${safelyComparableCandidates.length} total (of ${allHits.length} anchor hits): ` +
-    `${safelyComparableProfileCount} scale with the applicant's own household ("profile"), ` +
-    `${safelyComparableFixedCount} use one fixed reference household size ("fixed")`
+  `${safelyComparableCandidates.length} total (of ${allHits.length} anchor hits): all scale with the applicant's own ` +
+    `household ("profile"), zero fraction-notation, zero fixed-reference, zero individual/table/status/insurance/소득인정액 ` +
+    `metric — this is the ONLY figure that should be reported as "safe" going forward.`
 );
 console.log(
-  `Delta vs first (pre-review) checkpoint's reported figure: ${safelyComparableCandidates.length} vs ${OLD_SAFELY_COMPARABLE_COUNT} ` +
-    `(${safelyComparableCandidates.length - OLD_SAFELY_COMPARABLE_COUNT >= 0 ? "+" : ""}${
-      safelyComparableCandidates.length - OLD_SAFELY_COMPARABLE_COUNT
-    }). ` +
-    `The old figure was bucket-A-minus-any-household-size-number-nearby, computed WITHOUT the incomeMetric check — it never ` +
-    `excluded individual/applicant-scoped income (bucket G, ${bucketHits.G.length} hits, ${bucketServiceIds.G.size} records) and ` +
-    `used a boolean fixed/not-fixed split that couldn't detect table-like multi-size-number text ` +
-    `(${bucketAAmbiguousHouseholdSizeCount} bucket-A hits have 2+ distinct nearby household-size numbers, now correctly excluded ` +
-    `as "ambiguous" rather than silently kept as "not fixed"). The corrected figure also now counts "fixed" hits as candidates ` +
-    `(${safelyComparableFixedCount} of them) since fixed_reference_household is a legitimately modelable shape — the old filter ` +
-    `dropped every fixed-reference hit outright rather than modeling it.`
+  `Delta trail (for context only — NEITHER prior number is the current headline):\n` +
+    `  checkpoint-2 (pre-review, no incomeMetric check): ${CHECKPOINT2_SAFELY_COMPARABLE_COUNT}\n` +
+    `  checkpoint-3 (incomeMetric-aware, still counted "fixed" + fraction-form as safe): ${CHECKPOINT3_SAFELY_COMPARABLE_COUNT}\n` +
+    `  checkpoint-4 (this run, FINAL — matches production exactly): ${safelyComparableCandidates.length}\n` +
+    `Checkpoint-3 -> checkpoint-4 delta = ${safelyComparableCandidates.length - CHECKPOINT3_SAFELY_COMPARABLE_COUNT} ` +
+    `(-${fixedModeExcludedCount} now-excluded "fixed" household-size hits [production never auto-infers ` +
+    `fixed_reference_household from text alone — see docs/median-income-fixed-reference-review.md], ` +
+    `-${fractionFormSafeExcluded} now-excluded fraction-notation hits [production does not support fraction notation]). ` +
+    `Also newly excluded from bucket A entirely (never reached the safe filter to begin with): ` +
+    `${bucketHits.G.length} individual/applicant-scoped-income hits (bucket G, includes the adjacency-scoped 본인-label ` +
+    `pattern — real examples 627000000136 and 628000000748) and ${bucketHits.H.length} per-household-size-table-marker hits ` +
+    `(bucket H, real example 641000000164). ${bucketAAmbiguousHouseholdSizeCount} bucket-A hits have 2+ distinct nearby ` +
+    `household-size numbers and were already excluded as "ambiguous" as of checkpoint-3 (unchanged).`
 );
 console.log(`소득인정액 (bucket B) count: ${bucketHits.B.length}`);
 console.log(`건강보험료/건보료 proxy (bucket C) count: ${bucketHits.C.length}`);
-console.log(`개인/본인 소득 (bucket G, NEW) count: ${bucketHits.G.length}`);
+console.log(`개인/본인 소득 (bucket G) count: ${bucketHits.G.length}`);
+console.log(`가구원 수 테이블 마커 (bucket H, NEW) count: ${bucketHits.H.length}`);
 console.log(`Ambiguous (bucket F) count: ${bucketHits.F.length}`);
+console.log(`Fixed-reference hits excluded from safe count (checkpoint-4 fix #1): ${fixedModeExcludedCount}`);
+console.log(`Fraction-notation hits excluded from safe count (checkpoint-4 fix #5): ${fractionFormSafeExcluded}`);
 
 for (const b of BUCKET_KEYS) {
   console.log(`\n--- ${BUCKET_LABELS[b]} (matchCount=${bucketHits[b].length}, distinctRecords=${bucketServiceIds[b].size}) ---`);
@@ -466,9 +602,10 @@ fs.writeFileSync(
       monthlyVsAnnual,
       orAndStructureCount,
       safelyComparableCandidateCount: safelyComparableCandidates.length,
-      safelyComparableProfileCount,
-      safelyComparableFixedCount,
-      oldSafelyComparableCount: OLD_SAFELY_COMPARABLE_COUNT,
+      fixedModeExcludedCount,
+      fractionFormSafeExcluded,
+      checkpoint2SafelyComparableCount: CHECKPOINT2_SAFELY_COMPARABLE_COUNT,
+      checkpoint3SafelyComparableCount: CHECKPOINT3_SAFELY_COMPARABLE_COUNT,
       buckets: Object.fromEntries(
         BUCKET_KEYS.map((b) => [
           b,

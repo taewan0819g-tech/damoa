@@ -156,23 +156,53 @@ const MANWON_TO_KRW = 10000;
  * evaluation time (see domain/medianIncome/evaluate.ts).
  *
  * Only the proven-safe subset below is converted to a rule
- * (`parseMedianIncomeClause`) — every "기준중위소득" mention that doesn't fit
- * that shape (no percent+boundary found near the anchor, the nearby text
- * signals a DIFFERENT metric such as 소득인정액/건강보험료/개인소득, or 2+
- * distinct household-size numbers sit nearby — table-like text we can't
- * safely pick one row from) still falls back to unresolved rather than being
- * silently dropped, exactly like the old always-punt behavior this replaces.
+ * (`parseMedianIncomeClause`) — every "중위소득" mention (기준-prefixed or
+ * bare) that doesn't fit that shape (no percent+boundary found near the
+ * anchor, the nearby text signals a DIFFERENT metric such as
+ * 소득인정액/건강보험료/개인소득/종합소득, an explicit per-household-size table
+ * marker like "가구원 수에 따라" sits nearby, or ANY household-size number —
+ * even just one — sits nearby, since a real MOIS gold review found a lone
+ * nearby household-size number is not a safe signal either way, see
+ * `parseMedianIncomeClause`) still falls back to unresolved rather than
+ * being silently dropped, exactly like the old always-punt behavior this
+ * replaces.
  */
-const MEDIAN_INCOME_RE = /기준\s*중위소득/;
+const MEDIAN_INCOME_RE = /(?:기준\s*)?중위\s*소득/;
 
 /**
- * A percent number + Korean boundary word anchored near a "기준중위소득"
+ * A percent number + Korean boundary word anchored near a "중위소득"
  * mention, e.g. "기준중위소득 50% 이하", "기준 중위소득의 60%이하", "기준중위소득
- * 대비 100% 이하". The bounded, non-greedy gap between the anchor and the
- * digit run allows short connective words (의/대비/공백) without risking a
- * match against an unrelated LATER percent elsewhere in a long paragraph.
+ * 대비 100% 이하", or bare "중위소득 60% 이하인 자" / "중위소득 120% 미만"
+ * (real MOIS text frequently drops the "기준" prefix — a frozen-snapshot
+ * audit found 203 of 881 총 중위소득 mentions are bare; the "기준" prefix is
+ * therefore OPTIONAL here, matching `MEDIAN_INCOME_RE` and the audit
+ * script's `ANCHOR_RE`, so these clauses are no longer silently invisible
+ * to this parser — see 서비스ID 383000000146, 135200000102). The bounded,
+ * non-greedy gap between the anchor and the digit run allows short
+ * connective words (의/대비/공백) without risking a match against an
+ * unrelated LATER percent elsewhere in a long paragraph.
  */
-const MEDIAN_INCOME_PERCENT_RE = /기준\s*중위소득[^\n]{0,12}?(\d{1,3})\s*%\s*(이상|초과|이하|미만)/;
+const MEDIAN_INCOME_PERCENT_RE = /(?:기준\s*)?중위\s*소득[^\n]{0,12}?(\d{1,3})\s*%\s*(이상|초과|이하|미만)/;
+
+/**
+ * Deliberately NOT supported: Korean fraction notation ("100분의 50", "2분의
+ * 1") as an alternative to a literal "%" sign. A real-MOIS review of every
+ * frozen-snapshot 기준중위소득 fraction-notation clause (12 total) found the
+ * majority reference a DIFFERENT, disqualifying metric that the nearby text
+ * only reveals via wording this regex-based disqualifier check can miss at a
+ * glance — e.g. "소득 인정액이 기준 중위소득의 100분의 50 이하" (서비스ID
+ * 134200000003) and "...소득인 정액이 기준 중위소득의 100분의 50이하..." (서비스ID
+ * 643000000730) are 소득인정액 clauses with irregular internal spacing, and
+ * "직전 연도 기준 중위소득의 100분의 40 이상" (서비스ID 999000000027) qualifies
+ * "종합소득금액" (an individual tax-return income figure), not household
+ * income. Adding fraction-notation extraction on top of an already
+ * higher-risk sample would meaningfully raise the odds of a false-positive
+ * household_income rule. The metric-disqualifier check above was widened to
+ * be whitespace-tolerant specifically because of these examples, but
+ * fraction notation itself stays unresolved rather than extracted — see
+ * scripts/auditMedianIncomeEligibilityFrozen.ts, which reports fraction-form
+ * hits SEPARATELY from the production-safe count for exactly this reason.
+ */
 
 const MEDIAN_INCOME_WORD_TO_BOUNDARY: Record<string, MedianIncomeBoundary> = {
   "이하": "lte",
@@ -185,15 +215,53 @@ const MEDIAN_INCOME_WORD_TO_BOUNDARY: Record<string, MedianIncomeBoundary> = {
  * Real MOIS median-income clauses sometimes compare a DIFFERENT figure
  * against a 기준중위소득 percentage rather than raw household income:
  * 소득인정액 ("recognized income" — assets/expenses-adjusted, a materially
- * different number than gross household income), 건강보험료 (health-insurance
- * premium band, only correlated with income, not equal to it), and
- * 개인소득/본인(의) 소득 (individual, not household, income). Any of these
- * appearing near the match means the clause is NOT safely a household-income
- * comparison, so it's left unresolved rather than mis-typed as
- * `household_income` (see MedianIncomeMetric's doc in
- * domain/medianIncome/evaluate.ts).
+ * different number than gross household income), 건강보험료/건보료
+ * (health-insurance premium band, only correlated with income, not equal to
+ * it), 개인소득/본인(의) 소득 (individual, not household, income), and
+ * 종합소득(금액) (an individual taxpayer's aggregated tax-return income, not
+ * household income). Any of these appearing near the match means the clause
+ * is NOT safely a household-income comparison, so it's left unresolved
+ * rather than mis-typed as `household_income` (see MedianIncomeMetric's doc
+ * in domain/medianIncome/evaluate.ts).
+ *
+ * Whitespace-tolerant on purpose: real MOIS text sometimes inserts stray
+ * spaces mid-word (observed real excerpts: "소득 인정액", "소득인 정액" for
+ * what is unambiguously 소득인정액). A literal-substring check misses those
+ * variants and would silently misclassify a 소득인정액 clause as
+ * household_income -- a false positive this parser must never produce.
  */
-const MEDIAN_INCOME_METRIC_DISQUALIFIERS = ["소득인정액", "건강보험료", "개인소득", "본인소득", "본인 소득"];
+const MEDIAN_INCOME_METRIC_DISQUALIFIER_RE =
+  /소득\s*인\s*정\s*액|건\s*강?\s*겅\s*보험\s*료|건강\s*보험\s*료|건보료|개인\s*소득|본인\s*소득|본인의\s*소득|종합\s*소득/;
+
+/**
+ * "본인" (the applicant themselves, not the household) used as an explicit
+ * label directly modifying a 기준중위소득 mention, e.g. "(본인) 기준중위소득
+ * 120% 이하" or "본인 기준 중위소득 130%이하" (real examples: 서비스ID
+ * 627000000136 대구시 청년 지원 — which separately ALSO states "(가구)
+ * 기준중위소득 140% 이하" as a DIFFERENT clause in the same record, proving
+ * "본인" and "가구" are deliberately distinguished categories there; and
+ * 628000000748). This is an individual-income comparison, not a
+ * household-income one, so it must not be typed as `household_income`.
+ * Deliberately adjacency-scoped (only whitespace/close-paren allowed between
+ * "본인" and "기준중위소득") so it does NOT fire on legitimate combined-income
+ * phrasing like "본인·배우자 합산 연소득이 기준 중위소득 180% 이하" (서비스ID
+ * 519000000153), where "합산" (combined) sits in between and the resulting
+ * combined figure IS a household-income-shaped comparison.
+ */
+const MEDIAN_INCOME_INDIVIDUAL_LABEL_RE = /본인\s*\)?\s*(?:기준\s*)?중위\s*소득/;
+
+/**
+ * Explicit "this varies by household size"/"per household-size table"
+ * markers (e.g. "가구원 수에 따라 기준금액 상이", "가구 규모별 기준 중위소득",
+ * "가구원수별"). A real MOIS record for 경기도형긴급복지지원 (서비스ID
+ * 641000000164) states "기준 중위소득100% 이하(4인가구 기준 650만 원) ※ 가구원
+ * 수에 따라 기준금액 상이" -- the parenthetical cites ONE household size's
+ * absolute amount purely as an example, while this trailing marker proves
+ * the real cutoff is a full per-size table, not a fixed reference. Treated
+ * as an unconditional disqualifier alongside the metric-mismatch check
+ * above.
+ */
+const MEDIAN_INCOME_TABLE_MARKER_RE = /가구\s*원?\s*수\s*(?:에\s*따라|별)|가구\s*규모\s*별/;
 
 /** "N인가구"/"N인 가구"/"N인가족"/"N인 기준" — an explicit household-size number sitting next to a median-income mention (see `parseMedianIncomeClause`'s householdSizeMode logic). */
 const MEDIAN_INCOME_HOUSEHOLD_SIZE_RE = /(\d{1,2})\s*인\s*(?:가구|가족|기준)/g;
@@ -221,7 +289,11 @@ function parseMedianIncomeClause(text: string): { rule?: EligibilityRule; unreso
   const windowEnd = Math.min(text.length, matchIndex + full.length + 20);
   const window = text.slice(windowStart, windowEnd);
 
-  if (MEDIAN_INCOME_METRIC_DISQUALIFIERS.some((token) => window.includes(token))) {
+  if (
+    MEDIAN_INCOME_METRIC_DISQUALIFIER_RE.test(window) ||
+    MEDIAN_INCOME_TABLE_MARKER_RE.test(window) ||
+    MEDIAN_INCOME_INDIVIDUAL_LABEL_RE.test(window)
+  ) {
     return { unresolved: text };
   }
 
@@ -233,16 +305,28 @@ function parseMedianIncomeClause(text: string): { rule?: EligibilityRule; unreso
   const sizeMatches = [...window.matchAll(MEDIAN_INCOME_HOUSEHOLD_SIZE_RE)].map((m) => Number(m[1]));
   const distinctSizes = [...new Set(sizeMatches)];
 
-  let householdSizeMode: MedianIncomeThresholdSpec["householdSizeMode"];
-  let fixedHouseholdSize: number | undefined;
-  if (distinctSizes.length === 0) {
-    householdSizeMode = "scales_with_profile_household";
-  } else if (distinctSizes.length === 1) {
-    householdSizeMode = "fixed_reference_household";
-    fixedHouseholdSize = distinctSizes[0];
-  } else {
-    // 2+ distinct household-size numbers nearby: table-like text ("1인
-    // 100만원, 2인 150만원...") we can't safely pick a single row from.
+  // `distinctSizes.length === 0` is the ONLY shape this parser ever emits a
+  // rule for. A manual, service-by-service review of all 16 real MOIS
+  // "exactly one nearby household-size number" hits from the frozen
+  // snapshot (see docs/median-income-fixed-reference-review.md) found that
+  // a single nearby mention is NOT a reliable `fixed_reference_household`
+  // signal: only 7 of 15 distinct real services were confirmed genuinely
+  // fixed-reference (and only via external corroboration this parser has no
+  // access to, e.g. a named national loan program's documented standard);
+  // the rest were either a truncated view of a per-household-size table cut
+  // off by this function's narrow context window (e.g. 429000000646,
+  // WLU000000020 — both have a full "1인/2인/3인.../7인 가구" table a few
+  // dozen characters past this window's end) or a household-size number
+  // that merely happened to match the described target population, not an
+  // explicit fixed-reference design (e.g. 645000000122, 999000000061).
+  // Per this module's safety philosophy (false negatives OK, false
+  // positives are not), ANY nearby household-size number now falls back to
+  // unresolved rather than ever auto-inferring `fixed_reference_household`
+  // from text alone. `fixed_reference_household` remains a valid
+  // `MedianIncomeThresholdSpec` shape (see domain/medianIncome/evaluate.ts)
+  // for hand-authored/future explicitly-verified specs — this parser simply
+  // never emits it on its own.
+  if (distinctSizes.length !== 0) {
     return { unresolved: text };
   }
 
@@ -253,8 +337,7 @@ function parseMedianIncomeClause(text: string): { rule?: EligibilityRule; unreso
     percent,
     boundary,
     incomeMetric: "household_income",
-    householdSizeMode,
-    ...(fixedHouseholdSize !== undefined ? { fixedHouseholdSize } : {}),
+    householdSizeMode: "scales_with_profile_household",
     ...(year !== undefined ? { year } : {}),
   };
 
@@ -1322,7 +1405,7 @@ function ruleFieldSignalPresent(field: string, window: string): boolean {
       return window.includes("사업자등록");
     case "individualIncomeRange":
     case "householdIncomeRange":
-      return /연\s?소득|기준\s*중위소득/.test(window);
+      return /연\s?소득|(?:기준\s*)?중위\s*소득/.test(window);
     case "childrenCount":
       return /자녀\s*\d+\s*(?:명|인)/.test(window);
     case "singleParentFamily":

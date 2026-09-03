@@ -187,6 +187,32 @@ describe("extractEligibilityFromText", () => {
       }
     });
 
+    // Real-MOIS finding (frozen-snapshot audit): 203 of 881 total 중위소득
+    // mentions in the frozen snapshot drop the "기준" prefix entirely (real
+    // examples: 서비스ID 383000000146 "중위소득 120% 미만", 135200000102 "중위소득
+    // 60% 이하"). Before this fix, MEDIAN_INCOME_RE required "기준중위소득"
+    // literally, so these clauses were invisible to the parser -- not even
+    // reported as unresolved, silently vanishing instead. Bare "중위소득" must
+    // be extracted exactly like "기준중위소득".
+    it("extracts a bare '중위소득' clause with no '기준' prefix (real MOIS wording variant)", () => {
+      const { rules, unresolvedClauses } = extractEligibilityFromText(
+        "f",
+        "중위소득 120% 미만 사회적 배려계층 우선지원"
+      );
+      expect(unresolvedClauses).toEqual([]);
+      expect(rules).toEqual([
+        expect.objectContaining({
+          operator: "median_income_threshold",
+          value: expect.objectContaining({
+            percent: 120,
+            boundary: "lt",
+            incomeMetric: "household_income",
+            householdSizeMode: "scales_with_profile_household",
+          }),
+        }),
+      ]);
+    });
+
     it("flips the boundary under adjacent negation (이하하지 않은 -> 초과)", () => {
       const { rules } = extractEligibilityFromText("f", "기준중위소득 50% 이하하지 않은 가구");
       expect(rules[0]).toEqual(
@@ -207,21 +233,65 @@ describe("extractEligibilityFromText", () => {
       expect(tooBig.unresolvedClauses).toEqual(["기준중위소득 600% 이하인 가구"]);
     });
 
-    it.each(["소득인정액", "건강보험료", "개인소득", "본인소득", "본인 소득"])(
-      "leaves the clause unresolved when %s appears near the anchor (different income metric)",
-      (disqualifier) => {
-        const text = `${disqualifier} 기준중위소득 50% 이하인 가구`;
-        const result = extractEligibilityFromText("f", text);
-        expect(result.rules).toEqual([]);
-        expect(result.unresolvedClauses).toEqual([text]);
-      }
-    );
+    it.each([
+      "소득인정액",
+      "건강보험료",
+      "건보료",
+      "개인소득",
+      "본인소득",
+      "본인 소득",
+      "종합소득",
+      // Whitespace-irregular real-MOIS variants (see 서비스ID 134200000003,
+      // 643000000730 in the frozen snapshot) — the disqualifier check must
+      // be whitespace-tolerant, not a literal-substring match.
+      "소득 인정액",
+      "소득인 정액",
+    ])("leaves the clause unresolved when %s appears near the anchor (different income metric)", (disqualifier) => {
+      const text = `${disqualifier} 기준중위소득 50% 이하인 가구`;
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
 
     it("routes a 소득인정액 clause phrased AFTER the percent/boundary through the same disqualifier window", () => {
       const text = "기준중위소득 50% 이하의 소득인정액 가구";
       const result = extractEligibilityFromText("f", text);
       expect(result.rules).toEqual([]);
       expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    // Real-MOIS finding (checkpoint-4 review, 서비스ID 553000000106): "건강보험료"
+    // misspelled as "건겅보험료" (강->겅) evades a literal-substring disqualifier
+    // check entirely.
+    it("still disqualifies a health-insurance-premium clause with a real observed typo (건겅보험료 for 건강보험료)", () => {
+      const text = "가구건겅보험료 본인부담금 합산액이 기준중위소득 80% 이하인 자";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    // Real-MOIS finding (서비스ID 627000000136, 628000000748): "본인" used as an
+    // explicit label directly modifying 기준중위소득 marks an INDIVIDUAL income
+    // threshold, not a household one -- must not be typed as household_income.
+    it("leaves a '본인' (individual, not household) median-income clause unresolved", () => {
+      const text = "- (본인) 기준중위소득 120% 이하 - (가구) 기준중위소득 140% 이하";
+      const result = extractEligibilityFromText("f", text);
+      // Neither the individual-scoped "(본인)" clause nor the second "(가구)"
+      // clause (which the first clause's disqualifier window can still reach,
+      // being only ~15 chars away) is safely extracted from this combined
+      // sentence; both fall back to unresolved rather than risk mixing up
+      // which percent belongs to which scope.
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses.length).toBeGreaterThan(0);
+    });
+
+    it("still extracts a legitimate combined self+spouse household-income clause ('본인·배우자 합산')", () => {
+      const { rules } = extractEligibilityFromText("f", "본인·배우자 합산 연소득이 기준 중위소득 180% 이하");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          value: expect.objectContaining({ householdSizeMode: "scales_with_profile_household" }),
+        })
+      );
     });
 
     it("no household-size number nearby -> scales_with_profile_household", () => {
@@ -234,13 +304,20 @@ describe("extractEligibilityFromText", () => {
       expect((rules[0].value as { fixedHouseholdSize?: number }).fixedHouseholdSize).toBeUndefined();
     });
 
-    it("exactly one distinct household-size number nearby -> fixed_reference_household + fixedHouseholdSize", () => {
-      const { rules } = extractEligibilityFromText("f", "4인가구 기준 기준중위소득 60% 이하");
-      expect(rules[0]).toEqual(
-        expect.objectContaining({
-          value: expect.objectContaining({ householdSizeMode: "fixed_reference_household", fixedHouseholdSize: 4 }),
-        })
-      );
+    // A manual real-MOIS review (docs/median-income-fixed-reference-review.md)
+    // found that "exactly one nearby household-size number" is NOT a safe
+    // `fixed_reference_household` signal on its own -- most real hits with
+    // this shape turned out to be a truncated per-size table or a
+    // population-description coincidence, not a genuine fixed-reference
+    // design. This parser no longer ever emits `fixed_reference_household`
+    // on its own; ANY nearby household-size number (one or many) is
+    // unresolved. `fixed_reference_household` stays a valid hand-authored
+    // spec shape (see domain/medianIncome/evaluate.ts tests).
+    it("exactly one distinct household-size number nearby -> unresolved (not a safe fixed-reference signal)", () => {
+      const text = "4인가구 기준 기준중위소득 60% 이하";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
     });
 
     it("two or more distinct household-size numbers nearby -> unresolved (table-like text)", () => {
@@ -250,13 +327,18 @@ describe("extractEligibilityFromText", () => {
       expect(result.unresolvedClauses).toEqual([text]);
     });
 
-    it("repeated mentions of the SAME household size nearby still count as one distinct size (fixed, not ambiguous)", () => {
-      const { rules } = extractEligibilityFromText("f", "4인가구 4인 가구 기준중위소득 60% 이하");
-      expect(rules[0]).toEqual(
-        expect.objectContaining({
-          value: expect.objectContaining({ householdSizeMode: "fixed_reference_household", fixedHouseholdSize: 4 }),
-        })
-      );
+    it("repeated mentions of the SAME household size nearby are still unresolved (not treated as safely fixed)", () => {
+      const text = "4인가구 4인 가구 기준중위소득 60% 이하";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    it("an explicit per-household-size table marker nearby -> unresolved even with zero digit household-size mentions in window", () => {
+      const text = "가구원 수에 따라 기준금액이 상이하며 기준중위소득 100% 이하인 가구";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
     });
 
     it("extracts an explicit year stated before the anchor", () => {
