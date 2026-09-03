@@ -6,6 +6,11 @@ import type {
   EligibilityRuleGroup,
   InstitutionType,
 } from "@/types/benefit";
+import {
+  buildEducationStatusRule,
+  buildEmploymentStatusRule,
+  buildMaritalStatusRule,
+} from "@/domain/youthCodebook/compatibility";
 
 /**
  * Raw record shape confirmed live against the 온통청년(Youth Center) Open API
@@ -56,6 +61,49 @@ export interface YouthRawPolicy {
   earnMinAmt?: string;
   earnMaxAmt?: string;
   earnEtcCn?: string;
+  /**
+   * Marital status condition code (family 0055: 기혼/미혼/제한없음). See
+   * domain/youthCodebook/ for the official code table and
+   * domain/youthCodebook/compatibility.ts's `buildMaritalStatusRule` for the
+   * production mapping onto Damoa's `maritalStatus` profile field.
+   */
+  mrgSttsCd?: string;
+  /**
+   * Employment status condition code(s) (family 0013), comma-delimited
+   * OR/whitelist when multiple. See `buildEmploymentStatusRule`.
+   */
+  jobCd?: string;
+  /**
+   * Education status condition code(s) (family 0049), comma-delimited
+   * OR/whitelist when multiple. See `buildEducationStatusRule`.
+   */
+  schoolCd?: string;
+  /**
+   * Target-group/business-status condition code(s) (family 0014),
+   * comma-delimited OR/whitelist when multiple. No Damoa profile field maps
+   * safely onto any specific code as of Phase 4-B (see
+   * domain/youthCodebook/table.ts) — kept typed for documentation/future use
+   * only; never wired into buildEligibility().
+   */
+  sbizCd?: string;
+  /**
+   * Academic-major condition code(s) (family 0011), comma-delimited
+   * OR/whitelist when multiple. Damoa has no academic-major profile field —
+   * kept typed for documentation/future use only; never wired into
+   * buildEligibility().
+   */
+  plcyMajorCd?: string;
+  /**
+   * Region condition code(s), 5-digit 법정동코드(administrative-district
+   * codes), comma-delimited when multiple. NOT present in the official
+   * codebook XLSX (confirmed absent from all 4 sheets) — its raw values
+   * were independently identified as 법정동코드 via an external public
+   * cross-reference. Building a rule requires a 법정동코드 -> Damoa
+   * region-text crosswalk that doesn't exist yet (see
+   * domain/youthCodebook/compatibility.ts's `ZIP_CD_NEXT_STEP`); kept typed
+   * for documentation/future use only, never wired into buildEligibility().
+   */
+  zipCd?: string;
   [key: string]: unknown;
 }
 
@@ -115,6 +163,16 @@ function buildAgeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
  * structured without guessing at natural-language content, so it's left
  * unstructured — the benefit falls back to "unknown" for that criterion
  * rather than a false "likely_eligible" or "not_eligible".
+ *
+ * Official codebook labels (family 0043, see `domain/youthCodebook/table.ts`
+ * / `domain/youthCodebook/provenance.ts` for the verified source): 0043001
+ * = 무관 ("unrelated"/no condition), 0043002 = 연소득 ("annual income" —
+ * the one structured variant handled below), 0043003 = 기타 ("other" —
+ * confirmed via a 2,743-record cross-check against `earnEtcCn` to always be
+ * free text and never a structured amount; see the Phase 4-A audit, §11).
+ * This behavior is UNCHANGED from before Phase 4-B — only the provenance
+ * reference was updated from an empirical pre-XLSX understanding to the
+ * now-verified official codebook.
  */
 // earnMinAmt/earnMaxAmt are denominated in 만원 (10,000 KRW) units — confirmed
 // live: getPlcy?plcyNo=20260724005400113307 ("햇살론유스", a well-known
@@ -172,7 +230,13 @@ function buildIncomeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
 }
 
 function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined {
-  const rules = [buildAgeRule(raw), buildIncomeRule(raw)].filter((r): r is EligibilityRule => Boolean(r));
+  const rules = [
+    buildAgeRule(raw),
+    buildIncomeRule(raw),
+    buildMaritalStatusRule(raw.mrgSttsCd),
+    buildEmploymentStatusRule(raw.jobCd),
+    buildEducationStatusRule(raw.schoolCd),
+  ].filter((r): r is EligibilityRule => Boolean(r));
   if (rules.length === 0) return undefined;
   return { type: "all", rules };
 }
@@ -180,30 +244,37 @@ function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined
 /**
  * Eligibility completeness for Youth Center records.
  *
- * We only structure age (`sprtTrgt*Age*`) and individual income
- * (`earnCndSeCd === "0043002"`). But every live record also carries
- * `mrgSttsCd` (marital status), `jobCd` (employment status), `schoolCd`
- * (education status), `sbizCd` (business/startup status), `zipCd`
- * (residence area) and `plcyMajorCd` — confirmed live via a 300-record
- * sample (see this file's test + `adapters/youthCenter/YouthAdapter.ts`
- * history) to always carry a non-blank value. A handful of specific codes
- * appear alongside one dominant value per field (e.g. jobCd is "0013010"
- * ~76% of the time, with ~10 other specific codes filling the rest), which
- * is consistent with the dominant value meaning "제한없음"(no restriction)
- * and the others meaning a real, specific restriction. 온통청년 DOES publish an
- * official code table for these fields (API코드정보.xlsx, "코드정의서" —
- * see the Phase 4 codebook audit at docs/youth-codebook-phase4-audit.md and
- * domain/youthCodebook/ for the verified code→label mappings), but as of
- * this phase most of these fields still aren't wired into rule-building
- * here: several codes map cleanly (e.g. mrgSttsCd's 미혼/기혼/제한없음), but
- * others are ambiguous against Damoa's current profile ontology (narrower
- * categories, unsupported concepts, unclear multi-code AND/OR semantics) and
- * guessing wrong would risk turning a real restriction into a false pass. So
- * none of those fields are structured into rules yet, and ANY built
- * eligibility group (age and/or income) is marked "incomplete": we know
- * there's more region/employment/education/marital/business eligibility
- * data on every record than we currently structure, so a pass on age+income
- * alone is never strong enough evidence for likely_eligible.
+ * Phase 4-B added production rule-building for `mrgSttsCd` (marital
+ * status), `jobCd` (employment status), and `schoolCd` (education status)
+ * on top of the existing age/income rules — see
+ * `domain/youthCodebook/compatibility.ts`'s `buildMaritalStatusRule` /
+ * `buildEmploymentStatusRule` / `buildEducationStatusRule`, keyed off the
+ * official 온통청년 코드정의서 (API코드정보.xlsx — see
+ * `domain/youthCodebook/provenance.ts` and the Phase 4-A audit at
+ * docs/youth-codebook-phase4-audit.md for full source provenance and the
+ * Phase 4-B corrections applied on top of that audit's initial proposals).
+ * Every live record also carries `sbizCd` (business/target-group status),
+ * `zipCd` (residence area), and `plcyMajorCd` (academic major) — NONE of
+ * those are wired into rule-building this phase: `sbizCd`'s specific codes
+ * are either scope-mismatched against existing profile fields (e.g.
+ * 한부모가정 vs. the family-membership-scoped `singleParentFamily`) or have
+ * no matching Damoa concept at all; `plcyMajorCd` has no Damoa academic-major
+ * field; `zipCd` isn't even in the official codebook and would need a
+ * separate 법정동코드 crosswalk (see `compatibility.ts`'s `ZIP_CD_NEXT_STEP`).
+ * See `domain/youthCodebook/table.ts` for the exact per-code
+ * `implementationStatus` driving every one of these decisions.
+ *
+ * So even with marital/employment/education now structured, ANY built
+ * eligibility group is STILL marked "incomplete" — unconditionally,
+ * regardless of which specific rules it contains. We know there's real
+ * business-status/region/major eligibility data on every record that we
+ * still don't structure, so a full pass on the rules we DO parse is never
+ * strong enough evidence for likely_eligible on its own (see
+ * `lib/eligibility/ruleEngine.ts`'s `evaluateEligibilityDetailed`, which
+ * downgrades a full pass on `"incomplete"` data to "unknown" rather than
+ * promoting it — this is what keeps adding marital/employment/education
+ * rules from ever increasing `likelyEligibleCount` by itself, only
+ * improving candidate pruning and positive-evidence signal).
  */
 function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): Benefit["eligibilityDataStatus"] {
   return eligibility ? "incomplete" : undefined;

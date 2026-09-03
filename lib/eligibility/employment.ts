@@ -1,4 +1,5 @@
 import type { EmploymentStatus } from "@/types/profile";
+import { matchStatusCompat, type StatusCompatSpec as GenericStatusCompatSpec } from "./statusCompat";
 
 /**
  * Employment-status compatibility (section 11 of the constraint-compatibility
@@ -17,13 +18,17 @@ import type { EmploymentStatus } from "@/types/profile";
  * Only `unemployed` and `employed` are confidently known to satisfy or
  * violate each target; everything else resolves to "unknown" rather than
  * being forced into an incorrect pass or fail.
+ *
+ * The generic PASS/FAIL/UNKNOWN matching logic itself now lives in
+ * `lib/eligibility/statusCompat.ts` (promoted there in Phase 4-B so
+ * `maritalStatus`/`educationStatus` compatibility, needed for the Youth
+ * Center codebook integration, can reuse it without depending on this
+ * employment-specific module). `StatusCompatSpec`/`matchStatusCompat` are
+ * re-exported here unchanged so this file's existing 4 call sites
+ * (`ruleEngine.ts`, `koreanEligibilityParser.ts`, and their tests) don't
+ * need to change.
  */
-export interface StatusCompatSpec {
-  /** Profile values that are verified compatible with (satisfy) the target. */
-  passValues: EmploymentStatus[];
-  /** Profile values that are verified incompatible with (violate) the target. */
-  failValues: EmploymentStatus[];
-}
+export type StatusCompatSpec = GenericStatusCompatSpec<EmploymentStatus>;
 
 export type EmploymentTarget = "unemployed" | "employed";
 
@@ -34,16 +39,4 @@ export const EMPLOYMENT_TARGET_SPECS: Record<EmploymentTarget, StatusCompatSpec>
   employed: { passValues: ["employed"], failValues: ["unemployed"] },
 };
 
-/**
- * Generic small-enum compatibility check, shared by both candidate
- * retrieval (via evaluateRule -> compare, see ruleEngine.ts) and the final
- * rule engine — the exact same function, so semantics can't drift between
- * the two stages. Anything not explicitly listed in either side of the spec
- * resolves to "unknown", never a guessed pass or fail.
- */
-export function matchStatusCompat(fieldValue: unknown, spec: StatusCompatSpec): "pass" | "fail" | "unknown" {
-  if (typeof fieldValue !== "string") return "unknown";
-  if ((spec.passValues as string[]).includes(fieldValue)) return "pass";
-  if ((spec.failValues as string[]).includes(fieldValue)) return "fail";
-  return "unknown";
-}
+export { matchStatusCompat };
