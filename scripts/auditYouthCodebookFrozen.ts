@@ -14,9 +14,14 @@
  *
  * The XLSX source file itself is NOT committed to this repository (it may
  * contain distribution restrictions) — only its SHA-256, filename, and the
- * fully transcribed code→label rows below are recorded, so downstream
- * reviewers can verify this script's `YOUTH_CODEBOOK` constant against a
- * fresh copy of the same file without needing this repo to embed it.
+ * fully transcribed code→label rows are recorded (in
+ * `domain/youthCodebook/officialTable.ts`, imported below — see Phase 4-B
+ * pre-merge cleanup §5: this script used to carry a SECOND, independently
+ * maintained copy of the same 11-family transcription, which has been
+ * removed to eliminate drift risk. There is now exactly one place in this
+ * codebase where these rows are transcribed), so downstream reviewers can
+ * verify `OFFICIAL_YOUTH_CODEBOOK` against a fresh copy of the same file
+ * without needing this repo to embed it.
  *
  * Run with:
  *   npx tsx scripts/auditYouthCodebookFrozen.ts
@@ -29,196 +34,39 @@
  */
 
 import fs from "node:fs";
+import { OFFICIAL_YOUTH_CODEBOOK as YOUTH_CODEBOOK, type OfficialYouthCodeFamily } from "../domain/youthCodebook/officialTable";
+import { YOUTH_CODEBOOK_PROVENANCE as CODEBOOK_PROVENANCE } from "../domain/youthCodebook/provenance";
 
 // ---------------------------------------------------------------------------
-// 1. Official codebook, transcribed verbatim from API코드정보.xlsx's
-//    "코드정보" sheet (70 rows incl. header, 69 data rows, 0 duplicates,
-//    0 blanks — verified via openpyxl with data_only=True). `zipCd` is
-//    confirmed ABSENT from this sheet; see the separate zipCd provenance
+// 1. Official codebook (11 families / 69 rows, verified via openpyxl with
+//    data_only=True — 0 duplicates, 0 blanks). Imported from the single
+//    centralized transcription in domain/youthCodebook/officialTable.ts
+//    (Phase 4-B pre-merge cleanup, §5) rather than duplicated here. `zipCd`
+//    is confirmed ABSENT from this sheet; see the separate zipCd provenance
 //    note near ZIP_CD_PROVENANCE below.
 // ---------------------------------------------------------------------------
 
-const CODEBOOK_PROVENANCE = {
-  source: "온통청년(Youth Center) Open API 코드정의서",
-  filename: "API코드정보.xlsx",
-  sha256: "81cd89ddc7bd49dfa9e53dec4f093bc8372d241505b5e8374cbfaf018245a5ef",
-  sizeBytes: 21213,
-  sheet: "코드정보",
-  totalRows: 70,
-  dataRows: 69,
-  duplicates: 0,
-  blanks: 0,
-  verifiedAt: "2026-09-03",
-} as const;
-
-interface CodeEntry {
-  code: string;
-  label: string;
-}
-
-interface CodeFamily {
-  /** The raw API field name this family applies to (e.g. "mrgSttsCd"). */
-  apiField: string;
-  /** The XLSX family/group code (e.g. "0055"). */
-  familyId: string;
-  entries: CodeEntry[];
-}
-
-const YOUTH_CODEBOOK: CodeFamily[] = [
-  {
-    apiField: "pvsnInstGroupCd",
-    familyId: "0054",
-    entries: [
-      { code: "0054001", label: "중앙부처" },
-      { code: "0054002", label: "지자체" },
-    ],
-  },
-  {
-    apiField: "plcyPvsnMthdCd",
-    familyId: "0042",
-    entries: [
-      { code: "0042001", label: "인프라 구축" },
-      { code: "0042002", label: "프로그램" },
-      { code: "0042003", label: "직접대출" },
-      { code: "0042004", label: "공공기관" },
-      { code: "0042005", label: "계약(위탁운영)" },
-      { code: "0042006", label: "보조금" },
-      { code: "0042007", label: "대출보증" },
-      { code: "0042008", label: "공적보험" },
-      { code: "0042009", label: "조세지출" },
-      { code: "0042010", label: "바우처" },
-      { code: "0042011", label: "정보제공" },
-      { code: "0042012", label: "경제적 규제" },
-      { code: "0042013", label: "기타" },
-    ],
-  },
-  {
-    apiField: "plcyAprvSttsCd",
-    familyId: "0044",
-    entries: [
-      { code: "0044001", label: "신청" },
-      { code: "0044002", label: "승인" },
-      { code: "0044003", label: "반려" },
-      { code: "0044004", label: "임시저장" },
-    ],
-  },
-  {
-    apiField: "aplyPrdSeCd",
-    familyId: "0057",
-    entries: [
-      { code: "0057001", label: "특정기간" },
-      { code: "0057002", label: "상시" },
-      { code: "0057003", label: "마감" },
-    ],
-  },
-  {
-    apiField: "bizPrdSeCd",
-    familyId: "0056",
-    entries: [
-      { code: "0056001", label: "특정기간" },
-      { code: "0056002", label: "기타" },
-    ],
-  },
-  {
-    apiField: "mrgSttsCd",
-    familyId: "0055",
-    entries: [
-      { code: "0055001", label: "기혼" },
-      { code: "0055002", label: "미혼" },
-      { code: "0055003", label: "제한없음" },
-    ],
-  },
-  {
-    apiField: "earnCndSeCd",
-    familyId: "0043",
-    entries: [
-      { code: "0043001", label: "무관" },
-      { code: "0043002", label: "연소득" },
-      { code: "0043003", label: "기타" },
-    ],
-  },
-  {
-    apiField: "plcyMajorCd",
-    familyId: "0011",
-    entries: [
-      { code: "0011001", label: "인문계열" },
-      { code: "0011002", label: "사회계열" },
-      { code: "0011003", label: "상경계열" },
-      { code: "0011004", label: "이학계열" },
-      { code: "0011005", label: "공학계열" },
-      { code: "0011006", label: "예체능계열" },
-      { code: "0011007", label: "농산업계열" },
-      { code: "0011008", label: "기타" },
-      { code: "0011009", label: "제한없음" },
-    ],
-  },
-  {
-    apiField: "jobCd",
-    familyId: "0013",
-    entries: [
-      { code: "0013001", label: "재직자" },
-      { code: "0013002", label: "자영업자" },
-      { code: "0013003", label: "미취업자" },
-      { code: "0013004", label: "프리랜서" },
-      { code: "0013005", label: "일용근로자" },
-      { code: "0013006", label: "(예비)창업자" },
-      { code: "0013007", label: "단기근로자" },
-      { code: "0013008", label: "영농종사자" },
-      { code: "0013009", label: "기타" },
-      { code: "0013010", label: "제한없음" },
-    ],
-  },
-  {
-    apiField: "schoolCd",
-    familyId: "0049",
-    entries: [
-      { code: "0049001", label: "고졸 미만" },
-      { code: "0049002", label: "고교 재학" },
-      { code: "0049003", label: "고졸 예정" },
-      { code: "0049004", label: "고교 졸업" },
-      { code: "0049005", label: "대학 재학" },
-      { code: "0049006", label: "대졸 예정" },
-      { code: "0049007", label: "대학 졸업" },
-      { code: "0049008", label: "석·박사" },
-      { code: "0049009", label: "기타" },
-      { code: "0049010", label: "제한없음" },
-    ],
-  },
-  {
-    apiField: "sbizCd",
-    familyId: "0014",
-    entries: [
-      { code: "0014001", label: "중소기업" },
-      { code: "0014002", label: "여성" },
-      { code: "0014003", label: "기초생활수급자" },
-      { code: "0014004", label: "한부모가정" },
-      { code: "0014005", label: "장애인" },
-      { code: "0014006", label: "농업인" },
-      { code: "0014007", label: "군인" },
-      { code: "0014008", label: "지역인재" },
-      { code: "0014009", label: "기타" },
-      { code: "0014010", label: "제한없음" },
-    ],
-  },
-];
+type CodeFamily = OfficialYouthCodeFamily;
 
 /** zipCd has NO entry in the official 코드정보 sheet — its provenance is a
- * separate, external investigation (a public 법정동코드 cross-reference), not
- * this XLSX. Kept here only so the audit report can state its status
- * explicitly rather than silently omitting it. */
+ * separate, external investigation, not this XLSX. Kept here only so the
+ * audit report can state its status explicitly rather than silently
+ * omitting it. (Terminology corrected during the Phase 4-B pre-merge
+ * cleanup, §4 — see domain/youthCodebook/provenance.ts's
+ * `ZIP_CD_PROVENANCE`, which this mirrors.) */
 const ZIP_CD_PROVENANCE = {
   officialXlsxCoverage: false,
   note:
     "zipCd is ABSENT from API코드정보.xlsx's 코드정보 sheet (verified: 69/69 " +
-    "data rows checked, no zipCd-named family). Its raw 5-digit values were " +
-    "instead cross-checked against a public 법정동코드(administrative-district " +
-    "code) table (e.g. 11680=서울 강남구, 41135=경기 성남시 분당구, " +
-    "26440=부산 강서구, 50110=제주시, 36110=세종특별자치시 — all matched). " +
-    "That proves the CODE SYSTEM's identity, not a safe production mapping: " +
-    "Damoa's profile stores province/city TEXT, not 법정동코드, so turning " +
-    "this into a rule requires a separate 법정동코드->Damoa-region crosswalk " +
-    "that does not exist yet in this codebase. Treated as UNRESOLVED for " +
-    "Phase 4 production-matching purposes.",
+    "data rows checked, no zipCd-named family). It is a 5-digit Youth " +
+    "Center region code; observed values are consistent with 시군구-level " +
+    "administrative-region codes, but the exact official code-system " +
+    "identity has not yet been verified from an authoritative Youth " +
+    "Center source. Regardless, Damoa's profile stores province/city as " +
+    "TEXT, not a numeric code, so turning this into a rule requires a " +
+    "separate, verified region-code -> Damoa-region crosswalk that does " +
+    "not exist yet in this codebase. Treated as UNRESOLVED for Phase 4 " +
+    "production-matching purposes.",
 } as const;
 
 const codebookByField = new Map<string, CodeFamily>(YOUTH_CODEBOOK.map((f) => [f.apiField, f]));

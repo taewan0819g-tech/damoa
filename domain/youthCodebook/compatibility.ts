@@ -2,6 +2,7 @@ import type { EducationStatus, EmploymentStatus, MaritalStatus } from "@/types/p
 import type { EligibilityRule } from "@/types/benefit";
 import { matchStatusCompat, type StatusCompatSpec } from "@/lib/eligibility/statusCompat";
 import { getYouthCodeFamily } from "./table";
+import type { YouthDimensionClassification } from "./types";
 
 /**
  * Youth Center (온통청년) codebook -> Damoa profile compatibility mapping.
@@ -162,6 +163,47 @@ export function parseYouthCodeList(apiField: string, raw: string | undefined | n
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4-B pre-merge cleanup, §1/§2: per-record dimension classification.
+// Distinguishes "unrestricted" (the family's own 제한없음 — affirmatively no
+// constraint) from genuinely "unresolved" data, and reports when a
+// multi-code value mixes a usable "safe" branch with an "unresolved" one
+// (a rule may still be built from the safe branch, but real uncertainty
+// remains). Used by YouthAdapter.ts to compute `hasUnresolvedEligibility`
+// and by scripts/youthCodebookCoverageReport.ts for true per-field coverage
+// counts — see types.ts's `YouthDimensionStatus` doc comment for the full
+// definition of each status.
+// ---------------------------------------------------------------------------
+
+export function classifyYouthDimension(apiField: string, raw: string | undefined | null): YouthDimensionClassification {
+  const parsed = parseYouthCodeList(apiField, raw);
+  if (parsed.isBlank) return { status: "missing", hasUnresolvedEligibility: false };
+  if (parsed.unknownCodes.length > 0) return { status: "unknown_code", hasUnresolvedEligibility: true };
+
+  const family = getYouthCodeFamily(apiField);
+  const statusByCode = new Map((family?.entries ?? []).map((e) => [e.code, e.implementationStatus]));
+
+  let hasUnrestricted = false;
+  let hasSafe = false;
+  let hasUnresolved = false;
+  for (const code of parsed.codes) {
+    const status = statusByCode.get(code);
+    if (status === "unrestricted") hasUnrestricted = true;
+    else if (status === "safe") hasSafe = true;
+    else if (status === "unresolved") hasUnresolved = true;
+  }
+
+  if (hasSafe && hasUnresolved) {
+    return { status: "partially_structured_with_unresolved_branch", hasUnresolvedEligibility: true };
+  }
+  if (hasSafe) return { status: "fully_structured", hasUnresolvedEligibility: false };
+  if (hasUnresolved) return { status: "unresolved", hasUnresolvedEligibility: true };
+  if (hasUnrestricted) return { status: "unrestricted", hasUnresolvedEligibility: false };
+  // Unreachable in practice (every known code is unrestricted/safe/unresolved
+  // by construction in table.ts), but fail safe rather than throw.
+  return { status: "unrestricted", hasUnresolvedEligibility: false };
+}
+
+// ---------------------------------------------------------------------------
 // §4: OR-aggregation of a multi-code list into a single StatusCompatSpec.
 // ---------------------------------------------------------------------------
 
@@ -286,25 +328,31 @@ export function buildEducationStatusRule(schoolCd: string | undefined): Eligibil
 }
 
 /**
- * §12: documented (NOT implemented) next step for `zipCd`. Confirmed absent
- * from the official XLSX (see `provenance.ts`'s `ZIP_CD_PROVENANCE`); its
- * raw values are 5-digit 법정동코드(administrative-district codes) — the
- * SAME code system used throughout Korean government open data, where the
- * first 5 digits identify a 시군구 (city/county/district) and the full
- * 10-digit code adds 읍면동-level granularity. A future crosswalk would
- * need to: (1) obtain the canonical MOIS 법정동코드 reference table (5-digit
- * 시군구 level is sufficient, no 10-digit table needed since `zipCd` values
- * are already 5 digits), (2) map each 시군구 code to the `{province, city}`
- * text pairs `region_in` already understands (`lib/eligibility/region.ts`),
- * and (3) build a `region_in` rule (not a new operator) from the parsed
- * code list using this module's same OR-composition pattern. Explicitly
- * out of scope for Phase 4-B — no frequency-based inference, no partial
- * crosswalk, per the task's instruction not to start this implementation
- * in the same run.
+ * §12 (corrected during the Phase 4-B pre-merge cleanup, §4): documented
+ * (NOT implemented) next step for `zipCd`. Confirmed absent from the
+ * official XLSX (see `provenance.ts`'s `ZIP_CD_PROVENANCE`) — the supplied
+ * official 코드정보 sheet has NO `zipCd` family at all. Observed 5-digit
+ * values are CONSISTENT WITH 시군구-level administrative-region codes (the
+ * pattern used throughout Korean government open data, where the first 5
+ * digits identify a 시군구/city-county-district), but the exact official
+ * Youth Center code-system identity for `zipCd` has NOT been verified from
+ * an authoritative Youth Center source — the earlier claim of a "confirmed"
+ * 법정동코드 identity overstated an external, unofficial cross-reference. A
+ * future crosswalk would still need to: (1) obtain and verify against an
+ * authoritative Youth Center (or equivalently authoritative) region-code
+ * reference table, (2) map each region code to the `{province, city}` text
+ * pairs `region_in` already understands (`lib/eligibility/region.ts`), and
+ * (3) build a `region_in` rule (not a new operator) from the parsed code
+ * list using this module's same OR-composition pattern. Explicitly out of
+ * scope for Phase 4-B — no frequency-based inference, no partial crosswalk,
+ * per the task's instruction not to start this implementation in the same
+ * run.
  */
 export const ZIP_CD_NEXT_STEP =
-  "zipCd values are 5-digit 법정동코드 (시군구-level administrative-district " +
-  "codes, confirmed via external cross-reference — see provenance.ts). " +
-  "Building a production rule requires a 법정동코드 -> Damoa region {province, " +
-  "city} crosswalk that does not exist in this codebase yet; deferred to a " +
-  "dedicated future checkpoint, not started in Phase 4-B.";
+  "zipCd is a 5-digit Youth Center region code; observed values are " +
+  "consistent with 시군구-level administrative-region codes, but the exact " +
+  "official code-system identity has not yet been verified from an " +
+  "authoritative Youth Center source (see provenance.ts). Building a " +
+  "production rule requires a verified region-code -> Damoa region " +
+  "{province, city} crosswalk that does not exist in this codebase yet; " +
+  "deferred to a dedicated future checkpoint, not started in Phase 4-B.";

@@ -10,6 +10,7 @@ import {
   buildEducationStatusRule,
   buildEmploymentStatusRule,
   buildMaritalStatusRule,
+  classifyYouthDimension,
 } from "@/domain/youthCodebook/compatibility";
 
 /**
@@ -94,14 +95,19 @@ export interface YouthRawPolicy {
    */
   plcyMajorCd?: string;
   /**
-   * Region condition code(s), 5-digit 법정동코드(administrative-district
-   * codes), comma-delimited when multiple. NOT present in the official
-   * codebook XLSX (confirmed absent from all 4 sheets) — its raw values
-   * were independently identified as 법정동코드 via an external public
-   * cross-reference. Building a rule requires a 법정동코드 -> Damoa
-   * region-text crosswalk that doesn't exist yet (see
+   * Region condition code(s), 5-digit Youth Center region codes,
+   * comma-delimited when multiple. NOT present in the official codebook
+   * XLSX (confirmed absent from all 4 sheets) — observed values are
+   * consistent with 시군구-level administrative-region codes, but the exact
+   * official Youth Center code-system identity has not yet been verified
+   * from an authoritative Youth Center source (see
+   * domain/youthCodebook/provenance.ts's `ZIP_CD_PROVENANCE`). Building a
+   * rule requires a verified region-code -> Damoa region-text crosswalk
+   * that doesn't exist yet (see
    * domain/youthCodebook/compatibility.ts's `ZIP_CD_NEXT_STEP`); kept typed
-   * for documentation/future use only, never wired into buildEligibility().
+   * for documentation/future use only, never wired into buildEligibility()
+   * — but its presence still contributes to `hasUnresolvedEligibility`
+   * (Phase 4-B pre-merge cleanup, §1/§4).
    */
   zipCd?: string;
   [key: string]: unknown;
@@ -229,16 +235,81 @@ function buildIncomeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
   return undefined;
 }
 
-function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined {
-  const rules = [
-    buildAgeRule(raw),
-    buildIncomeRule(raw),
-    buildMaritalStatusRule(raw.mrgSttsCd),
-    buildEmploymentStatusRule(raw.jobCd),
-    buildEducationStatusRule(raw.schoolCd),
-  ].filter((r): r is EligibilityRule => Boolean(r));
-  if (rules.length === 0) return undefined;
-  return { type: "all", rules };
+/**
+ * Phase 4-B pre-merge cleanup, §1/§3: alongside the structured rules
+ * themselves, determines whether the raw record carries any real
+ * eligibility-bearing data that could NOT be safely turned into a rule —
+ * independent of whether `eligibility` ends up defined at all. Mirrors
+ * `adapters/mois/MOISAdapter.ts`'s `buildEligibility` shape (returns both
+ * the rule group and the flag together, since they're computed from the
+ * same pass over the raw record).
+ *
+ * Per-dimension classification comes from
+ * `domain/youthCodebook/compatibility.ts`'s `classifyYouthDimension`, which
+ * correctly treats a family's own 제한없음(unrestricted) code as NOT
+ * unresolved (§2) while still flagging every other non-trivial case:
+ * unknown codes, known-but-unsupported codes, and multi-code values that
+ * mix a usable "safe" branch with an unsupported one (a rule may still get
+ * built from the safe branch — see `buildMaritalStatusRule` et al. — but
+ * real uncertainty remains, e.g. jobCd = "재직자,예비창업자" still builds an
+ * employed=>PASS/unemployed=>UNKNOWN rule AND sets this flag).
+ *
+ * `earnCndSeCd`/age get a small amount of extra handling beyond the generic
+ * classifier because their rule-building depends on more than just the code
+ * itself (`earnMinAmt`/`earnMaxAmt` amounts, `sprtTrgtMinAge`/
+ * `sprtTrgtMaxAge`): a "safe"/age-limited code that nonetheless failed to
+ * produce a rule because the amount/age data itself was missing or
+ * malformed is real unresolved data too, not merely "no condition".
+ */
+function buildEligibility(raw: YouthRawPolicy): { eligibility?: EligibilityRuleGroup; hasUnresolvedEligibility: boolean } {
+  let hasUnresolvedEligibility = false;
+
+  const ageRule = buildAgeRule(raw);
+  if (raw.sprtTrgtAgeLmtYn === "Y" && !ageRule) {
+    // Age restriction flagged (sprtTrgtAgeLmtYn: "Y") but min/max was
+    // missing or malformed -- real, required data we couldn't structure.
+    hasUnresolvedEligibility = true;
+  }
+
+  const incomeRule = buildIncomeRule(raw);
+  if (raw.earnCndSeCd === "0043002" && !incomeRule) {
+    // 연소득 condition flagged but neither earnMinAmt nor earnMaxAmt was a
+    // usable positive amount -- the code alone is "safe", but this specific
+    // record's amount data wasn't.
+    hasUnresolvedEligibility = true;
+  }
+
+  const maritalRule = buildMaritalStatusRule(raw.mrgSttsCd);
+  const employmentRule = buildEmploymentStatusRule(raw.jobCd);
+  const educationRule = buildEducationStatusRule(raw.schoolCd);
+
+  // Generic per-dimension classification for every codebook-covered field.
+  // sbizCd/plcyMajorCd are never wired into a rule at all this phase, but
+  // their raw values are real, unstructured eligibility data (§1/§3) --
+  // still contribute to hasUnresolvedEligibility even though `rules` never
+  // gains an entry for them.
+  const codebookFields: [string, string | undefined][] = [
+    ["mrgSttsCd", raw.mrgSttsCd],
+    ["earnCndSeCd", raw.earnCndSeCd],
+    ["jobCd", raw.jobCd],
+    ["schoolCd", raw.schoolCd],
+    ["sbizCd", raw.sbizCd],
+    ["plcyMajorCd", raw.plcyMajorCd],
+  ];
+  for (const [apiField, value] of codebookFields) {
+    if (classifyYouthDimension(apiField, value).hasUnresolvedEligibility) hasUnresolvedEligibility = true;
+  }
+
+  // zipCd has no official codebook family at all (see
+  // domain/youthCodebook/provenance.ts's ZIP_CD_PROVENANCE) -- any non-blank
+  // value is real, unstructured region-eligibility data (§4/§9).
+  if (raw.zipCd && raw.zipCd.trim() !== "") hasUnresolvedEligibility = true;
+
+  const rules = [ageRule, incomeRule, maritalRule, employmentRule, educationRule].filter(
+    (r): r is EligibilityRule => Boolean(r)
+  );
+  const eligibility = rules.length > 0 ? { type: "all" as const, rules } : undefined;
+  return { eligibility, hasUnresolvedEligibility };
 }
 
 /**
@@ -255,14 +326,19 @@ function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined
  * Phase 4-B corrections applied on top of that audit's initial proposals).
  * Every live record also carries `sbizCd` (business/target-group status),
  * `zipCd` (residence area), and `plcyMajorCd` (academic major) — NONE of
- * those are wired into rule-building this phase: `sbizCd`'s specific codes
- * are either scope-mismatched against existing profile fields (e.g.
+ * those are wired into a structured RULE this phase: `sbizCd`'s specific
+ * codes are either scope-mismatched against existing profile fields (e.g.
  * 한부모가정 vs. the family-membership-scoped `singleParentFamily`) or have
  * no matching Damoa concept at all; `plcyMajorCd` has no Damoa academic-major
  * field; `zipCd` isn't even in the official codebook and would need a
- * separate 법정동코드 crosswalk (see `compatibility.ts`'s `ZIP_CD_NEXT_STEP`).
- * See `domain/youthCodebook/table.ts` for the exact per-code
- * `implementationStatus` driving every one of these decisions.
+ * verified region-code crosswalk (see `compatibility.ts`'s
+ * `ZIP_CD_NEXT_STEP`). See `domain/youthCodebook/table.ts` for the exact
+ * per-code `implementationStatus` driving every one of these decisions.
+ * They ARE, however, still surfaced via `hasUnresolvedEligibility` (Phase
+ * 4-B pre-merge cleanup, §1/§3) whenever they carry real, non-blank,
+ * non-unrestricted data — so a benefit whose ONLY real eligibility
+ * condition is, say, a specific sbizCd or plcyMajorCd code correctly stays
+ * "incomplete"/unresolved instead of silently looking like a clean pass.
  *
  * So even with marital/employment/education now structured, ANY built
  * eligibility group is STILL marked "incomplete" — unconditionally,
@@ -282,7 +358,7 @@ function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): B
 
 export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {
   const organization = raw.sprvsnInstCdNm || raw.operInstCdNm || "온통청년";
-  const eligibility = buildEligibility(raw);
+  const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw);
   return {
     id: `youth-${raw.plcyNo}`,
     title: raw.plcyNm,
@@ -292,6 +368,7 @@ export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {
     benefitType: mapBenefitType(raw),
     eligibility,
     eligibilityDataStatus: eligibilityDataStatus(eligibility),
+    hasUnresolvedEligibility,
     application: {
       startDate: raw.bizPrdBgngYmd?.trim() || undefined,
       endDate: raw.bizPrdEndYmd?.trim() || undefined,

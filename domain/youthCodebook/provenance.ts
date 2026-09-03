@@ -28,21 +28,29 @@ export const YOUTH_CODEBOOK_PROVENANCE: YouthCodebookProvenance = {
 /**
  * `zipCd` has NO entry in the official 코드정보 sheet (verified: 69/69 data
  * rows checked, no zipCd-named family in any of the workbook's 4 sheets).
- * Its raw 5-digit values were instead cross-checked externally against a
- * public 법정동코드(administrative-district code) reference table (e.g.
+ * Its raw 5-digit values are consistent with a public 법정동코드
+ * (administrative-district code) reference table's 시군구-level pattern (e.g.
  * 11680=서울 강남구, 41135=경기 성남시 분당구, 26440=부산 강서구, 50110=제주시,
- * 36110=세종특별자치시 — all matched). That proves the CODE SYSTEM's
- * identity, not a safe production mapping: Damoa's profile stores
- * province/city as free TEXT (`region_in`), not 법정동코드, so turning this
- * into a rule requires a separate 법정동코드 -> Damoa-region-text crosswalk
- * that does not exist in this codebase yet. See `compatibility.ts`'s
- * `ZIP_CD_NEXT_STEP` for the documented (not implemented) next-step path.
+ * 36110=세종특별자치시 all match that pattern) — but this is an external,
+ * unofficial cross-reference, NOT a verification against an authoritative
+ * Youth Center source, so the exact official Youth Center code-system
+ * identity for `zipCd` has NOT been established (corrected during the
+ * Phase 4-B pre-merge cleanup, §4 — the earlier wording overstated this as
+ * "confirmed"). Regardless of the exact code-system identity, Damoa's
+ * profile stores province/city as free TEXT (`region_in`), not a numeric
+ * code, so turning this into a rule requires a separate, verified
+ * region-code -> Damoa-region-text crosswalk that does not exist in this
+ * codebase yet. See `compatibility.ts`'s `ZIP_CD_NEXT_STEP` for the
+ * documented (not implemented) next-step path.
  */
 export const ZIP_CD_PROVENANCE = {
   officialXlsxCoverage: false as const,
   note:
-    "zipCd is ABSENT from API코드정보.xlsx's 코드정보 sheet. Its raw 5-digit " +
-    "values are 법정동코드(administrative-district codes) confirmed via an " +
-    "external public cross-reference, not the official XLSX. Treated as " +
-    "UNRESOLVED for production rule-building purposes (Phase 4-B, §12).",
+    "zipCd is ABSENT from API코드정보.xlsx's 코드정보 sheet. It is a 5-digit " +
+    "Youth Center region code; observed values are consistent with " +
+    "시군구-level administrative-region codes, but the exact official " +
+    "code-system identity has not yet been verified from an authoritative " +
+    "Youth Center source. Treated as UNRESOLVED for production " +
+    "rule-building purposes (Phase 4-B, §12; terminology corrected in the " +
+    "Phase 4-B pre-merge cleanup, §4).",
 };

@@ -37,9 +37,12 @@ matching code and does not modify any production file.
 
 ## 2. Official code families (transcribed verbatim, `코드정보` sheet)
 
-11 families, 69 codes total. Full table reproduced in
-`scripts/auditYouthCodebookFrozen.ts`'s `YOUTH_CODEBOOK` constant (the
-single source of truth for this audit). Summary of the 6 families this
+11 families, 69 codes total. Full table transcribed in
+`domain/youthCodebook/officialTable.ts`'s `OFFICIAL_YOUTH_CODEBOOK` constant
+(centralized during the Phase 4-B pre-merge cleanup, §5 — the single
+authoritative transcription of the official XLSX; `scripts/auditYouthCodebookFrozen.ts`
+imports it rather than maintaining its own copy, eliminating the drift risk
+of two independently-hand-transcribed tables). Summary of the 6 families this
 phase focuses on:
 
 - **`mrgSttsCd`** (0055, marital status): 0055001=기혼, 0055002=미혼, 0055003=제한없음
@@ -299,18 +302,27 @@ individual codes across 186 distinct raw combos; single-code records: 845;
 max codes in one combo: 256).
 
 External cross-check against a public 법정동코드(administrative-district
-code) reference table confirmed the CODE SYSTEM's identity — `11680`=서울
-강남구, `41135`=경기 성남시 분당구, `26440`=부산 강서구, `50110`=제주시,
-`36110`=세종특별자치시, all 100% matches. Internal corroboration: `36110`
-alone appears 46× (Sejong has no sub-gu subdivisions, consistent with a
-5-digit 시군구-level code), and `50110`+`50130` together appear as a pair
-172× (the two 시 that make up all of Jeju).
+code) reference table found values **consistent with** that code system's
+시군구-level pattern — `11680`=서울 강남구, `41135`=경기 성남시 분당구,
+`26440`=부산 강서구, `50110`=제주시, `36110`=세종특별자치시, all matches.
+Internal corroboration: `36110` alone appears 46× (Sejong has no sub-gu
+subdivisions, consistent with a 5-digit 시군구-level code), and
+`50110`+`50130` together appear as a pair 172× (the two 시 that make up all
+of Jeju).
 
-This proves `zipCd` values ARE 법정동코드(5-digit 시군구-level codes), but
-that is **code-system identity, not a safe production mapping**: Damoa's
-profile stores province/city as free TEXT (used by the existing `region_in`
-operator), not 법정동코드. Turning `zipCd` into a rule would require a new
-법정동코드 → Damoa-region-text crosswalk that does not exist in this
+**Correction (Phase 4-B pre-merge cleanup, §4):** the above is an external,
+unofficial cross-reference, NOT a verification against an authoritative
+Youth Center source — the original wording here ("This proves `zipCd`
+values ARE 법정동코드...confirmed the CODE SYSTEM's identity") overstated
+this as confirmed. Corrected framing: `zipCd` is a 5-digit Youth Center
+region code; observed values are consistent with 시군구-level
+administrative-region codes, but the exact official code-system identity
+has not yet been verified from an authoritative Youth Center source.
+Regardless of the exact code-system identity, this is **code-system
+identity, not a safe production mapping**: Damoa's profile stores
+province/city as free TEXT (used by the existing `region_in` operator), not
+a numeric code. Turning `zipCd` into a rule would require a new, verified
+region-code → Damoa-region-text crosswalk that does not exist in this
 codebase today. **Status: UNRESOLVED**, explicitly not proposed for
 implementation this phase.
 
