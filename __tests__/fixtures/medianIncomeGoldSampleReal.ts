@@ -303,19 +303,27 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
   // -- category/status wording that must not block extraction ---------------
   {
     id: "real-rule-status-category-wording-not-blocking",
-    sourceServiceId: "654000000006",
+    sourceServiceId: "511000000155",
     sourceField: "target",
-    text: "전북에 주소를 둔지 1개월이상, 가구소득평가액이 기준중위소득 50%이하, 부양의무자가 고소득자(연 1.3억 원)을 초과하는 경우 지원불가",
+    text: "□ 참여자격: 공고일 현재 상주시에 거주하는 만18세 이상 근로능력자(외국인 등록번호를 소지한 자 포함)로서 가구소득이 기준중위소득 60%이하이면서 재산이 4억원 미만인 가구의 구성원 . 단, 사업개시일 현재 만 34세 이하인 청년 미취업자는 소득 및 재산과 무관하게 참여 가능",
     expectation: {
       expectedRule: {
-        percent: 50,
+        percent: 60,
         boundary: "lte",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "전북형 기초생활보장제도: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 135200000102 '중위소득 60% 이하인 자', had no positive household-income label -- '수급자' is a legal status word, not an income-scope label -- and is now unresolved). This record's '가구소득평가액' label directly precedes the anchor. The trailing exclusion clause ('부양의무자가 고소득자... 지원불가') sits within the +20 window but does not disqualify the match: '고소득자' ('high earner') is a plain-language status descriptor, not one of the metric-disqualifier tokens (소득인정액/건강보험료/개인소득/종합소득/임금/근로소득/부부합산).",
+    note: "공공일자리 제공(공공근로서비스, 지역공동체일자리): CHECKPOINT-6 REPLACEMENT (task-item-2 42-hit review, see docs/median-income-42-hit-review.md). The PREVIOUS sample at this id (서비스ID 654000000006, '가구소득평가액이 기준중위소득 50%이하') is itself one of the 6 false positives that review found: 소득평가액 (income-assessment amount) is now a recognized disqualifier (checkpoint-6), so that record correctly moved to unresolved and is no longer a valid 'rule' example -- see `real-unresolved-metric-disqualifier-income-assessment-amount` below. This replacement's '가구소득' label directly precedes the anchor, and the trailing status/category wording ('근로능력자(외국인 등록번호를 소지한 자 포함)' before the anchor, '가구의 구성원' and the '단, ... 참여 가능' carve-out after it) does not disqualify the match: none of it is one of the metric-disqualifier tokens (소득인정액/소득평가액/건강보험료/개인소득/종합소득/임금/근로소득/부부합산/원가구).",
+  },
+  {
+    id: "real-unresolved-metric-disqualifier-income-assessment-amount",
+    sourceServiceId: "654000000006",
+    sourceField: "target",
+    text: "전북에 주소를 둔지 1개월이상, 가구소득평가액이 기준중위소득 50%이하, 부양의무자가 고소득자(연 1.3억 원)을 초과하는 경우 지원불가",
+    expectation: { expectUnresolved: true },
+    note: "전북형 기초생활보장제도: CHECKPOINT-6 CORRECTION (task-item-2 42-hit review). Previously accepted as a RULE under checkpoint-5 because '가구소득평가액' satisfied the positive-signal regex and no then-known disqualifier recognized '소득평가액' specifically. 소득평가액 is the pre-asset-conversion component of 소득인정액 under Korean welfare law -- an administrative metric, not raw household income. `MEDIAN_INCOME_METRIC_DISQUALIFIER_RE` now also matches '소득평가액', so this correctly falls back to unresolved.",
   },
 
   // -- descriptive mention: no percent/boundary at all -> unresolved --------
@@ -350,16 +358,16 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     sourceServiceId: "161300000099",
     sourceField: "criteria",
     text: "ㅇ (소득) 청년 원가구*의 소득이 기준 중위소득 100% 이하이면서 청년 독립가구 소득이 기준 중위소득 60% 이하",
-    expectation: {
-      expectedRule: {
-        percent: 100,
-        boundary: "lte",
-        incomeMetric: "household_income",
-        householdSizeMode: "scales_with_profile_household",
-      },
-      expectUnresolved: false,
-    },
-    note: "청년월세 지원: KNOWN LIMITATION (unaffected by checkpoint-5 -- '원가구*의 소득' still satisfies `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`'s narrow gap budget despite the intervening footnote asterisk and particle). This is a genuine AND ('이면서') of TWO separate median-income thresholds on two DIFFERENT income bases (원가구 100% 이하 AND 독립가구 60% 이하) -- the parser only ever resolves the FIRST percent+boundary occurrence in a text, so the second threshold (독립가구 60% 이하) is silently NOT captured as a second rule, and is also NOT reported as unresolved. This under-extraction is the safe failure direction, but it means this specific record's eligibility rules are incomplete. Documented honestly here per the project's 'do not encode a known limitation as correct' mandate.",
+    expectation: { expectUnresolved: true },
+    note: "청년월세 지원: CHECKPOINT-6 CORRECTION (task-item-2 42-hit review, see docs/median-income-42-hit-review.md and `real-unresolved-parental-origin-household-disqualifier` below). Under checkpoint-5 this was WRONGLY accepted as a RULE (100% lte) purely because '원가구*의 소득' satisfied the positive-signal regex and 원가구/독립가구 were not yet recognized as a semantic mismatch -- this was itself a genuine AND ('이면서') of TWO separate median-income thresholds on two DIFFERENT income bases (원가구 100% 이하 AND 독립가구 60% 이하), neither of which is the applicant's own current household as Damoa's `annualHouseholdIncome` represents it. `MEDIAN_INCOME_PARENTAL_ORIGIN_HOUSEHOLD_DISQUALIFIER_RE` (checkpoint-6) now correctly disqualifies the whole clause. This id is kept (rather than renamed) to preserve the AND-structure-within-median-income category coverage, now honestly demonstrating the SAFE outcome (unresolved) rather than the previously-wrong RULE outcome; see `real-rule-multiple-percentages-first-occurrence-wins` for a still-passing example of the general first-occurrence-only limitation on a record that does emit a rule.",
+  },
+  {
+    id: "real-unresolved-parental-origin-household-disqualifier",
+    sourceServiceId: "161300000099",
+    sourceField: "target",
+    text: "계약일자·기간 등 기재 필요) ㅇ (소득) 청년 원가구*의 소득이 기준 중위소득 100% 이하이면서 청년 독립가구 소득이 기준 중위소득 60% 이하 * (원가구) 청년 + 부모 + 부모와 동일 주소",
+    expectation: { expectUnresolved: true },
+    note: "청년월세 지원 (지원대상 field, with the trailing '* (원가구) 청년 + 부모 + 부모와 동일 주소' footnote definition included verbatim): REQUIRED CHECKPOINT-6 CATEGORY -- 원가구 (parental-origin household) vs. 독립가구 (applicant's own independent household). Real youth-housing programs test BOTH via AND; neither figure is safely comparable to `annualHouseholdIncome` (the applicant's own current household), so the clause correctly stays unresolved.",
   },
 
   // -- multiple median-income percentages in one source ----------------------
@@ -378,6 +386,37 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
       expectUnresolved: false,
     },
     note: "직업훈련 생계비대부사업: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 179038700004, had no positive household-income label at its first anchor and is now unresolved). REQUIRED CATEGORY -- multiple median-income percentages in one source (80/100/120%, one per training-program sub-track). The parser deterministically resolves only the FIRST occurrence in raw text order ('가구원 합산 소득' 80%, which also happens to be the only one of the three with a positive household label directly attached) -- the two later, more specific per-program percentages (100%, 120%) are silently not captured as separate rules. Documented as a real limitation, not fixed here: disambiguating which of several program-scoped percentages applies to THIS specific applicant sub-track would require program-specific knowledge this generic text parser doesn't have. Also proves category/status wording ('비정규직 근로자, 전직실업자, 무급휴직자, 자영업자인 피보험자') sitting directly adjacent to the anchor does not block extraction.",
+  },
+
+  // -- checkpoint-6 (task-item-2 42-hit review): positive-regex/중위소득 -----
+  // -- collision bug -- see docs/median-income-42-hit-review.md -------------
+  {
+    id: "real-unresolved-positive-regex-collision-national-reference-household",
+    sourceServiceId: "373000000126",
+    sourceField: "target",
+    text: "기분(정동)장애일부로 최초 진단받은 후 5년 이내인 환자로서 전국가구 중위소득의 120%이하",
+    expectation: { expectUnresolved: true },
+    note: "정신질환자 치료비 지원: CHECKPOINT-6 CORRECTION. Previously accepted as a RULE under checkpoint-5 because `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`'s bounded wildcard gap ('가구' ... [^\\n]{0,4} ... '소득') bridged INTO the trailing '소득' of '중위소득' itself ('가구' + ' 중위' (2 gap chars) + '소득' matched under the old regex). '전국가구' ('nationwide households', a reference population) is also not the applicant's own household even if a genuine label had been present. The `(?!중위)` negative lookahead added to the wildcard gap now blocks this bridging, and there is no other genuine positive household-income phrase in this text, so it correctly falls back to unresolved.",
+  },
+  {
+    id: "real-unresolved-positive-regex-collision-category-label",
+    sourceServiceId: "315000000104",
+    sourceField: "target",
+    text: "○ 관내 주민등록을 두고, 법정 저소득 한부모가구(중위소득65% 이하) 지원(단, 생계, 의료급여 지원가구는 제외)",
+    expectation: { expectUnresolved: true },
+    note: "저소득 한부모 명절위문금 지원: CHECKPOINT-6 CORRECTION, same bridging bug as `real-unresolved-positive-regex-collision-national-reference-household` above -- the '(' immediately after '가구' plus the leading '중' of '중위' fit inside the old regex's 4-char gap budget, bridging all the way to '중위소득''s own trailing '소득'. '저소득 한부모가구' is a certified target-category label, not a direct positive household-income statement. Now correctly unresolved.",
+  },
+
+  // -- checkpoint-6 (task-item-2 42-hit review): disqualifier-only window ---
+  // -- widened to reach a trailing footnote -- see docs/median-income-42-  --
+  // -- hit-review.md ----------------------------------------------------------
+  {
+    id: "real-unresolved-disqualifier-window-widened-sodeukinjeongaek-footnote",
+    sourceServiceId: "461000000126",
+    sourceField: "target",
+    text: "○ (소득기준) 기준중위소득 140% 초과자\r\n     * 소득기준 :  신청가구의 소득과 재산을 종합적으로 반영한 소득인정액 \r\n     * 신청가구는 '서비스 이용자' 및 '배우자'(주민등록 등본상에 기재)로 한정",
+    expectation: { expectUnresolved: true },
+    note: "치매 진료비 및 약제비 본인부담금 지원: CHECKPOINT-6 CORRECTION. Previously accepted as a RULE (140% gt) under checkpoint-5: the narrow ±40/+20-char window used for the disqualifier check ended before reaching the trailing '* 소득기준 : ... 소득인정액' footnote (~34 chars past the match in the real record). The disqualifier-only check window (not the positive-signal window) is now widened to +150 chars, so it correctly reaches '소득인정액' and falls back to unresolved. Note the genuine positive-signal label ('신청가구의 소득') is itself INSIDE this same footnote -- proves the fix deliberately widens ONLY the disqualifier window, not the positive-signal window, since widening the latter could introduce new false positives.",
   },
 
   // -- percent expressed as the WORD '퍼센트', not the '%' symbol ------------

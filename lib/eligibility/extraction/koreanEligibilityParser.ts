@@ -234,14 +234,20 @@ const MEDIAN_INCOME_WORD_TO_BOUNDARY: Record<string, MedianIncomeBoundary> = {
  * Real MOIS median-income clauses sometimes compare a DIFFERENT figure
  * against a 기준중위소득 percentage rather than raw household income:
  * 소득인정액 ("recognized income" — assets/expenses-adjusted, a materially
- * different number than gross household income), 건강보험료/건보료
- * (health-insurance premium band, only correlated with income, not equal to
- * it), 개인소득/본인(의) 소득 (individual, not household, income), and
- * 종합소득(금액) (an individual taxpayer's aggregated tax-return income, not
- * household income). Any of these appearing near the match means the clause
- * is NOT safely a household-income comparison, so it's left unresolved
- * rather than mis-typed as `household_income` (see MedianIncomeMetric's doc
- * in domain/medianIncome/evaluate.ts).
+ * different number than gross household income), 소득평가액 ("income
+ * assessment amount" — a 국민기초생활보장법 term of art computed as actual
+ * income minus household-specific expense/work-income deductions; it is the
+ * component 소득인정액 is built from BEFORE adding the asset-conversion
+ * amount, so it is likewise not raw declared household income — real
+ * example: 서비스ID 654000000006, "가구소득평가액이 기준중위소득 50%이하"),
+ * 건강보험료/건보료 (health-insurance premium band, only correlated with
+ * income, not equal to it), 개인소득/본인(의) 소득 (individual, not
+ * household, income), and 종합소득(금액) (an individual taxpayer's
+ * aggregated tax-return income, not household income). Any of these
+ * appearing near the match means the clause is NOT safely a household-income
+ * comparison, so it's left unresolved rather than mis-typed as
+ * `household_income` (see MedianIncomeMetric's doc in
+ * domain/medianIncome/evaluate.ts).
  *
  * Whitespace-tolerant on purpose: real MOIS text sometimes inserts stray
  * spaces mid-word (observed real excerpts: "소득 인정액", "소득인 정액" for
@@ -250,7 +256,7 @@ const MEDIAN_INCOME_WORD_TO_BOUNDARY: Record<string, MedianIncomeBoundary> = {
  * household_income -- a false positive this parser must never produce.
  */
 const MEDIAN_INCOME_METRIC_DISQUALIFIER_RE =
-  /소득\s*인\s*정\s*액|건\s*강?\s*겅\s*보험\s*료|건강\s*보험\s*료|건보료|개인\s*소득|본인\s*소득|본인의\s*소득|종합\s*소득/;
+  /소득\s*인\s*정\s*액|소득\s*평\s*가\s*액|건\s*강?\s*겅\s*보험\s*료|건강\s*보험\s*료|건보료|개인\s*소득|본인\s*소득|본인의\s*소득|종합\s*소득/;
 
 /**
  * "본인" (the applicant themselves, not the household) used as an explicit
@@ -326,14 +332,37 @@ const MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE =
   /부부\s*합산(?:\s*연)?\s*소득|본인\s*[·・]\s*배우자\s*합산|신청인\s*(?:과|와)?\s*배우자\s*의?\s*소득\s*합계/;
 
 /**
- * Checkpoint-5 (new, THE core external-review fix): POSITIVE identification
- * of a household-scoped income label near the anchor — "가구소득"/"가구원
- * 소득"/"가구의 소득"/"가구단위 소득"/"가구 총소득"/"가구 합산소득"/"세대소득"/
- * "세대원 소득", or the anchor itself explicitly framed as household-unit
- * ("가구단위 중위소득"). This REPLACES the old "absence of a known
- * disqualifier -> assume household_income" logic, which a review of the
- * actual GitHub code correctly flagged as backwards: absence of a blacklist
- * hit never proves the measured variable is compatible with
+ * Checkpoint-6 (manual 42-hit review correction): "원가구" ("origin
+ * household" — the parental household a youth originally belongs to,
+ * PARENTS + youth + co-resident family, as distinct from the youth's own
+ * "독립가구"/independent household). Real MOIS youth-housing programs test
+ * BOTH household definitions with an AND ("청년 원가구*의 소득이 기준 중위소득
+ * 100% 이하이면서 청년 독립가구 소득이 기준 중위소득 60% 이하", 서비스ID
+ * 161300000099 청년월세 지원; see also 628000000155). Neither half is safely
+ * comparable to `annualHouseholdIncome`: this Phase's profile field
+ * represents the APPLICANT'S OWN current household, not a combined
+ * parent+child household the applicant may not even live in, and the real
+ * eligibility test additionally requires BOTH thresholds to hold
+ * simultaneously, which a single `median_income_threshold` rule cannot
+ * express. A manual, service-by-service review of the checkpoint-5 positive-
+ * signal hit set (see docs/median-income-42-hit-review.md) found this
+ * parser was incorrectly emitting a rule against the 원가구 (parental)
+ * threshold — the FIRST percent+boundary occurrence in the text — which is
+ * the wrong figure entirely for this profile field. Deliberately matched
+ * with a negative lookbehind for "지" so it does not collide with the
+ * unrelated, much more common "지원가구" ("supported household") token.
+ */
+const MEDIAN_INCOME_PARENTAL_ORIGIN_HOUSEHOLD_DISQUALIFIER_RE = /(?<!지)원\s*가구/;
+
+/**
+ * Checkpoint-6 (manual 42-hit review correction, THE core fix): POSITIVE
+ * identification of a household-scoped income label near the anchor —
+ * "가구소득"/"가구원 소득"/"가구의 소득"/"가구단위 소득"/"가구 총소득"/"가구
+ * 합산소득"/"세대소득"/"세대원 소득", or the anchor itself explicitly framed as
+ * household-unit ("가구단위 중위소득"). This REPLACES the old "absence of a
+ * known disqualifier -> assume household_income" logic, which a review of
+ * the actual GitHub code correctly flagged as backwards: absence of a
+ * blacklist hit never proves the measured variable is compatible with
  * `annualHouseholdIncome`/`householdIncomeBand`. A frozen-snapshot survey
  * (881 real 기준중위소득/중위소득 anchor hits) found only a small minority
  * (~40-80 raw hits, most overlapping with already-disqualified
@@ -344,17 +373,35 @@ const MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE =
  * parser now correctly treats as `ambiguous_unqualified` (unresolved)
  * instead of silently guessing household income. Real confirmed-positive
  * examples: 서비스ID 135200005013 ("(가구소득) 기준 중위소득 50% 이하"),
- * 161300000099 ("청년 원가구*의 소득이 기준 중위소득 100% 이하"), 149200000037
- * ("가구원 합산 소득이 기준 중위소득의 80% 이하"), 611000019628 ("가구합산소득이
- * 기준중위소득 85% 이하"), 999000000026 ("세대소득이 중위소득의 46% 이하").
- * The bounded `[^\n]{0,4}` gap (rather than an unbounded one) keeps this
- * intentionally tight -- wide enough to cross a short connective ("의",
- * "*의 ", a footnote asterisk) but not wide enough to accidentally bridge
- * across an unrelated clause boundary. `[·・]` and other punctuation inside
- * that 4-char budget is fine; a whole extra WORD is not, by design.
+ * 149200000037 ("가구원 합산 소득이 기준 중위소득의 80% 이하"), 611000019628
+ * ("가구합산소득이 기준중위소득 85% 이하"), 999000000026 ("세대소득이 중위소득의
+ * 46% 이하"). The bounded `[^\n]{0,4}` gap (rather than an unbounded one)
+ * keeps this intentionally tight -- wide enough to cross a short connective
+ * ("의", "*의 ", a footnote asterisk) but not wide enough to accidentally
+ * bridge across an unrelated clause boundary. `[·・]` and other punctuation
+ * inside that 4-char budget is fine; a whole extra WORD is not, by design.
+ *
+ * Checkpoint-6 negative-lookahead fix: the bounded gap can otherwise overlap
+ * with the "소득" that is ALREADY part of the "중위소득" anchor itself, e.g.
+ * "한부모가구(중위소득65% 이하)" (서비스ID 315000000104) or "전국가구 중위소득의
+ * 120%이하" (서비스ID 373000000126) — in both, "가구" is a HOUSEHOLD-TYPE noun
+ * (한부모가구/전국가구) with no distinct income label of its own; the "소득"
+ * the old regex matched was borrowed from "중위소득" a few characters later,
+ * not a genuine "가구...소득" phrase. The manual 42-hit review (see
+ * docs/median-income-42-hit-review.md) confirmed these are false positives:
+ * the text never actually states whose income (household? recognized
+ * income? something else?) is being measured — "가구" here only names a
+ * target household TYPE or is part of the benchmark's own full name
+ * ("전국가구 중위소득" = "nationwide HOUSEHOLD median income", a way of
+ * naming the government benchmark that says nothing about whether the
+ * COMPARED figure is household-scoped). The `(?!중위)` lookahead, applied at
+ * every position the gap could consume, blocks the match whenever "중위"
+ * (and hence the anchor's own "소득") falls inside the gap, while leaving
+ * every genuine real-positive example above untouched (none of their gaps
+ * contain "중위").
  */
 const MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE =
-  /가구(?:\s*원)?[^\n]{0,4}소득|세대(?:\s*원)?[^\n]{0,4}소득|가구\s*단위\s*(?:기준\s*)?중위\s*소득/;
+  /가구(?:\s*원)?(?:(?!중위)[^\n]){0,4}소득|세대(?:\s*원)?(?:(?!중위)[^\n]){0,4}소득|가구\s*단위\s*(?:기준\s*)?중위\s*소득/;
 
 /** An explicit calendar year adjacent to a median-income mention, either order: "2026년 기준중위소득" / "기준중위소득 2026년". */
 const MEDIAN_INCOME_YEAR_RE = /(?:(\d{4})\s*년[^\n]{0,6}중위소득|중위소득[^\n]{0,6}(\d{4})\s*년)/;
@@ -379,12 +426,33 @@ function parseMedianIncomeClause(text: string): { rule?: EligibilityRule; unreso
   const windowEnd = Math.min(text.length, matchIndex + full.length + 20);
   const window = text.slice(windowStart, windowEnd);
 
+  // Checkpoint-6 (manual 42-hit review correction): disqualifier terms are
+  // also checked in a WIDER trailing window than the narrow ±40/+20 window
+  // used for the positive-signal/individual-label checks. Real MOIS text
+  // very commonly follows an anchor sentence with a trailing asterisk
+  // footnote clarifying HOW the just-stated "소득기준" is actually computed
+  // — e.g. 서비스ID 461000000126 (치매 진료비): "기준중위소득 140% 초과자 *
+  // 소득기준 : 신청가구의 소득과 재산을 종합적으로 반영한 소득인정액" — the
+  // disqualifying "소득인정액" sits ~34 characters after the match, just past
+  // the narrow window's +20 reach, so the narrow window alone would
+  // misclassify this as household_income even though the very next clause
+  // states the real basis is 소득인정액. Deliberately asymmetric: only the
+  // DISQUALIFIER checks use this wider trailing window; the positive-signal
+  // and "본인" adjacency checks stay on the narrow `window` so they don't
+  // start reaching across unrelated later clauses. Widening only the
+  // disqualifier side can only ever move a result from household_income to
+  // unresolved, never the other way — false negatives OK, false positives
+  // are not.
+  const disqualifierWindowEnd = Math.min(text.length, matchIndex + full.length + 150);
+  const disqualifierWindow = text.slice(windowStart, disqualifierWindowEnd);
+
   if (
-    MEDIAN_INCOME_METRIC_DISQUALIFIER_RE.test(window) ||
-    MEDIAN_INCOME_TABLE_MARKER_RE.test(window) ||
+    MEDIAN_INCOME_METRIC_DISQUALIFIER_RE.test(disqualifierWindow) ||
+    MEDIAN_INCOME_TABLE_MARKER_RE.test(disqualifierWindow) ||
     MEDIAN_INCOME_INDIVIDUAL_LABEL_RE.test(window) ||
-    MEDIAN_INCOME_WAGE_INCOME_DISQUALIFIER_RE.test(window) ||
-    MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE.test(window)
+    MEDIAN_INCOME_WAGE_INCOME_DISQUALIFIER_RE.test(disqualifierWindow) ||
+    MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE.test(disqualifierWindow) ||
+    MEDIAN_INCOME_PARENTAL_ORIGIN_HOUSEHOLD_DISQUALIFIER_RE.test(window)
   ) {
     return { unresolved: text };
   }

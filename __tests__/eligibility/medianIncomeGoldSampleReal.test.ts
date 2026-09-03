@@ -78,6 +78,10 @@ describe("median income gold sample regression fixture (real MOIS excerpts)", ()
       "real-limitation-and-structure-within-median-income-only-first-captured", // AND structure (within median income itself)
       "real-rule-multiple-percentages-first-occurrence-wins", // multiple median-income percentages in one source
       "real-unresolved-percent-word-not-symbol", // 퍼센트 word form (unsupported)
+      "real-unresolved-metric-disqualifier-income-assessment-amount", // checkpoint-6: 소득평가액
+      "real-unresolved-parental-origin-household-disqualifier", // checkpoint-6: 원가구 vs 독립가구
+      "real-unresolved-positive-regex-collision", // checkpoint-6: positive-regex/중위소득 bridging bug (2 variants)
+      "real-unresolved-disqualifier-window-widened-sodeukinjeongaek-footnote", // checkpoint-6: widened disqualifier-only window
     ];
     for (const prefix of requiredPrefixes) {
       const hasCategory = [...ids].some((id) => id.startsWith(prefix));

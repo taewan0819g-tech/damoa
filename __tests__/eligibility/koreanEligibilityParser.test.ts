@@ -327,6 +327,118 @@ describe("extractEligibilityFromText", () => {
       }
     );
 
+    // Checkpoint-6 (Phase 3 pre-merge, 42-hit manual review of bucket A --
+    // see docs/median-income-42-hit-review.md): 소득평가액 (income-assessment
+    // amount) is the pre-asset-conversion component of 소득인정액 under
+    // Korean welfare law -- an administrative metric, not raw household
+    // income. Real example 서비스ID 654000000006 ("가구소득평가액이
+    // 기준중위소득 50%이하") was wrongly emitting a household-income rule
+    // before this fix, purely because "가구...소득" satisfied the positive
+    // regex and no disqualifier recognized "소득평가액" specifically.
+    it("leaves a '소득평가액' (income-assessment amount, not raw household income) median-income clause unresolved", () => {
+      const text = "가구소득평가액이 기준중위소득 50%이하";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    // Checkpoint-6: 원가구 (the youth applicant's PARENTAL-origin household,
+    // e.g. "청년 + 부모 + 부모와 동일 주소") is distinct from the applicant's
+    // own 독립가구 (independent household) and from Damoa's
+    // `annualHouseholdIncome` (the applicant's own current household).  Real
+    // youth-housing programs test BOTH via AND (서비스ID 161300000099,
+    // 628000000155) -- neither figure is safely comparable, so the clause
+    // must stay unresolved rather than misapplying either threshold.
+    it("leaves a '원가구' (parental-origin household, not applicant's own household) median-income clause unresolved", () => {
+      const text = "청년 원가구*의 소득이 기준 중위소득 100% 이하이면서 청년 독립가구 소득이 기준 중위소득 60% 이하";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    // Checkpoint-6: "지원가구" (supported household -- an unrelated, common
+    // administrative term) must NOT be caught by the 원가구 disqualifier
+    // merely because it also ends in "원가구"-like characters ("지" + "원가구"
+    // reads as "지원" + "가구" = "supported household", nothing to do with
+    // the youth's parental-origin household). The negative lookbehind for
+    // "지" exists specifically to avoid this collision.
+    it("does NOT falsely disqualify '지원가구' (supported household) as if it were '원가구'", () => {
+      const { rules, unresolvedClauses } = extractEligibilityFromText(
+        "f",
+        "가구소득이 지원가구 기준중위소득 100% 이하인 가구"
+      );
+      expect(unresolvedClauses).toEqual([]);
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          operator: "median_income_threshold",
+          value: expect.objectContaining({ percent: 100, boundary: "lte", incomeMetric: "household_income" }),
+        })
+      );
+    });
+
+    // Checkpoint-6: `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`'s bounded
+    // wildcard gap ("가구" ... [^\n]{0,4} ... "소득") could accidentally
+    // bridge INTO the trailing "소득" of "중위소득" itself, producing a false
+    // positive-signal match even when no genuine household-income phrase is
+    // present anywhere in the text. Real examples: 서비스ID 315000000104
+    // ("저소득 한부모가구(중위소득65% 이하)" -- no household-income label at
+    // all, "가구(중위소득"'s own "소득" is what the old regex wrongly grabbed)
+    // and 373000000126 ("전국가구 중위소득의 120%이하" -- "전국가구" is a
+    // national reference population, not the applicant's own household).
+    it.each([
+      ["저소득 한부모가구(중위소득65% 이하) 지원", "315000000104"],
+      ["전국가구 중위소득의 120%이하", "373000000126"],
+      ["한부모가구, 중위소득 80%이하의 저소득 가구 등", "O00030500005"],
+    ])(
+      "does NOT treat '가구...중위소득' bridging as a positive household-income signal (%s, real 서비스ID %s)",
+      (text) => {
+        const result = extractEligibilityFromText("f", text);
+        // Two of the three real excerpts also contain "한부모" (single
+        // parent), which correctly co-extracts an unrelated
+        // singleParentFamily rule from the same text -- that's expected and
+        // proves the median-income disqualification doesn't block unrelated
+        // family-dimension extraction (same pattern as the existing
+        // 소득인정액 disqualifier test above). Only the median-income rule
+        // itself must be absent.
+        const medianIncomeRules = result.rules.filter((r) => r.operator === "median_income_threshold");
+        expect(medianIncomeRules).toEqual([]);
+        expect(result.unresolvedClauses).toEqual([text]);
+      }
+    );
+
+    // Checkpoint-6: confirms the collision fix does NOT break genuine
+    // "가구 기준중위소득 ... 가구 소득합산액" style clauses where the gap
+    // between "가구" and "소득" does not pass through "중위" at all -- real
+    // example 서비스ID 627000000128.
+    it("still extracts a genuine '가구 기준중위소득 N% 이하(가구 소득합산액 기준)' rule after the collision fix", () => {
+      const text = "가구 기준중위소득 150% 이하(가구 소득합산액 기준)";
+      const { rules, unresolvedClauses } = extractEligibilityFromText("f", text);
+      expect(unresolvedClauses).toEqual([]);
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          operator: "median_income_threshold",
+          value: expect.objectContaining({ percent: 150, boundary: "lte", incomeMetric: "household_income" }),
+        })
+      );
+    });
+
+    // Checkpoint-6: the disqualifier-only check window was widened from
+    // matchIndex+full.length+20 to +150 chars, because a real trailing
+    // "* 소득기준 : ... 소득인정액" footnote can sit further past the anchor
+    // than the narrow window used for the positive-signal check. Real
+    // example 서비스ID 461000000126 (치매 진료비 및 약제비 본인부담금 지원):
+    // the genuine positive-signal label ("신청가구의 소득") is itself INSIDE
+    // this same trailing footnote, so a naive "just widen everything"
+    // fix would still be unsafe if it also widened the positive-signal
+    // window uniformly -- this widens ONLY the disqualifier check.
+    it("reaches a disqualifying '소득인정액' footnote beyond the narrow +20 window (widened disqualifier-only window)", () => {
+      const text =
+        "(소득기준) 기준중위소득 140% 초과자 * 소득기준 : 신청가구의 소득과 재산을 조사하여 산출한 소득인정액을 기준으로 합니다";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
     // Checkpoint-5 (the core fix): a bare percent+boundary clause with NO
     // disqualifier AND no explicit positive household-income label is now
     // `ambiguous_unqualified`, not silently assumed to be household income.
