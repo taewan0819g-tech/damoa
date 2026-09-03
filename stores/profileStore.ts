@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { UserProfile } from "@/types/profile";
+import { normalizeHomeownerConsistency } from "@/domain/profile/homeownerConsistency";
 
 interface ProfileState {
   profile: UserProfile;
@@ -19,8 +20,14 @@ export const useProfileStore = create<ProfileState>()(
     (set) => ({
       profile: EMPTY_PROFILE,
       onboardingCompleted: false,
-      updateProfile: (patch) => set((state) => ({ profile: { ...state.profile, ...patch } })),
-      setProfile: (profile) => set({ profile }),
+      // normalizeHomeownerConsistency is applied on every write path (here,
+      // setProfile below, and the persisted-storage `merge` below) so a
+      // contradictory `{ housingType: "own", homeowner: false }` profile can
+      // never exist regardless of which path produced it — see
+      // domain/profile/homeownerConsistency.ts.
+      updateProfile: (patch) =>
+        set((state) => ({ profile: normalizeHomeownerConsistency({ ...state.profile, ...patch }) })),
+      setProfile: (profile) => set({ profile: normalizeHomeownerConsistency(profile) }),
       completeOnboarding: () => set({ onboardingCompleted: true }),
       resetProfile: () => set({ profile: EMPTY_PROFILE, onboardingCompleted: false }),
     }),
@@ -28,10 +35,14 @@ export const useProfileStore = create<ProfileState>()(
       name: "damoa-profile",
       partialize: (state) => ({ profile: state.profile, onboardingCompleted: state.onboardingCompleted }),
       // Corrupted localStorage payloads fall back to defaults instead of throwing during hydration.
+      // Also normalizes homeowner/housingType consistency on rehydration, so
+      // an already-persisted contradictory profile (e.g. saved by an older
+      // build, or edited directly in localStorage) self-heals on next load.
       merge: (persisted, current) => {
         try {
           if (persisted && typeof persisted === "object") {
-            return { ...current, ...(persisted as Partial<ProfileState>) };
+            const merged = { ...current, ...(persisted as Partial<ProfileState>) };
+            return { ...merged, profile: normalizeHomeownerConsistency(merged.profile) };
           }
         } catch {
           // fall through to defaults

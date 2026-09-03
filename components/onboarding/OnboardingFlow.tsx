@@ -16,7 +16,7 @@ import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
 import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, type CurrentStatusOption } from "@/domain/profile/currentStatus";
 import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, type TriStateChoice } from "@/lib/constants/triState";
-import { todayLocalDateString } from "@/lib/dates/localDate";
+import { todayPolicyDateString } from "@/lib/dates/policyDate";
 import type { BenefitCategory } from "@/types/benefit";
 import type { HousingType, IncomeBand, MaritalStatus, UserProfile } from "@/types/profile";
 
@@ -45,10 +45,15 @@ interface Draft {
   /**
    * Genuine three-way choice — the same triState pattern as
    * singleParentFamily/multiculturalFamily: "not yet answered" (undefined)
-   * must never be silently treated as "does not own a home". Also
-   * deliberately NEVER inferred from housingType — a person can rent their
-   * current residence while owning another property, so "own"/"jeonse"/etc.
-   * says nothing definitive about homeowner status.
+   * must never be silently treated as "does not own a home".
+   *
+   * `housingType` inference is deliberately ONE-WAY: non-own tenure
+   * ("jeonse"/"monthly_rent"/"living_with_family") can never prove
+   * non-ownership (a person can rent their current residence while owning
+   * another property elsewhere), so those values never touch this field.
+   * But `housingType === "own"` ("자가") IS a sufficient positive ownership
+   * signal, so choosing it sets this to "yes" (see the housingType
+   * OptionList's onChange below) — never the other direction.
    */
   homeowner?: TriStateChoice;
   interests: BenefitCategory[];
@@ -128,7 +133,7 @@ export function OnboardingFlow() {
               id="birthDate"
               type="date"
               value={draft.birthDate}
-              max={todayLocalDateString()}
+              max={todayPolicyDateString()}
               onChange={(e) => patch({ birthDate: e.target.value })}
             />
             {draft.birthDate !== "" && !birthDateValid && (
@@ -269,7 +274,7 @@ export function OnboardingFlow() {
               <Input
                 id="marriageDate"
                 type="date"
-                max={todayLocalDateString()}
+                max={todayPolicyDateString()}
                 value={draft.marriageDate}
                 onChange={(e) => patch({ marriageDate: e.target.value })}
               />
@@ -313,7 +318,7 @@ export function OnboardingFlow() {
             name="housingType"
             options={HOUSING_OPTIONS}
             value={draft.housingType}
-            onChange={(v) => patch({ housingType: v })}
+            onChange={(v) => patch({ housingType: v, ...(v === "own" ? { homeowner: "yes" } : {}) })}
           />
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="homeowner">주택을 소유하고 있나요? (선택 입력)</Label>

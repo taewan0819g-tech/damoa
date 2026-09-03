@@ -19,7 +19,7 @@ import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
 import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, triStateFromBoolean } from "@/lib/constants/triState";
-import { todayLocalDateString } from "@/lib/dates/localDate";
+import { todayPolicyDateString } from "@/lib/dates/policyDate";
 import type { HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
@@ -79,7 +79,7 @@ export default function ProfilePage() {
             id="birthDate"
             type="date"
             value={profile.birthDate ?? ""}
-            max={todayLocalDateString()}
+            max={todayPolicyDateString()}
             onChange={(e) => updateProfile({ birthDate: e.target.value || undefined })}
           />
         </Field>
@@ -209,7 +209,7 @@ export default function ProfilePage() {
             <Input
               id="marriageDate"
               type="date"
-              max={todayLocalDateString()}
+              max={todayPolicyDateString()}
               value={profile.marriageDate ?? ""}
               onChange={(e) => updateProfile({ marriageDate: e.target.value || undefined })}
             />

@@ -1,5 +1,10 @@
-import { isValid, parseISO, startOfDay, subYears } from "date-fns";
 import { getNow } from "@/lib/dates/now";
+import {
+  policyDateString,
+  parseCalendarDateString,
+  subtractCalendarYears,
+  calendarDateToString,
+} from "@/lib/dates/policyDate";
 
 /**
  * Boundary word a real MOIS "혼인기간/혼인신고일 ... N년 (이내|미만|이하|초과|이상)"
@@ -16,22 +21,38 @@ export interface MarriageDurationSpec {
 
 /**
  * EXACT calendar-date marriage-duration comparison — deliberately NOT built
- * on a floored `differenceInYears` integer.
+ * on a floored `differenceInYears` integer, and deliberately NOT built on
+ * `Date` INSTANT arithmetic at all.
  *
- * An earlier version of this module computed `differenceInYears(now,
- * marriageDate)` and compared that floored integer against the policy's N
- * via the generic gte/lte/gt/lt operators. That silently misclassifies real
- * applicants: someone married 1 year 11 months ago has
- * `differenceInYears === 1`, so a floored "<= 1" check would WRONGLY pass a
- * "혼인신고일로부터 1년 이내" ("within 1 year of marriage registration")
- * requirement for someone who is actually 11 months past that cutoff.
+ * History:
+ * 1. An earlier version computed `differenceInYears(now, marriageDate)` and
+ *    compared that FLOORED integer against the policy's N. That silently
+ *    misclassifies real applicants: someone married 1 year 11 months ago has
+ *    `differenceInYears === 1`, so a floored "<= 1" check would WRONGLY pass
+ *    a "혼인신고일로부터 1년 이내" ("within 1 year of marriage registration")
+ *    requirement for someone who is actually 11 months past that cutoff.
+ * 2. A later version fixed the flooring bug by comparing `marriageDate`
+ *    against an exact `subYears(startOfDay(referenceDate), years)` `Date`
+ *    cutoff — correct, but the comparison was still `Date`-INSTANT-based via
+ *    `date-fns`, which reads/constructs `Date`s using the HOST MACHINE's own
+ *    configured timezone. A production server (often UTC) and a Korean
+ *    user's browser can disagree about which calendar day a given instant
+ *    falls on near local midnight, so `startOfDay` alone doesn't fully
+ *    remove the timezone dependency — it removes the TIME-OF-DAY dependency
+ *    but the DAY ITSELF could still differ depending on which machine
+ *    evaluates it.
  *
- * This version instead compares `marriageDate` directly against an exact
- * calendar cutoff date — `subYears(referenceDate, years)` — using date-fns,
- * which itself handles calendar/leap-year arithmetic correctly (e.g.
- * subtracting 1 year from Feb 29 lands on Feb 28 of a non-leap year). Greater
- * elapsed duration corresponds to an EARLIER marriage date, so the boundary
- * direction inverts relative to the duration-in-years reading:
+ * This version fixes BOTH: `referenceInstant` is first converted to a
+ * `YYYY-MM-DD` string under the single, explicit Asia/Seoul policy calendar
+ * (`policyDateString`, see lib/dates/policyDate.ts), and every comparison
+ * from there on — the cutoff subtraction, and the final pass/fail check — is
+ * done on plain calendar components / lexicographic `YYYY-MM-DD` string
+ * comparison, never on a `Date` instant. No hour, minute, or host timezone
+ * can perturb the result; only the Asia/Seoul CALENDAR DATE of
+ * `referenceInstant` and the raw `marriageDate` string matter.
+ *
+ * Greater elapsed duration corresponds to an EARLIER marriage date, so the
+ * boundary direction inverts relative to the duration-in-years reading:
  *
  *   "이내"/"이하" (duration <= N)  <=>  marriageDate >= cutoff (inclusive)
  *   "미만"        (duration <  N)  <=>  marriageDate >  cutoff (strict)
@@ -42,47 +63,32 @@ export interface MarriageDurationSpec {
  * `marriageDate` — mirroring `calculateAge`'s null-for-unusable-data
  * convention — so missing/bad profile data can never be treated as
  * disqualifying.
- *
- * DATE-ONLY vs TIME-OF-DAY (checkpoint-3 fix): eligibility here is
- * calendar-DATE based, not hour/minute based. `marriageDate` is a
- * date-only string ("2025-09-02") that `parseISO` interprets as LOCAL
- * midnight, but the default `referenceDate` is `getNow()` -> `new Date()`,
- * which carries the CURRENT time of day. Comparing an unnormalized
- * `referenceDate` against `parsed` therefore lets the wall-clock hour shift
- * the cutoff within the current day: e.g. evaluating at 2026-09-02 20:00
- * against a "1년 이내" (<=1 year) policy computes
- * `cutoff = subYears(2026-09-02T20:00, 1) = 2025-09-02T20:00`, which
- * WRONGLY fails a marriageDate of exactly `2025-09-02` (parsed as
- * `2025-09-02T00:00`) even though the two dates are exactly 1 calendar year
- * apart. Both `parsed` and `referenceDate` are normalized to local midnight
- * via `startOfDay` BEFORE computing the cutoff, so the comparison is always
- * calendar-day-exact regardless of what time of day it's evaluated.
- * Deliberately NOT done via a UTC ISO-string conversion, which would risk
- * shifting the calendar day itself for timezones behind UTC.
  */
 export function compareMarriageDurationToThreshold(
   marriageDate: string | undefined,
   spec: MarriageDurationSpec,
-  referenceDate: Date = getNow()
+  referenceInstant: Date = getNow()
 ): "pass" | "fail" | "unknown" {
   if (!marriageDate) return "unknown";
-  const parsedRaw = parseISO(marriageDate);
-  if (!isValid(parsedRaw)) return "unknown";
+  if (!parseCalendarDateString(marriageDate)) return "unknown";
 
-  const parsed = startOfDay(parsedRaw);
-  const referenceDay = startOfDay(referenceDate);
-  if (parsed > referenceDay) return "unknown";
+  const todayStr = policyDateString(referenceInstant);
+  if (marriageDate > todayStr) return "unknown"; // future marriageDate (safe: both YYYY-MM-DD strings)
 
-  const cutoff = subYears(referenceDay, spec.years);
+  const today = parseCalendarDateString(todayStr);
+  if (!today) return "unknown";
+
+  const cutoffStr = calendarDateToString(subtractCalendarYears(today, spec.years));
+
   switch (spec.boundary) {
     case "lte":
-      return parsed >= cutoff ? "pass" : "fail";
+      return marriageDate >= cutoffStr ? "pass" : "fail";
     case "lt":
-      return parsed > cutoff ? "pass" : "fail";
+      return marriageDate > cutoffStr ? "pass" : "fail";
     case "gte":
-      return parsed <= cutoff ? "pass" : "fail";
+      return marriageDate <= cutoffStr ? "pass" : "fail";
     case "gt":
-      return parsed < cutoff ? "pass" : "fail";
+      return marriageDate < cutoffStr ? "pass" : "fail";
     default:
       return "unknown";
   }

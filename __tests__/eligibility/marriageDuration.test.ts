@@ -6,24 +6,23 @@ import {
 
 /**
  * Domain-level boundary tests for compareMarriageDurationToThreshold — the
- * EXACT calendar-date marriage-duration comparison introduced to replace an
- * earlier floored `differenceInYears` design (see the function's own doc
- * comment in domain/profile/marriageDuration.ts for why flooring is unsafe:
- * someone married 1 year 11 months ago has differenceInYears===1, which
- * would WRONGLY pass a "1년 이내" cutoff under the floored design).
+ * EXACT calendar-date marriage-duration comparison, evaluated under the
+ * single fixed Asia/Seoul policy calendar (see
+ * domain/profile/marriageDuration.ts's own doc comment for why a floored
+ * `differenceInYears` is unsafe, and lib/dates/policyDate.ts for why `Date`
+ * INSTANT arithmetic — even after `startOfDay` — is unsafe: the calendar DAY
+ * itself, not just the time-of-day, can differ depending on which machine's
+ * timezone evaluates it).
  *
- * Every test injects an explicit `referenceDate` so the assertions are
- * deterministic and don't depend on the real wall-clock date.
+ * Every reference/marriage instant below is constructed with an EXPLICIT
+ * UTC offset (`+09:00` or `Z`), never a local multi-arg `Date(y, m, d)`
+ * constructor — so every assertion is deterministic regardless of the test
+ * runner's own machine timezone.
  */
 describe("compareMarriageDurationToThreshold", () => {
-  // Constructed via local-time (year, monthIndex, day) rather than a
-  // Z-suffixed ISO string: `compareMarriageDurationToThreshold` parses
-  // `marriageDate` with date-fns `parseISO`, which interprets a bare
-  // "YYYY-MM-DD" string as LOCAL midnight, not UTC midnight. Building the
-  // reference date the same (local) way keeps both sides of every
-  // comparison in the same calendar frame regardless of the machine's
-  // timezone.
-  const REF = new Date(2026, 2, 15); // 2026-03-15, local midnight
+  // 2026-03-15, 00:30 KST — deliberately non-midnight-UTC to catch any
+  // accidental reliance on UTC day boundaries.
+  const REF = new Date("2026-03-15T00:30:00+09:00");
 
   describe('"이내"/"이하" (duration <= N) -> marriageDate >= cutoff, inclusive', () => {
     const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
@@ -89,11 +88,11 @@ describe("compareMarriageDurationToThreshold", () => {
     it('married 2024-04-15 vs reference 2026-03-15 (1yr 11mo elapsed, floored differenceInYears===1) -> fail under exact-calendar "이내"', () => {
       // A floored differenceInYears(REF, "2024-04-15") === 1 (less than 2
       // full years elapsed) would have WRONGLY PASSED a naive "<= 1" check
-      // built on that floored integer. The exact cutoff is subYears(REF, 1)
-      // = 2025-03-15; "2024-04-15" is BEFORE that cutoff (more than 1 exact
-      // year has actually elapsed), so the real, unfloored comparison must
-      // fail — this is exactly the real-world misclassification the
-      // exact-calendar design fixes.
+      // built on that floored integer. The exact cutoff is subtracting 1
+      // calendar year from REF's policy date (2025-03-15); "2024-04-15" is
+      // BEFORE that cutoff (more than 1 exact year has actually elapsed), so
+      // the real, unfloored comparison must fail — this is exactly the
+      // real-world misclassification the exact-calendar design fixes.
       const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
       expect(compareMarriageDurationToThreshold("2024-04-15", spec, REF)).toBe("fail");
     });
@@ -101,34 +100,35 @@ describe("compareMarriageDurationToThreshold", () => {
 
   describe("leap-year boundary", () => {
     it("subtracting 1 year from a leap-year Feb 29 reference lands on Feb 28 (non-leap) -> exact cutoff comparison still correct", () => {
-      const leapRef = new Date(2024, 1, 29); // 2024-02-29, local midnight
+      const leapRef = new Date("2024-02-29T00:30:00+09:00"); // 2024-02-29 KST
       const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
-      // cutoff = subYears(2024-02-29, 1) = 2023-02-28 (date-fns clamps to the
-      // last valid day of Feb in the non-leap target year).
+      // cutoff = subtractCalendarYears(2024-02-29, 1) = 2023-02-28 (clamped
+      // to the last valid day of Feb in the non-leap target year).
       expect(compareMarriageDurationToThreshold("2023-02-28", spec, leapRef)).toBe("pass");
       expect(compareMarriageDurationToThreshold("2023-02-27", spec, leapRef)).toBe("fail");
     });
 
     it("marriageDate itself on a leap day (2024-02-29) compares correctly against a non-leap-year reference", () => {
-      const ref = new Date(2025, 2, 1); // 2025-03-01, local midnight
+      const ref = new Date("2025-03-01T00:30:00+09:00"); // 2025-03-01 KST
       const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
-      // cutoff = subYears(2025-03-01, 1) = 2024-03-01; marriageDate
-      // 2024-02-29 is before that cutoff, so the "within 1 year" window
-      // (marriageDate >= cutoff) is NOT satisfied.
+      // cutoff = subtractCalendarYears(2025-03-01, 1) = 2024-03-01;
+      // marriageDate 2024-02-29 is before that cutoff, so the "within 1
+      // year" window (marriageDate >= cutoff) is NOT satisfied.
       expect(compareMarriageDurationToThreshold("2024-02-29", spec, ref)).toBe("fail");
     });
   });
 
   describe("date-only vs time-of-day boundary (checkpoint-3 fix)", () => {
-    // Mirrors the exact scenario in the function's own doc comment: evaluating
-    // late in the day must NOT shift the cutoff within the current calendar
-    // day. Reference is 2026-09-02 20:30 LOCAL (deliberately non-midnight).
-    const REF_EVENING = new Date(2026, 8, 2, 20, 30); // 2026-09-02T20:30 local
+    // Reference is 2026-09-02 20:30 KST — deliberately non-midnight, to
+    // confirm the time-of-day component never perturbs the calendar-day
+    // comparison.
+    const REF_EVENING = new Date("2026-09-02T20:30:00+09:00");
 
     it('marriageDate exactly 1 calendar year before a non-midnight reference -> PASS under "이내" (inclusive)', () => {
       const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
-      // Without startOfDay normalization, cutoff would be 2025-09-02T20:30,
-      // which is AFTER parsed (2025-09-02T00:00), wrongly failing this case.
+      // Without day-level (not instant-level) cutoff comparison, cutoff would
+      // be 2025-09-02T20:30, which is AFTER parsed midnight 2025-09-02,
+      // wrongly failing this case.
       expect(compareMarriageDurationToThreshold("2025-09-02", spec, REF_EVENING)).toBe("pass");
     });
 
@@ -148,10 +148,10 @@ describe("compareMarriageDurationToThreshold", () => {
     });
 
     it("leap-year cutoff still resolves correctly when the reference carries a non-midnight time", () => {
-      // Reference: 2024-02-29 (leap day) at 23:45 local. cutoff = subYears of
-      // the DAY-NORMALIZED reference (2024-02-29T00:00) by 1 year, which
-      // date-fns clamps to 2023-02-28 (non-leap year has no Feb 29).
-      const leapRefEvening = new Date(2024, 1, 29, 23, 45);
+      // Reference: 2024-02-29 (leap day) at 23:45 KST. cutoff = subtracting
+      // 1 calendar year from the reference's Asia/Seoul policy date
+      // (2024-02-29), clamped to 2023-02-28 (non-leap year has no Feb 29).
+      const leapRefEvening = new Date("2024-02-29T23:45:00+09:00");
       const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
       expect(compareMarriageDurationToThreshold("2023-02-28", spec, leapRefEvening)).toBe("pass");
       expect(compareMarriageDurationToThreshold("2023-02-27", spec, leapRefEvening)).toBe("fail");
@@ -159,11 +159,39 @@ describe("compareMarriageDurationToThreshold", () => {
 
     it("a future marriageDate (later the same day as a non-midnight reference) still resolves to unknown, not a guessed pass/fail", () => {
       const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
-      // marriageDate "2026-09-03" is calendar-after REF_EVENING's day
-      // (2026-09-02), even though REF_EVENING's raw Date timestamp (20:30)
-      // is later in the day than 2026-09-03T00:00 would be on its own day —
-      // day-level comparison is what must govern here.
+      // marriageDate "2026-09-03" is calendar-after REF_EVENING's Asia/Seoul
+      // policy day (2026-09-02) — day-level comparison is what must govern
+      // here, not the raw instant's own time-of-day.
       expect(compareMarriageDurationToThreshold("2026-09-03", spec, REF_EVENING)).toBe("unknown");
+    });
+  });
+
+  describe("policy-timezone regression: reference instant is Sep 3 in Korea but Sep 2 in UTC", () => {
+    // 2026-09-03T00:30:00+09:00 == 2026-09-02T15:30:00Z. A UTC-local
+    // implementation (or one using the host machine's own timezone, if that
+    // machine happens to be UTC) would read this instant's calendar day as
+    // Sep 2 and get every boundary below wrong by exactly one day. The fixed
+    // Asia/Seoul policy calendar must read it as Sep 3 regardless of the
+    // evaluating machine's configured timezone.
+    const REF_KST_SEP3_UTC_SEP2 = new Date("2026-09-03T00:30:00+09:00");
+
+    it("confirms the instant is UTC Sep 2 but must be treated as policy-calendar Sep 3", () => {
+      expect(REF_KST_SEP3_UTC_SEP2.toISOString()).toBe("2026-09-02T15:30:00.000Z");
+    });
+
+    it('marriageDate 2025-09-03 (exactly 1 year before the KOREAN day) -> pass under "이내" (would wrongly fail if the day were read as Sep 2)', () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      expect(compareMarriageDurationToThreshold("2025-09-03", spec, REF_KST_SEP3_UTC_SEP2)).toBe("pass");
+    });
+
+    it('marriageDate 2025-09-02 (exactly 1 year before the UTC day, one day outside the correct KST-based window) -> fail under "이내"', () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      expect(compareMarriageDurationToThreshold("2025-09-02", spec, REF_KST_SEP3_UTC_SEP2)).toBe("fail");
+    });
+
+    it('marriageDate 2026-09-03 (same KOREAN calendar day as the reference) -> pass under "이내", not treated as future', () => {
+      const spec: MarriageDurationSpec = { years: 1, boundary: "lte" };
+      expect(compareMarriageDurationToThreshold("2026-09-03", spec, REF_KST_SEP3_UTC_SEP2)).toBe("pass");
     });
   });
 

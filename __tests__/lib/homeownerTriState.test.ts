@@ -59,12 +59,38 @@ describe("homeowner tri-state (Part 6)", () => {
     expect(source).not.toMatch(/homeowner:\s*false/);
   });
 
-  it("neither OnboardingFlow.tsx nor profile/page.tsx infer homeowner from housingType anymore", () => {
+  it("neither OnboardingFlow.tsx nor profile/page.tsx contain the OLD buggy inline inference pattern", () => {
     const onboarding = readSource("components/onboarding/OnboardingFlow.tsx");
     const profilePage = readSource("app/(app)/profile/page.tsx");
     // The old bug: `homeowner: v === "own" ? true : draft.homeowner` (and the
-    // profile-page equivalent keyed on `value`/`profile.homeowner`).
-    expect(onboarding).not.toMatch(/===\s*"own"\s*\?\s*true/);
-    expect(profilePage).not.toMatch(/===\s*"own"\s*\?\s*true/);
+    // profile-page equivalent keyed on `value`/`profile.homeowner`) — an
+    // inline ternary baked directly into the housingType onChange handler,
+    // with no protection against later being edited to also handle the
+    // (wrong) reverse direction. The CURRENT design intentionally still
+    // infers homeowner:true from housingType==="own" — that part of the old
+    // pattern was never the bug — but it now goes through the single
+    // reusable, one-way-only `normalizeHomeownerConsistency` (applied inside
+    // `patch()`/`updateProfile()`) rather than an inline per-callsite
+    // ternary, so this guard only rejects the OLD inline-ternary shape.
+    expect(onboarding).not.toMatch(/homeowner:\s*v\s*===\s*"own"\s*\?\s*true\s*:\s*draft\.homeowner/);
+    expect(profilePage).not.toMatch(/homeowner:\s*value\s*===\s*"own"\s*\?\s*true\s*:\s*profile\.homeowner/);
+  });
+
+  it("non-own housingType never appears paired with a hardcoded `homeowner: false` inference in either file", () => {
+    // Guards the asymmetry itself: no code path may read
+    // `housingType !== "own"` (or check for jeonse/monthly_rent/
+    // living_with_family) and conclude `homeowner: false`.
+    const onboarding = readSource("components/onboarding/OnboardingFlow.tsx");
+    const profilePage = readSource("app/(app)/profile/page.tsx");
+    expect(onboarding).not.toMatch(/!==\s*"own"\s*\?\s*false/);
+    expect(profilePage).not.toMatch(/!==\s*"own"\s*\?\s*false/);
+  });
+
+  it("choosing 자가 (own) in the onboarding housingType OptionList sets homeowner to the tri-state 'yes' value", () => {
+    const onboarding = readSource("components/onboarding/OnboardingFlow.tsx");
+    // The one-way inference now lives in the housingType OptionList's own
+    // onChange, spreading `{ homeowner: "yes" }` only when v === "own" —
+    // never touching homeowner for any other value.
+    expect(onboarding).toMatch(/v === "own" \? \{ homeowner: "yes" \} : \{\}/);
   });
 });

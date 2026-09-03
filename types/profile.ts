@@ -121,10 +121,20 @@ export interface UserProfile {
    * `false` — the onboarding/profile UI offers a genuine three-way choice
    * (소유하고 있어요/소유하고 있지 않아요/잘 모르겠어요, see
    * `HOMEOWNER_TRI_STATE_OPTIONS` in lib/constants/triState.ts), the same
-   * pattern as `singleParentFamily`/`multiculturalFamily`. Also deliberately
-   * NEVER inferred from `housingType`: a person can rent their current
-   * residence (`housingType: "jeonse"`/`"monthly_rent"`) while owning
-   * another property elsewhere, so housingType alone can't determine this.
+   * pattern as `singleParentFamily`/`multiculturalFamily`.
+   *
+   * `housingType` inference is deliberately ONE-WAY, not symmetric:
+   * non-own tenure (`"jeonse"`/`"monthly_rent"`/`"living_with_family"`)
+   * NEVER implies `homeowner: false` — a person can rent their current
+   * residence while owning another property elsewhere, so those values
+   * can't prove non-ownership. But `housingType: "own"` ("자가") IS a
+   * logically sufficient positive ownership signal for the residence being
+   * described, so it DOES safely imply `homeowner: true`. See
+   * `domain/profile/homeownerConsistency.ts`'s `normalizeHomeownerConsistency`,
+   * which is the single place this one-way rule is applied (onboarding,
+   * the profile-edit UI, and `parseUserProfile` for externally-supplied
+   * profiles) — it only ever pushes `homeowner` toward `true`, never
+   * toward `false`/`undefined`.
    */
   homeowner?: boolean;
   housingDeposit?: number;
