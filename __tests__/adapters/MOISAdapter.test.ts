@@ -82,8 +82,20 @@ describe("normalizeMOISServiceListItem eligibility", () => {
     ]);
   });
 
-  it("flags an unresolved 선정기준 clause (e.g. 기준 중위소득) via hasUnresolvedEligibility", () => {
+  it("parses a proven-safe 기준 중위소득 household-income 선정기준 clause into a median_income_threshold rule (checkpoint-3)", () => {
     const benefit = normalizeMOISServiceListItem(rawListItem({ 선정기준: "기준 중위소득 50% 이하 가구" }));
+    expect(benefit.eligibility?.rules).toEqual([
+      expect.objectContaining({
+        field: "householdIncomeRange",
+        operator: "median_income_threshold",
+        value: expect.objectContaining({ percent: 50, boundary: "lte", incomeMetric: "household_income" }),
+      }),
+    ]);
+    expect(benefit.hasUnresolvedEligibility).toBe(false);
+  });
+
+  it("flags an unresolved 선정기준 clause (e.g. 소득인정액-qualified 중위소득) via hasUnresolvedEligibility", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 선정기준: "소득인정액이 기준 중위소득 50% 이하 가구" }));
     expect(benefit.eligibility).toBeUndefined();
     expect(benefit.hasUnresolvedEligibility).toBe(true);
   });

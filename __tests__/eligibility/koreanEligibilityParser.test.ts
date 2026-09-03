@@ -146,10 +146,148 @@ describe("extractEligibilityFromText", () => {
       );
     });
 
-    it("reports 기준 중위소득 clauses as unresolved rather than guessing a threshold", () => {
+    it("parses a proven-safe 기준 중위소득 household-income clause into a median_income_threshold rule", () => {
       const result = extractEligibilityFromText("f", "기준 중위소득 50% 이하 가구");
+      expect(result.unresolvedClauses).toEqual([]);
+      expect(result.rules).toEqual([
+        expect.objectContaining({
+          field: "householdIncomeRange",
+          operator: "median_income_threshold",
+          required: true,
+          value: {
+            percent: 50,
+            boundary: "lte",
+            incomeMetric: "household_income",
+            householdSizeMode: "scales_with_profile_household",
+          },
+        }),
+      ]);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // MEDIAN INCOME (기준중위소득) — checkpoint-3 proven-safe subset
+  // ---------------------------------------------------------------------
+  describe("median income (기준중위소득)", () => {
+    it("parses each boundary word to the matching MedianIncomeBoundary", () => {
+      const cases: [string, string][] = [
+        ["기준중위소득 50% 이하인 가구", "lte"],
+        ["기준중위소득 50% 미만인 가구", "lt"],
+        ["기준중위소득 50% 이상인 가구", "gte"],
+        ["기준중위소득 50% 초과인 가구", "gt"],
+      ];
+      for (const [text, boundary] of cases) {
+        const { rules } = extractEligibilityFromText("f", text);
+        expect(rules).toEqual([
+          expect.objectContaining({
+            operator: "median_income_threshold",
+            value: expect.objectContaining({ boundary }),
+          }),
+        ]);
+      }
+    });
+
+    it("flips the boundary under adjacent negation (이하하지 않은 -> 초과)", () => {
+      const { rules } = extractEligibilityFromText("f", "기준중위소득 50% 이하하지 않은 가구");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          operator: "median_income_threshold",
+          value: expect.objectContaining({ boundary: "gt" }),
+        })
+      );
+    });
+
+    it("rejects an out-of-range percent (0 or > 500) as unresolved", () => {
+      const zero = extractEligibilityFromText("f", "기준중위소득 0% 이하인 가구");
+      expect(zero.rules).toEqual([]);
+      expect(zero.unresolvedClauses).toEqual(["기준중위소득 0% 이하인 가구"]);
+
+      const tooBig = extractEligibilityFromText("f", "기준중위소득 600% 이하인 가구");
+      expect(tooBig.rules).toEqual([]);
+      expect(tooBig.unresolvedClauses).toEqual(["기준중위소득 600% 이하인 가구"]);
+    });
+
+    it.each(["소득인정액", "건강보험료", "개인소득", "본인소득", "본인 소득"])(
+      "leaves the clause unresolved when %s appears near the anchor (different income metric)",
+      (disqualifier) => {
+        const text = `${disqualifier} 기준중위소득 50% 이하인 가구`;
+        const result = extractEligibilityFromText("f", text);
+        expect(result.rules).toEqual([]);
+        expect(result.unresolvedClauses).toEqual([text]);
+      }
+    );
+
+    it("routes a 소득인정액 clause phrased AFTER the percent/boundary through the same disqualifier window", () => {
+      const text = "기준중위소득 50% 이하의 소득인정액 가구";
+      const result = extractEligibilityFromText("f", text);
       expect(result.rules).toEqual([]);
-      expect(result.unresolvedClauses).toEqual(["기준 중위소득 50% 이하 가구"]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    it("no household-size number nearby -> scales_with_profile_household", () => {
+      const { rules } = extractEligibilityFromText("f", "기준중위소득 100% 이하인 가구");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          value: expect.objectContaining({ householdSizeMode: "scales_with_profile_household" }),
+        })
+      );
+      expect((rules[0].value as { fixedHouseholdSize?: number }).fixedHouseholdSize).toBeUndefined();
+    });
+
+    it("exactly one distinct household-size number nearby -> fixed_reference_household + fixedHouseholdSize", () => {
+      const { rules } = extractEligibilityFromText("f", "4인가구 기준 기준중위소득 60% 이하");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          value: expect.objectContaining({ householdSizeMode: "fixed_reference_household", fixedHouseholdSize: 4 }),
+        })
+      );
+    });
+
+    it("two or more distinct household-size numbers nearby -> unresolved (table-like text)", () => {
+      const text = "1인가구 100만원, 2인가구 150만원, 기준중위소득 50% 이하";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    it("repeated mentions of the SAME household size nearby still count as one distinct size (fixed, not ambiguous)", () => {
+      const { rules } = extractEligibilityFromText("f", "4인가구 4인 가구 기준중위소득 60% 이하");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          value: expect.objectContaining({ householdSizeMode: "fixed_reference_household", fixedHouseholdSize: 4 }),
+        })
+      );
+    });
+
+    it("extracts an explicit year stated before the anchor", () => {
+      const { rules } = extractEligibilityFromText("f", "2026년 기준중위소득 80% 이하인 가구");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: expect.objectContaining({ year: 2026 }) }));
+    });
+
+    it("extracts an explicit year stated after the anchor", () => {
+      const { rules } = extractEligibilityFromText("f", "기준중위소득 2026년 80% 이하인 가구");
+      expect(rules[0]).toEqual(expect.objectContaining({ value: expect.objectContaining({ year: 2026 }) }));
+    });
+
+    it("omits year when none is stated nearby (resolved at evaluation time instead)", () => {
+      const { rules } = extractEligibilityFromText("f", "기준중위소득 80% 이하인 가구");
+      expect((rules[0].value as { year?: number }).year).toBeUndefined();
+    });
+
+    it("no percent+boundary near the anchor -> unresolved, not silently dropped", () => {
+      const text = "기준중위소득을 고려하여 지원 여부를 결정한다";
+      const result = extractEligibilityFromText("f", text);
+      expect(result.rules).toEqual([]);
+      expect(result.unresolvedClauses).toEqual([text]);
+    });
+
+    it("attaches deterministic_text evidence with the full source text", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "기준중위소득 50% 이하인 가구");
+      expect(rules[0].evidence).toEqual({
+        sourceField: "지원대상",
+        sourceText: "기준중위소득 50% 이하인 가구",
+        extractionType: "deterministic_text",
+      });
     });
   });
 

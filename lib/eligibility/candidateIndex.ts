@@ -157,6 +157,7 @@ export function classifyDimension(rule: EligibilityRule): IndexDimension {
   if (rule.operator === "region_in") return "region";
   if (rule.operator === "target_scope_in") return "targetScope";
   if (
+    rule.operator === "median_income_threshold" ||
     rule.field === "individualIncomeRange" ||
     rule.field === "householdIncomeRange" ||
     rule.field === "annualIndividualIncome" ||
@@ -832,7 +833,24 @@ export function getCandidateBenefitsWithDiagnostics(
   }
 
   // --- income (per field: individualIncomeRange / householdIncomeRange) ---
-  let incomeKnown = false;
+  // `incomeKnown` gates whether the income FALLBACK bucket (below) is worth
+  // checking at all. It is deliberately computed from whether the profile
+  // has ANY resolvable income data (individualIncomeRange OR
+  // householdIncomeRange) — NOT from whether `index.incomeIndex.byField`
+  // happens to contain that field. `byField` is only populated when the
+  // catalog has at least one `range_within`/`range_within_interval` rule on
+  // that field (see `incomeRuleToInterval`); `median_income_threshold` rules
+  // always land in `fallback` (see `classifyDimension`) and can exist even
+  // when the catalog has zero indexable income-range rules at all, e.g. a
+  // catalog built entirely from MOIS 기준중위소득 clauses. Gating on
+  // `byField` membership alone would silently skip evaluating those fallback
+  // rules against a profile whose household income IS known, keeping
+  // benefits the full-scan reference path would correctly exclude —
+  // breaking the optimized/full-scan equivalence guarantee this index
+  // relies on (see the module docstring's mandatory-equivalence-test note).
+  const householdIncomeKnown = isPlainNumberRange(resolveProfileField(profile, "householdIncomeRange"));
+  const individualIncomeKnown = isPlainNumberRange(resolveProfileField(profile, "individualIncomeRange"));
+  let incomeKnown = householdIncomeKnown || individualIncomeKnown;
   for (const [field, fieldIndex] of index.incomeIndex.byField) {
     const range = resolveProfileField(profile, field);
     if (!isPlainNumberRange(range)) continue;

@@ -298,4 +298,98 @@ describe("evaluateEligibility", () => {
       expect(status).toBe("unknown");
     });
   });
+
+  describe("median_income_threshold (checkpoint-3, end-to-end through the rule engine)", () => {
+    // Current wall-clock date resolves to policy year 2026 (see
+    // domain/medianIncome/table.ts). 2026 4-person monthly = 6,494,738 KRW ->
+    // 50% annual threshold = 6,494,738 * 0.5 * 12 = 38,968,428.
+    const THRESHOLD_50PCT_4PERSON_2026 = 38968428;
+
+    function medianIncomeGroup(overrides: Partial<Record<string, unknown>> = {}): EligibilityRuleGroup {
+      return {
+        type: "all",
+        rules: [
+          {
+            id: "median-income",
+            field: "householdIncomeRange",
+            operator: "median_income_threshold",
+            required: true,
+            value: {
+              percent: 50,
+              boundary: "lte",
+              incomeMetric: "household_income",
+              householdSizeMode: "scales_with_profile_household",
+              ...overrides,
+            },
+          },
+        ],
+      };
+    }
+
+    it("evaluates against the whole profile (householdIncomeRange AND householdSize), ignoring rule.field's literal value", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: medianIncomeGroup() }), {
+        householdSize: 4,
+        annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026,
+      });
+      expect(status).toBe("likely_eligible");
+    });
+
+    it("fails when household income exceeds the threshold", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: medianIncomeGroup() }), {
+        householdSize: 4,
+        annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026 + 1,
+      });
+      expect(status).toBe("not_eligible");
+    });
+
+    it("resolves to unknown when householdSize is missing (can't pick a table row)", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: medianIncomeGroup() }), {
+        annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026,
+      });
+      expect(status).toBe("unknown");
+    });
+
+    it("resolves to unknown when household income is missing", () => {
+      const status = evaluateEligibility(makeBenefit({ eligibility: medianIncomeGroup() }), {
+        householdSize: 4,
+      });
+      expect(status).toBe("unknown");
+    });
+
+    it("fixed_reference_household uses the spec's fixedHouseholdSize, not the applicant's own household size", () => {
+      const group = medianIncomeGroup({ householdSizeMode: "fixed_reference_household", fixedHouseholdSize: 4 });
+      const status = evaluateEligibility(makeBenefit({ eligibility: group }), {
+        householdSize: 1, // would resolve to a much lower threshold if used
+        annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026,
+      });
+      expect(status).toBe("likely_eligible");
+    });
+
+    it("Section M regression: a single successful median_income_threshold parse must NOT promote an otherwise-incomplete benefit to likely_eligible", () => {
+      const benefit = {
+        eligibility: medianIncomeGroup(),
+        hasUnresolvedEligibility: true, // e.g. an unparsed 소득인정액 clause elsewhere in the source
+      };
+      const status = evaluateEligibility(makeBenefit(benefit), {
+        householdSize: 4,
+        annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026,
+      });
+      // All parsed rules pass, but the benefit is known-incomplete, so the
+      // generic downgrade logic in evaluateEligibilityDetailed must hold this
+      // at "unknown" rather than over-claiming likely_eligible.
+      expect(status).toBe("unknown");
+    });
+
+    it("Section M regression: a definite FAIL still resolves to not_eligible even when the benefit is incomplete", () => {
+      const benefit = {
+        eligibility: medianIncomeGroup(),
+        hasUnresolvedEligibility: true,
+      };
+      const status = evaluateEligibility(makeBenefit(benefit), {
+        householdSize: 4,
+        annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026 + 1,
+      });
+      expect(status).toBe("not_eligible");
+    });
+  });
 });

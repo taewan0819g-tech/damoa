@@ -114,7 +114,29 @@ export type RuleOperator =
    * `compareMarriageDurationToThreshold` for the exact
    * subYears(referenceDate, years)-cutoff semantics per boundary word.
    */
-  | "marriage_duration_within";
+  | "marriage_duration_within"
+  /**
+   * 기준중위소득 (Korean "standard median income") percentage-threshold
+   * comparison, e.g. "기준중위소득 50% 이하". `field` is always
+   * `"householdIncomeRange"` (documentation/dimension-classification only —
+   * see `target_scope_in`'s precedent — the operator resolves BOTH
+   * `householdIncomeRange` and `householdSize` from the whole profile, never
+   * just the named field). `value` is a `MedianIncomeThresholdSpec` (see
+   * domain/medianIncome/evaluate.ts). Never built from a literal statistical
+   * median computed at request time — 기준중위소득 is a specific annually
+   * re-published MOHW table figure per household size (see
+   * domain/medianIncome/table.ts).
+   *
+   * Deliberately narrower than the general "income" concept: the production
+   * parser only ever emits this operator for clauses PROVEN to reference
+   * HOUSEHOLD income at a stated 기준중위소득 percentage — never 개인소득
+   * (individual income), 소득인정액 (recognized income, which subtracts
+   * assets/expenses and is a different number), health-insurance-premium
+   * bands, or a bare qualitative "저소득층" mention. Everything else stays
+   * unresolved rather than being force-fit into this operator (see
+   * koreanEligibilityParser.ts's median-income classifier).
+   */
+  | "median_income_threshold";
 
 /**
  * Where a rule came from. Never expose this in end-user UI — it exists so

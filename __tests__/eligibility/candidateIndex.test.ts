@@ -850,6 +850,208 @@ describe("optimized (indexed) retrieval vs full-scan reference implementation �
   });
 });
 
+describe("median_income_threshold candidate index (checkpoint-3: incomeKnown fallback-gate fix)", () => {
+  // Deliberately a catalog with ONLY median_income_threshold rules for
+  // income — NO range_within/range_within_interval income rules at all, so
+  // `incomeIndex.byField` stays completely empty (median_income_threshold
+  // rules always land in `incomeIndex.fallback`, never `byField` — see
+  // `classifyDimension`/`incomeRuleToInterval`). This is the exact shape
+  // that exposed the pre-fix bug: `incomeKnown` used to be derived SOLELY
+  // from `byField`'s contents, so with an empty `byField` the fallback
+  // bucket (containing every median-income rule) was never checked even
+  // when the profile's household income was fully known — silently
+  // under-pruning and breaking indexed-vs-full-scan equivalence.
+  function medianIncomeCatalog(): Benefit[] {
+    return [
+      benefit("mi-unconstrained"),
+      benefit("mi-50-profile-lte", {
+        eligibility: {
+          type: "all",
+          rules: [
+            {
+              id: "mi",
+              field: "householdIncomeRange",
+              operator: "median_income_threshold",
+              required: true,
+              value: {
+                percent: 50,
+                boundary: "lte",
+                incomeMetric: "household_income",
+                householdSizeMode: "scales_with_profile_household",
+              },
+            },
+          ],
+        },
+      }),
+      benefit("mi-100-profile-lte", {
+        eligibility: {
+          type: "all",
+          rules: [
+            {
+              id: "mi",
+              field: "householdIncomeRange",
+              operator: "median_income_threshold",
+              required: true,
+              value: {
+                percent: 100,
+                boundary: "lte",
+                incomeMetric: "household_income",
+                householdSizeMode: "scales_with_profile_household",
+              },
+            },
+          ],
+        },
+      }),
+      benefit("mi-fixed-4-60-lte", {
+        eligibility: {
+          type: "all",
+          rules: [
+            {
+              id: "mi",
+              field: "householdIncomeRange",
+              operator: "median_income_threshold",
+              required: true,
+              value: {
+                percent: 60,
+                boundary: "lte",
+                incomeMetric: "household_income",
+                householdSizeMode: "fixed_reference_household",
+                fixedHouseholdSize: 4,
+              },
+            },
+          ],
+        },
+      }),
+      benefit("mi-80-profile-gte", {
+        eligibility: {
+          type: "all",
+          rules: [
+            {
+              id: "mi",
+              field: "householdIncomeRange",
+              operator: "median_income_threshold",
+              required: true,
+              value: {
+                percent: 80,
+                boundary: "gte",
+                incomeMetric: "household_income",
+                householdSizeMode: "scales_with_profile_household",
+              },
+            },
+          ],
+        },
+      }),
+      // Compound: also requires age, so a definite median-income FAIL must
+      // still prune this benefit via the "all" group (both are required).
+      benefit("mi-50-profile-lte-and-age-adult", {
+        eligibility: {
+          type: "all",
+          rules: [
+            {
+              id: "mi",
+              field: "householdIncomeRange",
+              operator: "median_income_threshold",
+              required: true,
+              value: {
+                percent: 50,
+                boundary: "lte",
+                incomeMetric: "household_income",
+                householdSizeMode: "scales_with_profile_household",
+              },
+            },
+            { id: "age", field: "age", operator: "gte", value: 19, required: true },
+          ],
+        },
+      }),
+    ];
+  }
+
+  // 2026 4-person monthly = 6,494,738 KRW (see domain/medianIncome/table.ts)
+  // -> 50% annual threshold = 38,968,428; 100% annual threshold = 77,936,856.
+  const THRESHOLD_50PCT_4PERSON_2026 = 38968428;
+
+  it("a profile with known household income + size that definitely FAILS a median-income rule is excluded identically by both the indexed and full-scan paths", () => {
+    const catalog = medianIncomeCatalog();
+    const index = buildCandidateIndex(catalog);
+    const profile: UserProfile = { householdSize: 4, annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026 + 1 };
+
+    const indexed = getCandidateBenefits(index, profile).map((b) => b.id).sort();
+    const fullScan = getCandidateBenefitsFullScan(index, profile).map((b) => b.id).sort();
+
+    expect(indexed).toEqual(fullScan);
+    // The core regression assertion: this benefit's required median-income
+    // rule definitively fails at this income, so BOTH paths must prune it —
+    // pre-fix, the indexed path would have wrongly kept it (empty byField
+    // meant the fallback bucket holding this rule was never consulted).
+    expect(indexed).not.toContain("mi-50-profile-lte");
+    expect(indexed).not.toContain("mi-50-profile-lte-and-age-adult");
+  });
+
+  it("a profile that PASSES a median-income rule is kept by both paths", () => {
+    const catalog = medianIncomeCatalog();
+    const index = buildCandidateIndex(catalog);
+    const profile: UserProfile = { householdSize: 4, annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026, birthDate: "2000-01-01" };
+
+    const indexed = getCandidateBenefits(index, profile).map((b) => b.id).sort();
+    const fullScan = getCandidateBenefitsFullScan(index, profile).map((b) => b.id).sort();
+
+    expect(indexed).toEqual(fullScan);
+    expect(indexed).toContain("mi-50-profile-lte");
+    expect(indexed).toContain("mi-50-profile-lte-and-age-adult");
+  });
+
+  it("equivalence sweep across household size / income-band / fixed-vs-profile combinations (mismatch count === 0)", () => {
+    const catalog = medianIncomeCatalog();
+    const index = buildCandidateIndex(catalog);
+    const householdSizes: (number | undefined)[] = [undefined, 1, 2, 3, 4, 5, 7];
+    const incomeBands: (UserProfile["householdIncomeBand"] | undefined)[] = [
+      undefined,
+      "none",
+      "under_1000",
+      "1000_2000",
+      "2000_3000",
+      "3000_4000",
+      "4000_5000",
+      "5000_7000",
+      "over_7000",
+      "unknown",
+    ];
+
+    const mismatches: { profile: UserProfile; indexed: string[]; fullScan: string[] }[] = [];
+    let combinationCount = 0;
+    for (const householdSize of householdSizes) {
+      for (const householdIncomeBand of incomeBands) {
+        combinationCount += 1;
+        const profile: UserProfile = {};
+        if (householdSize !== undefined) profile.householdSize = householdSize;
+        if (householdIncomeBand !== undefined) profile.householdIncomeBand = householdIncomeBand;
+
+        const indexed = getCandidateBenefits(index, profile).map((b) => b.id).sort();
+        const fullScan = getCandidateBenefitsFullScan(index, profile).map((b) => b.id).sort();
+        if (JSON.stringify(indexed) !== JSON.stringify(fullScan)) {
+          mismatches.push({ profile, indexed, fullScan });
+        }
+      }
+    }
+    expect(combinationCount).toBe(householdSizes.length * incomeBands.length);
+    expect(mismatches.length, `expected ZERO mismatches, found ${mismatches.length}: ${JSON.stringify(mismatches.slice(0, 3))}`).toBe(0);
+  });
+
+  it("median-income benefits added into the FULL synthetic catalog (mixed with range_within/range_within_interval income rules) still hold zero-mismatch equivalence", () => {
+    const catalog = [...buildSyntheticCatalog(), ...medianIncomeCatalog()];
+    const index = buildCandidateIndex(catalog);
+    const mismatches: { profile: UserProfile; indexed: string[]; fullScan: string[] }[] = [];
+    for (const profile of [...handPickedProfiles(), ...randomProfiles(150, 777)]) {
+      const indexed = getCandidateBenefits(index, profile).map((b) => b.id).sort();
+      const fullScan = getCandidateBenefitsFullScan(index, profile).map((b) => b.id).sort();
+      if (JSON.stringify(indexed) !== JSON.stringify(fullScan)) {
+        mismatches.push({ profile, indexed, fullScan });
+      }
+    }
+    expect(mismatches.length, `expected ZERO mismatches, found ${mismatches.length}: ${JSON.stringify(mismatches.slice(0, 3))}`).toBe(0);
+  });
+});
+
 describe("candidate retrieval diagnostics — profile richness reduces touched work (section 7 / section 10)", () => {
   it("never performs a full linear scan of the whole constrained set: touched-entry count stays small for a sparse profile against a large catalog", () => {
     // A large catalog dominated by entries irrelevant to a sparse "age only" profile.

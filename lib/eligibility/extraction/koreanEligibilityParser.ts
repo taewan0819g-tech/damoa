@@ -4,6 +4,7 @@ import { resolveCityProvinces, getShortDistrictNames } from "../regionGazetteer"
 import { intervalFromBoundaryWord } from "../interval";
 import { EMPLOYMENT_TARGET_SPECS } from "../employment";
 import type { MarriageDurationBoundary, MarriageDurationSpec } from "@/domain/profile/marriageDuration";
+import type { MedianIncomeBoundary, MedianIncomeThresholdSpec } from "@/domain/medianIncome/evaluate";
 
 /**
  * Deterministic Korean eligibility text parser.
@@ -146,19 +147,131 @@ function parseManwonNumber(raw: string): number | undefined {
 const MANWON_TO_KRW = 10000;
 
 /**
- * "중위소득" (median-income-percentage) thresholds are intentionally NOT
- * parsed here (section 8): computing them correctly requires a known
+ * "중위소득" (median-income-percentage) thresholds require a known
  * householdSize, a known applicable year, and an official median-income
- * table — none of which this deterministic text parser has access to.
- * Detecting the phrase is still useful: it tells the caller there IS a real
- * income-eligibility clause, just one we can't safely resolve, so it's
- * reported as unresolved rather than silently dropped.
+ * table to actually resolve to pass/fail — none of which this deterministic
+ * TEXT parser has access to, so this parser only ever extracts the SHAPE
+ * (percent + boundary + household-size-mode + optional explicit year) into a
+ * `median_income_threshold` rule; the actual lookup/comparison happens at
+ * evaluation time (see domain/medianIncome/evaluate.ts).
+ *
+ * Only the proven-safe subset below is converted to a rule
+ * (`parseMedianIncomeClause`) — every "기준중위소득" mention that doesn't fit
+ * that shape (no percent+boundary found near the anchor, the nearby text
+ * signals a DIFFERENT metric such as 소득인정액/건강보험료/개인소득, or 2+
+ * distinct household-size numbers sit nearby — table-like text we can't
+ * safely pick one row from) still falls back to unresolved rather than being
+ * silently dropped, exactly like the old always-punt behavior this replaces.
  */
 const MEDIAN_INCOME_RE = /기준\s*중위소득/;
 
+/**
+ * A percent number + Korean boundary word anchored near a "기준중위소득"
+ * mention, e.g. "기준중위소득 50% 이하", "기준 중위소득의 60%이하", "기준중위소득
+ * 대비 100% 이하". The bounded, non-greedy gap between the anchor and the
+ * digit run allows short connective words (의/대비/공백) without risking a
+ * match against an unrelated LATER percent elsewhere in a long paragraph.
+ */
+const MEDIAN_INCOME_PERCENT_RE = /기준\s*중위소득[^\n]{0,12}?(\d{1,3})\s*%\s*(이상|초과|이하|미만)/;
+
+const MEDIAN_INCOME_WORD_TO_BOUNDARY: Record<string, MedianIncomeBoundary> = {
+  "이하": "lte",
+  "미만": "lt",
+  "이상": "gte",
+  "초과": "gt",
+};
+
+/**
+ * Real MOIS median-income clauses sometimes compare a DIFFERENT figure
+ * against a 기준중위소득 percentage rather than raw household income:
+ * 소득인정액 ("recognized income" — assets/expenses-adjusted, a materially
+ * different number than gross household income), 건강보험료 (health-insurance
+ * premium band, only correlated with income, not equal to it), and
+ * 개인소득/본인(의) 소득 (individual, not household, income). Any of these
+ * appearing near the match means the clause is NOT safely a household-income
+ * comparison, so it's left unresolved rather than mis-typed as
+ * `household_income` (see MedianIncomeMetric's doc in
+ * domain/medianIncome/evaluate.ts).
+ */
+const MEDIAN_INCOME_METRIC_DISQUALIFIERS = ["소득인정액", "건강보험료", "개인소득", "본인소득", "본인 소득"];
+
+/** "N인가구"/"N인 가구"/"N인가족"/"N인 기준" — an explicit household-size number sitting next to a median-income mention (see `parseMedianIncomeClause`'s householdSizeMode logic). */
+const MEDIAN_INCOME_HOUSEHOLD_SIZE_RE = /(\d{1,2})\s*인\s*(?:가구|가족|기준)/g;
+
+/** An explicit calendar year adjacent to a median-income mention, either order: "2026년 기준중위소득" / "기준중위소득 2026년". */
+const MEDIAN_INCOME_YEAR_RE = /(?:(\d{4})\s*년[^\n]{0,6}중위소득|중위소득[^\n]{0,6}(\d{4})\s*년)/;
+
+/**
+ * Extracts the proven-safe subset of a "기준중위소득" clause into a
+ * `median_income_threshold` rule. See the module-level doc above
+ * `MEDIAN_INCOME_RE` for the overall scope/safety philosophy. Always called
+ * with `MEDIAN_INCOME_RE.test(text)` already true, so `text` is guaranteed
+ * to contain at least one 기준중위소득 mention.
+ */
+function parseMedianIncomeClause(text: string): { rule?: EligibilityRule; unresolved?: string } {
+  const match = text.match(MEDIAN_INCOME_PERCENT_RE);
+  if (!match) return { unresolved: text };
+
+  const [full, percentStr, word] = match;
+  const percent = Number(percentStr);
+  if (!Number.isFinite(percent) || percent <= 0 || percent > 500) return { unresolved: text };
+
+  const matchIndex = text.indexOf(full);
+  const windowStart = Math.max(0, matchIndex - 40);
+  const windowEnd = Math.min(text.length, matchIndex + full.length + 20);
+  const window = text.slice(windowStart, windowEnd);
+
+  if (MEDIAN_INCOME_METRIC_DISQUALIFIERS.some((token) => window.includes(token))) {
+    return { unresolved: text };
+  }
+
+  const negated = isNegatedAfter(text, matchIndex + full.length);
+  const effectiveWord = negated ? BOUNDARY_FLIP[word] : word;
+  const boundary = MEDIAN_INCOME_WORD_TO_BOUNDARY[effectiveWord];
+  if (!boundary) return { unresolved: text };
+
+  const sizeMatches = [...window.matchAll(MEDIAN_INCOME_HOUSEHOLD_SIZE_RE)].map((m) => Number(m[1]));
+  const distinctSizes = [...new Set(sizeMatches)];
+
+  let householdSizeMode: MedianIncomeThresholdSpec["householdSizeMode"];
+  let fixedHouseholdSize: number | undefined;
+  if (distinctSizes.length === 0) {
+    householdSizeMode = "scales_with_profile_household";
+  } else if (distinctSizes.length === 1) {
+    householdSizeMode = "fixed_reference_household";
+    fixedHouseholdSize = distinctSizes[0];
+  } else {
+    // 2+ distinct household-size numbers nearby: table-like text ("1인
+    // 100만원, 2인 150만원...") we can't safely pick a single row from.
+    return { unresolved: text };
+  }
+
+  const yearMatch = window.match(MEDIAN_INCOME_YEAR_RE);
+  const year = yearMatch ? Number(yearMatch[1] ?? yearMatch[2]) : undefined;
+
+  const spec: MedianIncomeThresholdSpec = {
+    percent,
+    boundary,
+    incomeMetric: "household_income",
+    householdSizeMode,
+    ...(fixedHouseholdSize !== undefined ? { fixedHouseholdSize } : {}),
+    ...(year !== undefined ? { year } : {}),
+  };
+
+  return {
+    rule: {
+      id: `text-median-income-${boundary}-${percent}`,
+      field: "householdIncomeRange",
+      operator: "median_income_threshold",
+      value: spec,
+      required: true,
+    },
+  };
+}
+
 function parseIncomeClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
   if (MEDIAN_INCOME_RE.test(text)) {
-    return { unresolved: text };
+    return parseMedianIncomeClause(text);
   }
 
   const incomeRe = /(개인|가구)?\s*연\s?소득[^0-9]{0,4}([0-9,천백십]+)\s*만\s?원[^가-힣]{0,2}(이상|초과|이하|미만)/;
@@ -1209,7 +1322,7 @@ function ruleFieldSignalPresent(field: string, window: string): boolean {
       return window.includes("사업자등록");
     case "individualIncomeRange":
     case "householdIncomeRange":
-      return /연\s?소득/.test(window);
+      return /연\s?소득|기준\s*중위소득/.test(window);
     case "childrenCount":
       return /자녀\s*\d+\s*(?:명|인)/.test(window);
     case "singleParentFamily":

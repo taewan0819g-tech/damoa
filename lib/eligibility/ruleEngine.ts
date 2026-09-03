@@ -11,6 +11,10 @@ import { matchTargetScope, type TargetScope } from "./targetScope";
 import { compareRangeToInterval, isInterval } from "./interval";
 import { matchStatusCompat, type StatusCompatSpec } from "./employment";
 import { compareMarriageDurationToThreshold, type MarriageDurationSpec } from "@/domain/profile/marriageDuration";
+import {
+  compareHouseholdIncomeToMedianIncomeThreshold,
+  type MedianIncomeThresholdSpec,
+} from "@/domain/medianIncome/evaluate";
 
 export type NodeResult = "pass" | "fail" | "unknown" | "skip";
 type CompareResult = "pass" | "fail" | "unknown";
@@ -113,6 +117,17 @@ export function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeR
   if (rule.operator === "target_scope_in") {
     if (!Array.isArray(rule.value)) return rule.required ? "unknown" : "skip";
     const result = matchTargetScope(profile, rule.value as TargetScope[]);
+    if (result === "unknown") return rule.required ? "unknown" : "skip";
+    return result;
+  }
+
+  // median_income_threshold ignores `field` and is evaluated against the
+  // whole profile (needs BOTH householdIncomeRange and householdSize) — see
+  // RuleEvidence / MedianIncomeThresholdSpec docs, same precedent as
+  // target_scope_in above.
+  if (rule.operator === "median_income_threshold") {
+    if (typeof rule.value !== "object" || rule.value === null) return rule.required ? "unknown" : "skip";
+    const result = compareHouseholdIncomeToMedianIncomeThreshold(profile, rule.value as MedianIncomeThresholdSpec);
     if (result === "unknown") return rule.required ? "unknown" : "skip";
     return result;
   }
