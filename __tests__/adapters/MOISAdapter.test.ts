@@ -83,7 +83,7 @@ describe("normalizeMOISServiceListItem eligibility", () => {
   });
 
   it("parses a proven-safe 기준 중위소득 household-income 선정기준 clause into a median_income_threshold rule (checkpoint-3)", () => {
-    const benefit = normalizeMOISServiceListItem(rawListItem({ 선정기준: "기준 중위소득 50% 이하 가구" }));
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 선정기준: "가구소득 기준 중위소득 50% 이하 가구" }));
     expect(benefit.eligibility?.rules).toEqual([
       expect.objectContaining({
         field: "householdIncomeRange",

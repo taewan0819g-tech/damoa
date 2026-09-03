@@ -45,6 +45,21 @@ export interface MedianIncomeYearEntry {
    * 6-person and 7-person figures for this year are independently verified
    * AND the resulting per-person increment has been corroborated — never
    * derived speculatively.
+   *
+   * Historical provenance re-check (2026-09-03, checkpoint-5 pass): this
+   * exact formula/rule text (add the 6-to-7-person delta per additional
+   * member beyond 7) is independently corroborated with matching numeric
+   * increments for 2024 (896,625원), 2025 (923,623원), and 2026 (959,198원) —
+   * each equals this table's own `householdValues[7] - householdValues[6]`
+   * for that year. The rule itself is a fixed 국민기초생활보장법 시행령
+   * provision applied uniformly every year (not something that is
+   * re-decided annually), so for 2021-2023 — where a third-party numeric
+   * restatement of the increment was not found in this pass — the
+   * `eightPlusFormula` value remains sound: it is pure arithmetic
+   * (verified householdValues[7] minus verified householdValues[6], both
+   * independently sourced from mohw.go.kr) applying the same
+   * externally-corroborated rule, not a separately-sourced fact requiring
+   * its own citation. No year's eightPlusFormula was dropped.
    */
   eightPlusFormula?: {
     /** KRW added per household member beyond 7 (== householdValues[7] - householdValues[6] for a verified year). */
@@ -150,7 +165,11 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
       "'announced'가 아니라 'partial'로 남아있는 이유. 7인 가구 금액 및 8인 이상 산정식은 " +
       "조사 시점(2026-09) 기준 어떤 소스에서도 확인되지 않아 UNKNOWN으로 유지 — mohw.go.kr의 " +
       "공식 '연도별 기준중위소득' 페이지(2021-2026 entries가 가리키는 sourceUrl)가 2027 행으로 " +
-      "갱신되면 전체를 재검증할 것.",
+      "갱신되면 전체를 재검증할 것. 재확인(2026-09-03): mohw.go.kr 공식 페이지는 여전히 2026년까지만 " +
+      "게시 중이며 2027 행 없음(직접 재조회로 확인); korea.kr의 원 보도자료(카드뉴스 포함)에도 " +
+      "1인·4인 외 가구원수별 수치는 게재되어 있지 않음; 복수의 언론 보도(서울신문 등)를 추가로 " +
+      "재조회했으나 2·3·5·6·7인 가구 금액을 명시한 정부 1차 출처는 발견하지 못함 — 'partial' " +
+      "status 및 7인/8인이상 UNKNOWN 유지가 여전히 정확한 표현임을 재확인함.",
   },
 ];
 

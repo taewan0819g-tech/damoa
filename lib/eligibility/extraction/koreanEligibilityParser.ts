@@ -155,17 +155,36 @@ const MANWON_TO_KRW = 10000;
  * `median_income_threshold` rule; the actual lookup/comparison happens at
  * evaluation time (see domain/medianIncome/evaluate.ts).
  *
- * Only the proven-safe subset below is converted to a rule
- * (`parseMedianIncomeClause`) — every "중위소득" mention (기준-prefixed or
- * bare) that doesn't fit that shape (no percent+boundary found near the
- * anchor, the nearby text signals a DIFFERENT metric such as
- * 소득인정액/건강보험료/개인소득/종합소득, an explicit per-household-size table
- * marker like "가구원 수에 따라" sits nearby, or ANY household-size number —
- * even just one — sits nearby, since a real MOIS gold review found a lone
- * nearby household-size number is not a safe signal either way, see
- * `parseMedianIncomeClause`) still falls back to unresolved rather than
- * being silently dropped, exactly like the old always-punt behavior this
- * replaces.
+ * Checkpoint-5 (external-review correction): a rule is emitted ONLY when
+ * ALL THREE hold: (a) a percent + Korean boundary word is parsed near the
+ * anchor (`MEDIAN_INCOME_PERCENT_RE`); (b) NONE of the known disqualifiers
+ * match nearby — a different metric entirely (소득인정액/건강보험료·건보료),
+ * individual-not-household income (개인소득/본인 소득/종합소득, or the
+ * adjacency-scoped "본인" label), an explicit per-household-size table
+ * marker ("가구원 수에 따라"/"가구 규모별"), the applicant's own wage/earned
+ * income (임금/근로소득/개인·근로자 월평균소득), or the applicant+spouse's
+ * COMBINED-but-not-household income (부부합산(연)?소득 등); AND (c) an
+ * EXPLICIT positive household-income label is found nearby
+ * (`MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE` — 가구소득/가구원소득/세대소득
+ * and siblings, or an explicitly household-framed anchor like "가구단위
+ * 중위소득"). (c) is the core fix here: the old logic treated "no known
+ * disqualifier matched" as sufficient to assume household income, which is
+ * backwards — absence of a blacklist hit never proves the compared figure is
+ * actually household-scoped. An empirical frozen-snapshot survey of every
+ * real 중위소득 anchor hit (881 total, see
+ * scripts/_tmpPositiveSignalSurvey.ts) found 774/881 (~88%) carry NEITHER a
+ * positive household-income signal NOR a known disqualifier — just a bare
+ * "기준중위소득 N% 이하" with zero scoping wording — so requiring an explicit
+ * positive signal is not a marginal tightening, it is the difference between
+ * this parser being mostly right and mostly guessing.
+ *
+ * ANY "중위소득" mention (기준-prefixed or bare) that fails any of (a)/(b)/(c),
+ * or that has ANY nearby household-size number (even a single one — a real
+ * MOIS gold review found a lone nearby size is not a safe
+ * `fixed_reference_household` signal either way, see
+ * `parseMedianIncomeClause`), still falls back to unresolved rather than
+ * being silently dropped — false negatives are acceptable here, false
+ * positives are not.
  */
 const MEDIAN_INCOME_RE = /(?:기준\s*)?중위\s*소득/;
 
@@ -266,6 +285,77 @@ const MEDIAN_INCOME_TABLE_MARKER_RE = /가구\s*원?\s*수\s*(?:에\s*따라|별
 /** "N인가구"/"N인 가구"/"N인가족"/"N인 기준" — an explicit household-size number sitting next to a median-income mention (see `parseMedianIncomeClause`'s householdSizeMode logic). */
 const MEDIAN_INCOME_HOUSEHOLD_SIZE_RE = /(\d{1,2})\s*인\s*(?:가구|가족|기준)/g;
 
+/**
+ * Checkpoint-5 (external-review correction, see module doc above
+ * `parseMedianIncomeClause`): a clause where the compared figure is
+ * unambiguously the APPLICANT'S OWN INDIVIDUAL EARNINGS (임금/wage,
+ * 근로소득/labor-tax-category earned income, or an explicit "개인
+ * 월평균소득"/"근로자의 월평균소득" phrasing) rather than any household-scoped
+ * figure. Real MOIS examples: 서비스ID 515000000168 ("임금이 2026년 기준
+ * 중위소득 150% 이하인 자" — 청년근로자 사랑채움 사업) and 587500000001 /
+ * 494000000234 ("근로소득증빙이가능하고 해당 소득이 기준중위소득 170% 이하").
+ * Deliberately does NOT include bare "급여" (far too ambiguous on its own —
+ * routinely names a WELFARE BENEFIT TYPE in real MOIS text, e.g.
+ * 생계급여/의료급여/주거급여/교육급여/해산급여/장제급여, not a wage) or bare
+ * "월평균소득" (ambiguous between individual and household scope without a
+ * qualifier — see 149200000018, where "월평균소득이 ... 3인 가구 기준
+ * 중위소득 이하" plausibly means the HOUSEHOLD's monthly average income).
+ * Both of those under-qualified forms are still safely handled: with no
+ * positive household-income signal nearby either, they fall through to the
+ * `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE` requirement below and end up
+ * unresolved anyway, for the right general reason rather than a narrow
+ * word-specific one.
+ */
+const MEDIAN_INCOME_WAGE_INCOME_DISQUALIFIER_RE =
+  /임금|근로\s*소득|근로자\s*의?\s*월\s*평균\s*소득|개인\s*월\s*평균\s*소득/;
+
+/**
+ * Checkpoint-5 (new): "본인·배우자 합산"/"부부합산(연)?소득"/"신청인과 배우자의
+ * 소득 합계" — the applicant + spouse's COMBINED income, which is NOT
+ * necessarily the same figure as total household income (a household may
+ * also contain adult children, parents, or other income-earning members
+ * beyond the couple). Real examples: 서비스ID 373000000116 ("부부합산소득이
+ * 기준중위소득 200%..."), 402000000115 ("부부합산 소득 기준 중위소득 180%
+ * 이하"), 535000000607 ("부부합산 연소득 기준 중위소득 180% 이하"), and
+ * 519000000153 ("본인·배우자 합산 연소득이 기준 중위소득 180%* 이하"). Per the
+ * external review: couple income != household income; this Phase does NOT
+ * add a couple-income profile field/UI, so these clauses stay unresolved
+ * rather than being compared against `householdIncomeRange`.
+ */
+const MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE =
+  /부부\s*합산(?:\s*연)?\s*소득|본인\s*[·・]\s*배우자\s*합산|신청인\s*(?:과|와)?\s*배우자\s*의?\s*소득\s*합계/;
+
+/**
+ * Checkpoint-5 (new, THE core external-review fix): POSITIVE identification
+ * of a household-scoped income label near the anchor — "가구소득"/"가구원
+ * 소득"/"가구의 소득"/"가구단위 소득"/"가구 총소득"/"가구 합산소득"/"세대소득"/
+ * "세대원 소득", or the anchor itself explicitly framed as household-unit
+ * ("가구단위 중위소득"). This REPLACES the old "absence of a known
+ * disqualifier -> assume household_income" logic, which a review of the
+ * actual GitHub code correctly flagged as backwards: absence of a blacklist
+ * hit never proves the measured variable is compatible with
+ * `annualHouseholdIncome`/`householdIncomeBand`. A frozen-snapshot survey
+ * (881 real 기준중위소득/중위소득 anchor hits) found only a small minority
+ * (~40-80 raw hits, most overlapping with already-disqualified
+ * 소득인정액-labeled clauses like "가구소득인정액") carry an EXPLICIT
+ * household-income label at all; the overwhelming majority (774/881, ~88%)
+ * carry NEITHER a positive household signal NOR a known disqualifier -- a
+ * bare "기준중위소득 N% 이하" with no scoping wording whatsoever, which this
+ * parser now correctly treats as `ambiguous_unqualified` (unresolved)
+ * instead of silently guessing household income. Real confirmed-positive
+ * examples: 서비스ID 135200005013 ("(가구소득) 기준 중위소득 50% 이하"),
+ * 161300000099 ("청년 원가구*의 소득이 기준 중위소득 100% 이하"), 149200000037
+ * ("가구원 합산 소득이 기준 중위소득의 80% 이하"), 611000019628 ("가구합산소득이
+ * 기준중위소득 85% 이하"), 999000000026 ("세대소득이 중위소득의 46% 이하").
+ * The bounded `[^\n]{0,4}` gap (rather than an unbounded one) keeps this
+ * intentionally tight -- wide enough to cross a short connective ("의",
+ * "*의 ", a footnote asterisk) but not wide enough to accidentally bridge
+ * across an unrelated clause boundary. `[·・]` and other punctuation inside
+ * that 4-char budget is fine; a whole extra WORD is not, by design.
+ */
+const MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE =
+  /가구(?:\s*원)?[^\n]{0,4}소득|세대(?:\s*원)?[^\n]{0,4}소득|가구\s*단위\s*(?:기준\s*)?중위\s*소득/;
+
 /** An explicit calendar year adjacent to a median-income mention, either order: "2026년 기준중위소득" / "기준중위소득 2026년". */
 const MEDIAN_INCOME_YEAR_RE = /(?:(\d{4})\s*년[^\n]{0,6}중위소득|중위소득[^\n]{0,6}(\d{4})\s*년)/;
 
@@ -292,8 +382,20 @@ function parseMedianIncomeClause(text: string): { rule?: EligibilityRule; unreso
   if (
     MEDIAN_INCOME_METRIC_DISQUALIFIER_RE.test(window) ||
     MEDIAN_INCOME_TABLE_MARKER_RE.test(window) ||
-    MEDIAN_INCOME_INDIVIDUAL_LABEL_RE.test(window)
+    MEDIAN_INCOME_INDIVIDUAL_LABEL_RE.test(window) ||
+    MEDIAN_INCOME_WAGE_INCOME_DISQUALIFIER_RE.test(window) ||
+    MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE.test(window)
   ) {
+    return { unresolved: text };
+  }
+
+  // Checkpoint-5 (external-review correction): POSITIVE identification is
+  // now REQUIRED, not merely "no disqualifier matched". A bare "기준중위소득
+  // N% 이하" with no household-scoping wording anywhere nearby is
+  // `ambiguous_unqualified`, not silently assumed to be household income --
+  // see `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`'s doc comment for the
+  // full rationale and real examples.
+  if (!MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE.test(window)) {
     return { unresolved: text };
   }
 

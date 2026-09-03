@@ -7,8 +7,7 @@ import type { MedianIncomeBoundary } from "@/domain/medianIncome/evaluate";
  * Every `text` here is a VERBATIM excerpt (whitespace-collapsed only, exactly
  * like the family gold sample) copied from the frozen snapshot captured at
  * /tmp/mois_serviceList_full.json (10,967 rows), the SAME snapshot used by
- * `scripts/auditMedianIncomeEligibilityFrozen.ts` and by the manual
- * fixed-reference review at `docs/median-income-fixed-reference-review.md`.
+ * `scripts/auditMedianIncomeEligibilityFrozen.ts`.
  *
  * Every entry's `expectation` was decided by (1) manually reading the real
  * excerpt against `koreanEligibilityParser.ts`'s actual, current regex logic,
@@ -24,16 +23,26 @@ import type { MedianIncomeBoundary } from "@/domain/medianIncome/evaluate";
  * `expectation` to hide a limitation — if the parser's real behavior changes,
  * update the `note` honestly along with the expectation.
  *
- * While BUILDING this fixture, running real candidates through the actual
- * extractor surfaced one genuine, previously-undetected parser bug (see
- * `real-rule-bare-median-income-no-gijun-prefix` below): `MEDIAN_INCOME_RE`
- * required the literal "기준" prefix, so 203 of 881 real frozen-snapshot
- * "중위소득" mentions that drop that prefix (very common real MOIS phrasing)
- * were completely invisible to the parser -- not even reported as
- * unresolved, silently vanishing instead. That bug was fixed directly in
- * `koreanEligibilityParser.ts` (MEDIAN_INCOME_RE and MEDIAN_INCOME_PERCENT_RE
- * now both treat "기준" as optional) as part of building this gold set; this
- * fixture keeps a dedicated regression sample for it.
+ * ---------------------------------------------------------------------------
+ * CHECKPOINT-5 REBUILD (external-review correction): an independent review
+ * of the checkpoint-4 gold set found its "safe household-income" methodology
+ * was itself circular/backwards — several samples below were originally
+ * accepted as `median_income_threshold` rules merely because NO disqualifier
+ * matched, not because a positive household-income label was actually
+ * present. `koreanEligibilityParser.ts` now requires an explicit positive
+ * signal (`MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`) before ever emitting
+ * a rule, and adds two disqualifier categories that were previously missing
+ * entirely: WAGE/EARNED income (임금/근로소득 — the applicant's own individual
+ * earnings) and COUPLE-COMBINED income (부부합산소득/본인·배우자 합산 — not
+ * necessarily identical to full household income). This whole fixture was
+ * re-derived against that stricter parser: every sample below was re-run
+ * through the real, current extractor, and MANY changed outcome or source
+ * example as a direct result (see individual notes). Most notably,
+ * `real-rule-explicit-year` (old sourceServiceId 515000000168, "임금이 2026년
+ * 기준 중위소득 150% 이하인 자") was WRONG under checkpoint-4 — it is a
+ * WAGE-income clause, not household income, and is corrected here to
+ * `real-unresolved-wage-income-disqualifier` with `expectUnresolved: true`.
+ * ---------------------------------------------------------------------------
  */
 
 export interface MedianIncomeGoldExpectedValue {
@@ -65,84 +74,94 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
   // -- ordinary profile-scaled household-income threshold (rule) ------------
   {
     id: "real-rule-ordinary-profile-household-income",
-    sourceServiceId: "135200000103",
+    sourceServiceId: "135200005013",
     sourceField: "target",
-    text: "○ 기준중위소득 125% 이하인 등록장애인(외국인 포함)\n\n○ 자동차사고로 인하여 중증후유장애를 입은 사람(수급자, 차상위계층)",
+    text: "ㅇ 연령, 개인소득, 가구소득 3가지 모두 충족한 자\n   (가입연령) 신청 당시 만15~39세 이하\n   (소득기준) 월 10만원 이상 근로, 사업 소득 발생 \n   (가구소득) 기준 중위소득 50% 이하",
     expectation: {
       expectedRule: {
-        percent: 125,
+        percent: 50,
         boundary: "lte",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "장애인법률구조지원: clean, ordinary 기준중위소득 N% 이하 clause with no household-size mention nearby and no explicit year -- the baseline positive case. Confirms `scales_with_profile_household` (never a fixed size) is emitted, per the checkpoint-4 parser fix.",
+    note: "자산형성지원사업(청년내일저축계좌): CHECKPOINT-5 REPLACEMENT for the old sample (서비스ID 135200000103, '기준중위소득 125% 이하인 등록장애인...') which had NO positive household-income label nearby and now correctly falls back to unresolved. This record's explicit '(가구소득)' label right before the anchor satisfies `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`. Also proves an earlier, unrelated '개인소득' mention (a different eligibility dimension listed a few dozen characters before the anchor) does NOT block extraction -- it sits outside the ±40/+20 window.",
   },
 
   // -- bare '중위소득' with no '기준' prefix (real coverage-gap fix) ----------
   {
     id: "real-rule-bare-median-income-no-gijun-prefix",
-    sourceServiceId: "383000000146",
+    sourceServiceId: "149200005007",
     sourceField: "target",
-    text: "○ 안양시 돌봄 취약가구\n - (공통사항) 중위소득 120% 미만 사회적 배려계층 우선지원\n - 저소득층, 중증장애인, 한부모가정, 다문화가정, 1인가구",
+    text: "∙ II유형: 15세~69세 구직자 중 I유형에 해당하지 않는 가구단위 중위소득 100% 이하(청년은 소득 무관)",
     expectation: {
       expectedRule: {
-        percent: 120,
+        percent: 100,
+        boundary: "lte",
+        incomeMetric: "household_income",
+        householdSizeMode: "scales_with_profile_household",
+      },
+      expectUnresolved: false,
+    },
+    note: "국민취업지원제도: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 383000000146 '중위소득 120% 미만 사회적 배려계층 우선지원', had no positive household-income label and is now unresolved). This excerpt is the trailing 'II유형' clause of the real record (the full record's FIRST 중위소득 mention, '중위소득 60% 이하', has no positive signal nearby and would itself resolve to unresolved under the parser's single-first-match design -- excerpted here to isolate the still-real, still-verbatim positive-signal clause). Demonstrates both the bare '중위소득' (no '기준' prefix) coverage-gap fix AND the explicit household-unit framing '가구단위 중위소득' branch of the positive-signal regex.",
+  },
+
+  // -- boundary word: 미만 (lt), with a real positive household-income label -
+  {
+    id: "real-rule-boundary-word-lt",
+    sourceServiceId: "429000000646",
+    sourceField: "criteria",
+    text: "○ 지원대상 : 건강보험가입자 중 지원 사업 대상 질환 1,413개, 소득 및 재산기준을 만족하는 사람\n\n - 환자가구 소득기준(기준 중위소득 140% 미만)",
+    expectation: {
+      expectedRule: {
+        percent: 140,
         boundary: "lt",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "안양시 돌봄 취약가구: real example of the very common bare '중위소득' (no '기준' prefix) phrasing -- BEFORE the fix made while building this gold set, this whole clause was silently invisible to the parser (no rule, no unresolved entry either). Also proves the trailing '1인가구' (listed as one of several alternative target sub-groups, not a table row tied to this specific clause) sits safely OUTSIDE the ±40/+20 extraction window, so it correctly does NOT suppress extraction the way a truly nearby household-size number would.",
+    note: "희귀질환자 의료비 지원사업: real 미만 (lt) example with a positive household label ('환자가구 소득기준'). Deliberately excerpted BEFORE the full per-household-size table that follows in the real record (1인~7인가구 absolute KRW amounts) -- this is the SAME record cited by `parseMedianIncomeClause`'s household-size-guard doc comment as a case whose full table sits just past this function's narrow context window. Proves the window-edge truncation genuinely does still produce the correct, safe `scales_with_profile_household` shape when a positive signal is present within the window, independent of what's truncated past it.",
   },
 
-  // -- all four boundary words -------------------------------------------
+  // -- boundary word: 초과 (gt), with a real positive household-income label -
   {
     id: "real-rule-boundary-word-gt",
-    sourceServiceId: "333000000377",
+    sourceServiceId: "648000001103",
     sourceField: "target",
-    text: "○ (신청일 기준) 부산시 거주중인 기준중위소득 150% 초과 산모",
+    text: "▪(거주지) 주민등록상 공고일 현재 경남 거주자\n▪(나이) 공고일 기준 18세 이상 ~ 39세 이하 ※ 군복무, 대체근무(산업기능요원 등) 복무에 따른 기간 포함\n▪(가구소득) 가구 기준중위소득 50% 초과 ~130% 이하\n▪(재직기준) 직장 소재지가 경남도이며, 공고일 기준 3개월 이상 사업장에 계속 근로중인 청년(정규직, 비정규직, 사업자)",
     expectation: {
       expectedRule: {
-        percent: 150,
+        percent: 50,
         boundary: "gt",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "해운대구 산모·신생아 건강관리 지원(확대): real 초과 (gt) example -- an income-EXCLUSION program (helps people ABOVE the median-income cutoff who don't qualify for the standard lower-income version).",
+    note: "(경남) 모다드림 청년통장 지원: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 333000000377, had no positive household-income label and is now unresolved). This record's explicit '(가구소득)' label directly precedes the anchor. The clause describes a BAND ('50% 초과 ~130% 이하') -- only the FIRST boundary+percent pair (50% 초과) is captured, per this parser's single-match design; the upper bound (130% 이하) is silently not captured as a second rule.",
   },
+
+  // -- boundary word: 이상 (gte) -- empirical zero-corpus-hit finding --------
   {
-    id: "real-rule-boundary-word-gte",
+    id: "real-unresolved-boundary-word-gte-no-corpus-example",
     sourceServiceId: "460000000134",
     sourceField: "target",
     text: "신청일 기준 충남도 내 거주자, 소득초과(기준중위소득 180% 이상)로 정부지원에서 제외된 법률혼, 사실혼 난임부부",
-    expectation: {
-      expectedRule: {
-        percent: 180,
-        boundary: "gte",
-        incomeMetric: "household_income",
-        householdSizeMode: "scales_with_profile_household",
-      },
-      expectUnresolved: false,
-    },
-    note: "충남 난임부부 지원: real 이상 (gte) example, another income-EXCLUSION-style clause (충남도 자체지원은 정부지원에서 소득초과로 제외된 부부를 대상으로 함). Also co-extracts a region rule (충청남도) from the same text -- confirms median-income extraction doesn't block/get blocked by an unrelated region rule.",
+    expectation: { expectUnresolved: true },
+    note: "충남 난임부부 지원: CHECKPOINT-5 CORRECTION -- under checkpoint-4 this was wrongly accepted as a household-income RULE purely because no disqualifier matched; there is in fact no positive household-income label anywhere nearby ('충남도 내 거주자'/'정부지원에서 제외된' describe eligibility/exclusion status, not income scope), so it now correctly falls back to unresolved. Kept here (rather than dropped) as a deliberate, honest EMPIRICAL FINDING: a full-corpus scan of the frozen snapshot (`scripts/auditMedianIncomeEligibilityFrozen.ts`) found ZERO real records anywhere with an '이상' (gte) boundary word AND a positive household-income label within the extraction window -- 이상-boundary median-income clauses in this real dataset are exclusively income-EXCLUSION clauses ('소득초과로 제외된') with no household-scoping wording. The 이상/gte code path itself remains directly exercised by the synthetic `it.each` boundary-word test in koreanEligibilityParser.test.ts (with a synthetic positive-signal prefix), since no real corpus example currently exists to do so.",
   },
-  // 이하 (lte) is exercised by nearly every other sample below.
-  // 미만 (lt) is exercised by real-rule-bare-median-income-no-gijun-prefix above.
 
   // -- explicit year --------------------------------------------------------
   {
     id: "real-rule-explicit-year",
-    sourceServiceId: "515000000168",
+    sourceServiceId: "B55029700002",
     sourceField: "target",
-    text: "관내 중소·중견기업에 주30시간 이상 근무하고, 3개월 이상 근무중인 만 19세~39세 미혼 청년\n임금이 2026년 기준 중위소득 150% 이하인 자",
+    text: "○ 의료적 요건 : 협약기관에서 1차 진료 후 담당의사가 상급종합병원에서의 진료가 필요하다고 판단한 자\n\n○ 사회경제적 요건 : 국내거주 중인 외국인 중, 2026년 기준 중위소득 90% 이하에 해당하는 자(동일 가구원 소득 합산하여 산정)\n\n★ 협약기관에서 의뢰가능한 대상자여야함",
     expectation: {
       expectedRule: {
-        percent: 150,
+        percent: 90,
         boundary: "lte",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
@@ -150,23 +169,23 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
       },
       expectUnresolved: false,
     },
-    note: "청년근로자 사랑채움 사업: real explicit-year example ('2026년 기준 중위소득'), also co-extracts an age range rule from the same text.",
+    note: "취약계층 외국인 의료비 지원: CHECKPOINT-5 REPLACEMENT. The PREVIOUS sample at this id (서비스ID 515000000168, '임금이 2026년 기준 중위소득 150% 이하인 자') is the exact bug the external review flagged: '임금' (wage/earned income) is the applicant's own individual earnings, NOT household income, and checkpoint-4 wrongly classified it as safe household income solely because no disqualifier matched. It is corrected below at `real-unresolved-wage-income-disqualifier`. This replacement genuinely has BOTH an explicit year ('2026년') AND a positive household label ('동일 가구원 소득 합산하여 산정') within the extraction window.",
   },
   {
     id: "real-rule-no-explicit-year",
-    sourceServiceId: "138300000040",
+    sourceServiceId: "461000000115",
     sourceField: "target",
-    text: "기준중위소득 125%이하의 한부모가족 또는 미혼부",
+    text: "○ 만18세 이상 근로능력자, 가구소득 기준중위소득 70%이하 이면서 재산이 4억원 이하인 자",
     expectation: {
       expectedRule: {
-        percent: 125,
+        percent: 70,
         boundary: "lte",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "한부모무료법률구조: real no-explicit-year example -- `year` is correctly omitted (not defaulted to the current year) from the emitted spec. Also demonstrates OR-structure category wording ('한부모가족 또는 미혼부') NOT blocking median-income extraction: the OR here joins two overlapping single-parent-family sub-categories (미혼부 is itself legally a 한부모), not two unrelated eligibility dimensions, so the cross-dimension-OR safety net correctly does not suppress either the median-income rule or the singleParentFamily rule.",
+    note: "예산형 공공근로사업(공공근로): CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 138300000040 '기준중위소득 125%이하의 한부모가족 또는 미혼부', uses '가족' not '가구' so no longer matches the positive-signal regex and is now unresolved). This record's explicit '가구소득' label directly precedes the anchor; `year` is correctly omitted (not defaulted to the current year) from the emitted spec.",
   },
 
   // -- explicit per-household-size table marker -> unresolved ---------------
@@ -176,24 +195,15 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     sourceField: "target",
     text: "○ 위기상황이 발생한 1년 이내의 가정으로 소득, 재산, 금융재산 기준을 충족하는 경우\n○ 소득기준 : 기준 중위소득100% 이하(4인가구 기준 650만 원) ※ 가구원 수에 따라 기준금액 상이",
     expectation: { expectUnresolved: true },
-    note: "경기도형긴급복지지원: REQUIRED CATEGORY -- ambiguous/multi-size table text. The record states the cutoff varies by household size ('가구원 수에 따라 기준금액 상이') right after citing ONE size's absolute amount as an example (4인가구 기준 650만 원) -- exactly the checkpoint-4 finding that a single nearby household-size number is not a safe fixed-reference signal. `MEDIAN_INCOME_TABLE_MARKER_RE` unconditionally forces unresolved here.",
+    note: "경기도형긴급복지지원: REQUIRED CATEGORY -- ambiguous/multi-size table text. The record states the cutoff varies by household size ('가구원 수에 따라 기준금액 상이') right after citing ONE size's absolute amount as an example (4인가구 기준 650만 원) -- exactly the checkpoint-4 finding that a single nearby household-size number is not a safe fixed-reference signal. `MEDIAN_INCOME_TABLE_MARKER_RE` unconditionally forces unresolved here, independent of the checkpoint-5 positive-signal requirement (this text also happens to have no positive household label nearby either).",
   },
   {
     id: "real-unresolved-table-truncated-by-window",
     sourceServiceId: "644000000244",
     sourceField: "target",
     text: "❍ 소득기준: 당해연도 보건복지부에서 고시하는 기준중위소득 120%이하\n   <2024년 기준 준중위소득120%>\n   - 1인가구 : 2,674,134원, 2인가구 : 4,419,131원, 3인가구 : 5,657,588원\n     4인가구 : 6,875,896원, 5인가구 : 8,034,882원, 6인가구 : 9,142,043원",
-    expectation: {
-      expectedRule: {
-        percent: 120,
-        boundary: "lte",
-        incomeMetric: "household_income",
-        householdSizeMode: "scales_with_profile_household",
-        year: 2024,
-      },
-      expectUnresolved: false,
-    },
-    note: "충청남도 입원 생활비 지원: the full per-household-size table (1인~6인가구) sits just OUTSIDE the ±40/+20 extraction window, so it doesn't trigger the household-size guard. This happens to still be the CORRECT extraction (a full per-size table genuinely IS `scales_with_profile_household`, the same shape this parser always emits) -- documented here as a real example of the window's limits, not a case that needs fixing: an explicit per-size table can never safely become `fixed_reference_household` even if the window HAD reached it (see checkpoint-4 review), so there is no unsafe outcome regardless of window placement here.",
+    expectation: { expectUnresolved: true },
+    note: "충청남도 입원 생활비 지원: CHECKPOINT-5 CORRECTION -- previously accepted as a RULE (120% lte, year 2024) under checkpoint-4 purely because no disqualifier matched. Re-verified directly (even with the trailing per-size table entirely removed, isolating just the first line) that this excerpt has NO positive household-income label anywhere nearby -- '당해연도 보건복지부에서 고시하는' describes the SOURCE of the figure (a government notice), not that it is household-scoped. Kept as a distinct, honestly-relabeled category: a real record whose outcome flips from checkpoint-4's blacklist-only 'safe' classification to checkpoint-5's positive-evidence-required 'unresolved' classification, independent of the household-size table.",
   },
 
   // -- genuinely fixed-reference household size (per manual review) still --
@@ -204,7 +214,7 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     sourceField: "criteria",
     text: "월평균 소득이 3인 가구 기준 중위소득 2분의 1 이하인 노동자",
     expectation: { expectUnresolved: true },
-    note: "근로복지공단 생활안정자금 융자: per `docs/median-income-fixed-reference-review.md` (#2, class A), this is one of only 7/15 real fixed-reference hits CONFIRMED genuinely fixed via external corroboration (a documented national loan-program standard, independent of the applicant's real household size) -- yet the production parser still safely resolves it to unresolved, for TWO independent reasons: (1) `fixed_reference_household` is never auto-inferred from text at all anymore (checkpoint-4 fix), and (2) this excerpt uses Korean fraction notation ('2분의 1') instead of a literal '%' digit, which `MEDIAN_INCOME_PERCENT_RE` deliberately does not support (see that regex's doc comment). Proves the conservative fallback holds even for a real A-classified case, and even independently of the household-size guard.",
+    note: "근로복지공단 생활안정자금 융자: per `docs/median-income-fixed-reference-review.md` (#2, class A), this is one of only 7/15 real fixed-reference hits CONFIRMED genuinely fixed via external corroboration (a documented national loan-program standard, independent of the applicant's real household size) -- yet the production parser still safely resolves it to unresolved, for THREE independent reasons: (1) `fixed_reference_household` is never auto-inferred from text at all anymore (checkpoint-4 fix), (2) this excerpt uses Korean fraction notation ('2분의 1') instead of a literal '%' digit, which `MEDIAN_INCOME_PERCENT_RE` deliberately does not support, and (3, checkpoint-5) there is no positive household-income label nearby either ('노동자' names the applicant, not the income scope). Proves the conservative fallback holds for a real A-classified case via multiple independent, redundant safety mechanisms.",
   },
   {
     id: "real-unresolved-fixed-target-population-bare-median-income",
@@ -212,7 +222,7 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     sourceField: "target",
     text: "지원대상: 사회적 고립가구 중 결식우려 1인가구 (기초생활수급자·차상위계층 또는 중위소득100% 이하)",
     expectation: { expectUnresolved: true },
-    note: "양천 반올림 밑반찬 지원 사업: per the checkpoint-4 review (#3, class A) -- target population is explicitly '1인가구' so a fixed 1-person reference would actually be correct BY CONSTRUCTION here, but the parser still conservatively falls back to unresolved because it cannot distinguish this from the 8/15 real cases where a nearby household-size number was NOT a safe signal (see review doc). Also exercises the bare '중위소득100%' (no 기준 prefix, no space before the digits) wording variant together with the household-size guard in the same real excerpt.",
+    note: "양천 반올림 밑반찬 지원 사업: per the checkpoint-4 review (#3, class A) -- target population is explicitly '1인가구' so a fixed 1-person reference would actually be correct BY CONSTRUCTION here, but the parser still conservatively falls back to unresolved: the household-size guard fires on the nearby '1인가구'/'고립가구' mentions, and (checkpoint-5) there is also no positive household-income label directly scoping the '중위소득100%' figure itself. Also exercises the bare '중위소득100%' (no 기준 prefix, no space before the digits) wording variant.",
   },
 
   // -- ambiguous: no percent digit at all near a household-size mention ----
@@ -222,7 +232,7 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     sourceField: "target",
     text: "○ 월평균소득이 보건복지부 장관이 고시하는 3인 가구 기준 중위소득 이하인 자로 다음에 해당하는 자",
     expectation: { expectUnresolved: true },
-    note: "산재근로자 생활안정자금 융자: real example with a boundary word ('이하') but NO percent digit anywhere nearby (the clause means 'at or below the (100%) 3-person median income figure', a bare comparison with an implicit 100%) -- `MEDIAN_INCOME_PERCENT_RE` requires an explicit digit run before '%', so this correctly falls back to unresolved rather than guessing percent=100.",
+    note: "산재근로자 생활안정자금 융자: real example with a boundary word ('이하') but NO percent digit anywhere nearby (the clause means 'at or below the (100%) 3-person median income figure', a bare comparison with an implicit 100%) -- `MEDIAN_INCOME_PERCENT_RE` requires an explicit digit run before '%', so this correctly falls back to unresolved rather than guessing percent=100 (this early return happens before the checkpoint-5 positive-signal check is ever reached).",
   },
 
   // -- metric disqualifiers (real examples) ----------------------------------
@@ -260,31 +270,52 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     expectation: { expectUnresolved: true },
     note: "청년희망적금: REQUIRED CATEGORY -- individual (not household) income false positive. '(본인)' directly labels the FIRST 기준중위소득 mention as an individual-income comparison; the record separately states a DIFFERENT '(가구)'-labeled household clause a few characters later, proving 본인/가구 are deliberately distinguished categories in this real record. Both the individual-scoped first clause and the reachable second clause fall back to unresolved together (see the corresponding synthetic unit test in koreanEligibilityParser.test.ts for why: this parser resolves only the FIRST percent+boundary match in the whole text).",
   },
+
+  // -- wage/earned income (임금/근로소득), not household income -- checkpoint-5
   {
-    id: "real-unresolved-combined-self-spouse-with-nearby-size-footnote",
+    id: "real-unresolved-wage-income-disqualifier",
+    sourceServiceId: "515000000168",
+    sourceField: "target",
+    text: "관내 중소·중견기업에 주30시간 이상 근무하고, 3개월 이상 근무중인 만 19세~39세 미혼 청년\n임금이 2026년 기준 중위소득 150% 이하인 자",
+    expectation: { expectUnresolved: true },
+    note: "청년근로자 사랑채움 사업: REQUIRED CORRECTION -- this is the exact record the external review flagged as a checkpoint-4 false positive. '임금이 ... 이하인 자' ('a person whose WAGE is at or below ...') scopes the comparison to the applicant's individual wage/earned income, not household income; checkpoint-4 wrongly emitted a `median_income_threshold` rule here solely because no then-known disqualifier matched (there was no wage-income disqualifier category at all). `MEDIAN_INCOME_WAGE_INCOME_DISQUALIFIER_RE` (checkpoint-5, matching '임금') now correctly routes this to unresolved. Also co-extracts an age-range rule from the same text, confirming the wage disqualifier doesn't block unrelated age-dimension extraction.",
+  },
+
+  // -- couple-combined income (부부합산/본인·배우자 합산), not household income --
+  // -- checkpoint-5 ----------------------------------------------------------
+  {
+    id: "real-unresolved-couple-income-disqualifier",
+    sourceServiceId: "402000000115",
+    sourceField: "target",
+    text: "부부합산 소득 기준 중위소득 180% 이하 무주택 신혼부부(전용면적 85㎡ 이하 주택)",
+    expectation: { expectUnresolved: true },
+    note: "군포시 신혼부부 전월세 보증금 대출이자 지원: clean, minimal real example of `MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE`'s '부부합산 소득' branch. Per the external review: a married couple's combined income is NOT necessarily identical to the full household income (a household may also contain other income-earning members, e.g. parents or adult children living together) -- this Phase does not add a couple-income profile field/UI, so this clause stays unresolved rather than being misapplied against `householdIncomeRange`.",
+  },
+  {
+    id: "real-unresolved-couple-income-combined-self-spouse-with-footnote",
     sourceServiceId: "519000000153",
     sourceField: "target",
-    text: "본인·배우자 합산 연소득이 기준 중위소득 180%* 이하\n     * 2025년 기준 : 월6,840,000원(2인가구) / 연82,080,000원(2인가구)",
+    text: "본인·배우자 합산 연소득이 기준 중위소득 180%* 이하\n      * 2025년 기준 : 월6,840,000원(2인가구) / 연82,080,000원(2인가구)",
     expectation: { expectUnresolved: true },
-    note: "청도군 신혼부부 주거자금 대출이자 지원: '본인·배우자 합산' (combined self+spouse) is legitimately a household-income-shaped comparison, NOT an individual-income false positive (see the synthetic 'still extracts...' unit test for the same wording WITHOUT this footnote, which DOES extract). In the real FULL record, though, the '(2인가구)' footnote citing the absolute KRW figure sits inside the ±40/+20 window, so the household-size guard conservatively still routes this to unresolved -- an honest example of the guard being stricter on real (noisier) text than on a clean synthetic example.",
+    note: "청도군 신혼부부 주거자금 대출이자 지원: MECHANISM CORRECTED under checkpoint-5. Under checkpoint-4 this sample's note claimed the household-size footnote ('(2인가구)') was what forced this to unresolved (a nearby household-size number). Re-verified directly: even with that footnote entirely removed, this clause is STILL unresolved -- '본인·배우자 합산' now matches `MEDIAN_INCOME_COUPLE_INCOME_DISQUALIFIER_RE` directly and unconditionally, before the household-size guard is ever reached. Documented honestly here per the project's 'do not encode a known limitation as correct' mandate: the OUTCOME didn't change, but the REASON did, and the old note would have been actively misleading about which real mechanism governs this record.",
   },
 
   // -- category/status wording that must not block extraction ---------------
   {
     id: "real-rule-status-category-wording-not-blocking",
-    sourceServiceId: "135200000102",
-    sourceField: "criteria",
-    text: "○ 한센병사업대상자 중 수급자에서 제외된 자로서 중위소득 60% 이하인 자에게 지원",
+    sourceServiceId: "654000000006",
+    sourceField: "target",
+    text: "전북에 주소를 둔지 1개월이상, 가구소득평가액이 기준중위소득 50%이하, 부양의무자가 고소득자(연 1.3억 원)을 초과하는 경우 지원불가",
     expectation: {
       expectedRule: {
-        percent: 60,
+        percent: 50,
         boundary: "lte",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "재가한센인생계비지원: category/status wording ('수급자에서 제외된 자') sits right next to the bare 중위소득 anchor but does not disqualify it -- '수급자' is a legal category label, not one of the metric-disqualifier tokens (소득인정액/건강보험료/개인소득/종합소득).",
+    note: "전북형 기초생활보장제도: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 135200000102 '중위소득 60% 이하인 자', had no positive household-income label -- '수급자' is a legal status word, not an income-scope label -- and is now unresolved). This record's '가구소득평가액' label directly precedes the anchor. The trailing exclusion clause ('부양의무자가 고소득자... 지원불가') sits within the +20 window but does not disqualify the match: '고소득자' ('high earner') is a plain-language status descriptor, not one of the metric-disqualifier tokens (소득인정액/건강보험료/개인소득/종합소득/임금/근로소득/부부합산).",
   },
 
   // -- descriptive mention: no percent/boundary at all -> unresolved --------
@@ -300,19 +331,19 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
   // -- AND structure --------------------------------------------------------
   {
     id: "real-rule-and-structure-cross-dimension",
-    sourceServiceId: "443000000661",
+    sourceServiceId: "642000000712",
     sourceField: "target",
-    text: "○ 기준중위소득 180% 이하 청년\n   - 지원기준: 신청일 기준 옥천군에 주민등록을 두고 실제 거주하고 있는 청년\n     · 나이기준: 19세 이상 ~39세 이하 청년\n     · 소득기준: 기준중위소득 180% 이하\n                        * 소득이 없는 경우 부모님 기준중위소득으로 판단",
+    text: "○ 공고일 기준 강원특별자치도 거주, 최종학력 기준 졸업(중퇴), 만18세~45세이하 미취업 청년\n -최근 3개월 가구소득액 평균이 기준중위소득 120%초과 ~ 180%이하(만18세~34세 이하), 기준중위소득 180%이하(만35세~45세 이하)",
     expectation: {
       expectedRule: {
-        percent: 180,
-        boundary: "lte",
+        percent: 120,
+        boundary: "gt",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "REQUIRED CATEGORY: AND structure, across dimensions (median income AND age AND region, no 또는/혹은 anywhere) -- all three co-extracted correctly without the cross-dimension-OR safety net wrongly firing (that net only triggers on an actual OR occurrence linking distinct dimensions). A second, later 기준중위소득 mention ('소득이 없는 경우 부모님 기준중위소득으로 판단') is a fallback-basis clause for income-less applicants; only the FIRST occurrence is captured, per this parser's single-match design.",
+    note: "강원특별자치도 청년 취업준비 쿠폰 지원: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 443000000661 '기준중위소득 180% 이하 청년', had no positive household-income label at its first anchor and is now unresolved). REQUIRED CATEGORY: AND structure, across dimensions (median income AND age AND region, no 또는/혹은 anywhere) -- all co-extracted correctly without the cross-dimension-OR safety net wrongly firing. '가구소득액 평균' directly precedes the anchor. Only the FIRST percent+boundary pair in the whole text is captured (120% 초과); the two LATER thresholds in the same sentence (180% 이하 for 18-34, and a wholly separate 180% 이하 for 35-45) are silently not captured as additional rules, per this parser's single-match design.",
   },
   {
     id: "real-limitation-and-structure-within-median-income-only-first-captured",
@@ -328,25 +359,25 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
       },
       expectUnresolved: false,
     },
-    note: "청년월세 지원: KNOWN LIMITATION. This is a genuine AND ('이면서') of TWO separate median-income thresholds on two DIFFERENT income bases (원가구 100% 이하 AND 독립가구 60% 이하) -- the parser only ever resolves the FIRST percent+boundary occurrence in a text, so the second threshold (독립가구 60% 이하) is silently NOT captured as a second rule, and is also NOT reported as unresolved (this whole clause resolves cleanly with just the first threshold). This under-extraction is the safe failure direction (a real applicant is evaluated against a real, correctly-extracted 100%-of-원가구 rule, just not the ADDITIONAL 60%-of-독립가구 one), but it means this specific record's eligibility rules are incomplete. Documented honestly here per the project's 'do not encode a known limitation as correct' mandate rather than silently accepted.",
+    note: "청년월세 지원: KNOWN LIMITATION (unaffected by checkpoint-5 -- '원가구*의 소득' still satisfies `MEDIAN_INCOME_HOUSEHOLD_INCOME_POSITIVE_RE`'s narrow gap budget despite the intervening footnote asterisk and particle). This is a genuine AND ('이면서') of TWO separate median-income thresholds on two DIFFERENT income bases (원가구 100% 이하 AND 독립가구 60% 이하) -- the parser only ever resolves the FIRST percent+boundary occurrence in a text, so the second threshold (독립가구 60% 이하) is silently NOT captured as a second rule, and is also NOT reported as unresolved. This under-extraction is the safe failure direction, but it means this specific record's eligibility rules are incomplete. Documented honestly here per the project's 'do not encode a known limitation as correct' mandate.",
   },
 
   // -- multiple median-income percentages in one source ----------------------
   {
     id: "real-rule-multiple-percentages-first-occurrence-wins",
-    sourceServiceId: "179038700004",
+    sourceServiceId: "149200000037",
     sourceField: "target",
-    text: "국민기초생활보장법상 기초생활보장수급자 및 차상위계층(기준중위소득 50% 이하) - 기초생활보장수급자 * 생계급여(기준중위소득 30% 이하), 의료급여(기준중위소득 40% 이하), 주거급여(기준중위소득 43% 이하), 교육급여(기준중위소득 50% 이하) - 차상위계층: 기준중위소득 50% 이하",
+    text: "○  140시간 이상 직업훈련*에 참여하는 비정규직 근로자, 전직실업자, 무급휴직자, 자영업자인 피보험자 중 \n     가구원 합산 소득이 기준 중위소득의 80% 이하인 자\n     - 첨단산업 디지털 핵심 실무인재 양성훈련, 중장년내일센터 프로그램 참여자의 경우 기준 중위소득의 100%이하인 자, 국가기간산업직종 훈련 참여자의 경우 기준 중위소득의 120%이하인 자\n     - 전직실업자인 경우 실업급여 수급중인 자는 제외\n       * 직업훈련: 「국민 평생 직업능력 개발법」에 의해 지원되는 국민내일배움카드 과정(원격훈련은 비대면 실시간 훈련에 한정), 사업주 직업능력개발훈련, 폴리텍대학 전문기술(기능사)과정, 「고용보험법」및 「국민 평생 직업능력 개발법」에 의해 지원되는 국가인적자원개발컨소시엄 훈련과정 등",
     expectation: {
       expectedRule: {
-        percent: 50,
+        percent: 80,
         boundary: "lte",
         incomeMetric: "household_income",
         householdSizeMode: "scales_with_profile_household",
       },
       expectUnresolved: false,
     },
-    note: "HPV 국가예방접종사업: REQUIRED CATEGORY -- multiple median-income percentages in one source (50/30/40/43/50%, one per welfare-benefit type: 차상위계층/생계급여/의료급여/주거급여/교육급여). The parser deterministically resolves only the FIRST occurrence in raw text order (차상위계층 기준, 50%) -- the more specific per-benefit-type breakdown (생계급여 30%, 의료급여 40%, 주거급여 43%) is silently not captured as separate rules. Documented as a real limitation, not fixed here: safely disambiguating which of several benefit-type-scoped percentages applies to THIS specific service record would require program-specific knowledge this generic text parser doesn't have.",
+    note: "직업훈련 생계비대부사업: CHECKPOINT-5 REPLACEMENT (the old sample, 서비스ID 179038700004, had no positive household-income label at its first anchor and is now unresolved). REQUIRED CATEGORY -- multiple median-income percentages in one source (80/100/120%, one per training-program sub-track). The parser deterministically resolves only the FIRST occurrence in raw text order ('가구원 합산 소득' 80%, which also happens to be the only one of the three with a positive household label directly attached) -- the two later, more specific per-program percentages (100%, 120%) are silently not captured as separate rules. Documented as a real limitation, not fixed here: disambiguating which of several program-scoped percentages applies to THIS specific applicant sub-track would require program-specific knowledge this generic text parser doesn't have. Also proves category/status wording ('비정규직 근로자, 전직실업자, 무급휴직자, 자영업자인 피보험자') sitting directly adjacent to the anchor does not block extraction.",
   },
 
   // -- percent expressed as the WORD '퍼센트', not the '%' symbol ------------
@@ -356,6 +387,6 @@ export const MEDIAN_INCOME_GOLD_SAMPLES_REAL: MedianIncomeGoldSampleReal[] = [
     sourceField: "target",
     text: "월 소득액이 국민기초생활보장법 제2조제11호에 따른 기준중위소득 100퍼센트 이하인 가구(세대)",
     expectation: { expectUnresolved: true },
-    note: "민주화운동 관련자 예우 및 지원: real example using the WORD '퍼센트' instead of the '%' symbol -- `MEDIAN_INCOME_PERCENT_RE` only matches a literal '%' sign, so this correctly falls back to unresolved (a deliberate scope limit, not a bug: supporting the word form would require a much broader, riskier number-word grammar).",
+    note: "민주화운동 관련자 예우 및 지원: real example using the WORD '퍼센트' instead of the '%' symbol -- `MEDIAN_INCOME_PERCENT_RE` only matches a literal '%' sign, so this correctly falls back to unresolved (a deliberate scope limit, not a bug: supporting the word form would require a much broader, riskier number-word grammar). This early return happens before the checkpoint-5 positive-signal check is ever reached, even though '가구(세대)' at the end of this text would otherwise have satisfied it.",
   },
 ];

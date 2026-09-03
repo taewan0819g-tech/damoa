@@ -53,14 +53,15 @@ describe("median income gold sample regression fixture (real MOIS excerpts)", ()
   it("covers every required regression category from the Phase 3 gold-set spec", () => {
     const ids = new Set(MEDIAN_INCOME_GOLD_SAMPLES_REAL.map((s) => s.id));
     const requiredPrefixes = [
-      "real-rule-ordinary-profile-household-income", // ordinary household-income threshold
-      "real-rule-bare-median-income-no-gijun-prefix", // bare 중위소득 coverage-gap fix + 미만
+      "real-rule-ordinary-profile-household-income", // ordinary household-income threshold, positive-signal-scoped
+      "real-rule-bare-median-income-no-gijun-prefix", // bare 중위소득 coverage-gap fix + household-unit framing
+      "real-rule-boundary-word-lt", // 미만
       "real-rule-boundary-word-gt", // 초과
-      "real-rule-boundary-word-gte", // 이상
+      "real-unresolved-boundary-word-gte-no-corpus-example", // 이상 (checkpoint-5: zero real corpus hits w/ positive signal)
       "real-rule-explicit-year", // explicit year
       "real-rule-no-explicit-year", // no explicit year
       "real-unresolved-table-marker", // explicit per-size table marker
-      "real-unresolved-table-truncated-by-window", // ambiguous/multi-size table text (window edge)
+      "real-unresolved-table-truncated-by-window", // checkpoint-5: no positive signal, independent of table truncation
       "real-unresolved-genuine-fixed-reference-loan-program", // genuinely fixed-reference household size, still unresolved + fraction notation
       "real-unresolved-fixed-target-population-bare-median-income", // fixed-by-construction target population, still unresolved
       "real-unresolved-no-percent-digit", // no explicit percent digit
@@ -68,7 +69,9 @@ describe("median income gold sample regression fixture (real MOIS excerpts)", ()
       "real-unresolved-health-insurance-premium-disqualifier", // 건강보험료/건보료
       "real-unresolved-jonghapsodeuk-and-fraction-disqualifier", // individual/applicant income (종합소득) + fraction notation
       "real-unresolved-individual-label-bonin", // individual/applicant income (본인 label)
-      "real-unresolved-combined-self-spouse-with-nearby-size-footnote", // legitimate combined household income, still noise-sensitive
+      "real-unresolved-wage-income-disqualifier", // checkpoint-5: wage/earned income (임금/근로소득), incl. the 515000000168 correction
+      "real-unresolved-couple-income-disqualifier", // checkpoint-5: couple-combined income (부부합산 소득)
+      "real-unresolved-couple-income-combined-self-spouse-with-footnote", // checkpoint-5: 본인·배우자 합산, mechanism corrected
       "real-rule-status-category-wording-not-blocking", // category/status wording
       "real-unresolved-descriptive-mention-no-boundary", // descriptive/no-signal mention
       "real-rule-and-structure-cross-dimension", // AND structure (cross-dimension)
