@@ -190,14 +190,20 @@ function buildEligibility(raw: YouthRawPolicy): EligibilityRuleGroup | undefined
  * appear alongside one dominant value per field (e.g. jobCd is "0013010"
  * ~76% of the time, with ~10 other specific codes filling the rest), which
  * is consistent with the dominant value meaning "제한없음"(no restriction)
- * and the others meaning a real, specific restriction — but 온통청년 doesn't
- * publish a code table to confirm that mapping, and guessing it wrong
- * would risk turning a real restriction into a false pass. So none of
- * those fields are structured into rules, and ANY built eligibility group
- * (age and/or income) is marked "incomplete": we know there's more region/
- * employment/education/marital/business eligibility data on every record
- * than we can safely parse, so a pass on age+income alone is never strong
- * enough evidence for likely_eligible.
+ * and the others meaning a real, specific restriction. 온통청년 DOES publish an
+ * official code table for these fields (API코드정보.xlsx, "코드정의서" —
+ * see the Phase 4 codebook audit at docs/youth-codebook-phase4-audit.md and
+ * domain/youthCodebook/ for the verified code→label mappings), but as of
+ * this phase most of these fields still aren't wired into rule-building
+ * here: several codes map cleanly (e.g. mrgSttsCd's 미혼/기혼/제한없음), but
+ * others are ambiguous against Damoa's current profile ontology (narrower
+ * categories, unsupported concepts, unclear multi-code AND/OR semantics) and
+ * guessing wrong would risk turning a real restriction into a false pass. So
+ * none of those fields are structured into rules yet, and ANY built
+ * eligibility group (age and/or income) is marked "incomplete": we know
+ * there's more region/employment/education/marital/business eligibility
+ * data on every record than we currently structure, so a pass on age+income
+ * alone is never strong enough evidence for likely_eligible.
  */
 function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): Benefit["eligibilityDataStatus"] {
   return eligibility ? "incomplete" : undefined;
