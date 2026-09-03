@@ -46,33 +46,56 @@ export interface MedianIncomeYearEntry {
    * AND the resulting per-person increment has been corroborated — never
    * derived speculatively.
    *
-   * Provenance policy (Phase 3 pre-merge, task item 3): arithmetic
-   * consistency alone (`householdValues[7] - householdValues[6]`) is NOT
-   * accepted as sufficient justification for populating `eightPlusFormula`
-   * for a given year — each year's increment must be independently
-   * confirmed against a source that cites that year's specific MOHW gazette
-   * (고시) number, not merely re-derived from this table's own 1–7인 figures.
-   * 2021 and 2026 already had direct mohw.go.kr corroboration. For
-   * 2022–2025, per-year external confirmation was located and verified
-   * during this pass (2026-09-03) — each source independently states BOTH
-   * the exact 8인가구 KRW total and the "1인 증가시마다 N원씩 증가" rule text,
-   * citing the specific 보건복지부고시 number for that year, and every cited
-   * increment/8-person total exactly matches this table's own
-   * `householdValues[7] - householdValues[6]` arithmetic (a match, not a
-   * substitute, for independent sourcing):
-   *  - 2022: 873,588원/인 (8인 8,654,180원), 보건복지부고시 제2021-211호,
-   *    https://www.smart-law.co.kr/view/useful-legal-info/396
-   *  - 2023: 879,534원/인 (8인 8,987,049원), 보건복지부고시 제2022-191호,
-   *    https://www.smart-law.co.kr/view/useful-legal-info/438
-   *  - 2024: 896,625원/인 (8인 9,411,619원), 보건복지부고시 제2023-150호
-   *    (2023-08-16), https://www.smart-law.co.kr/view/useful-legal-info/492
-   *  - 2025: 923,623원/인 (8인 9,912,051원), 보건복지부고시 제2024-162호
-   *    (2024-08-01), https://www.smart-law.co.kr/view/useful-legal-info/528
-   * All 6 years 2021-2026 now carry genuine per-year external provenance for
-   * `eightPlusFormula`; no year's value was dropped, and none relies on
-   * arithmetic-consistency-only reasoning. 2027 has no `eightPlusFormula`
-   * (see that entry's own note: the 7인 figure itself is not yet verified
-   * from any source, so the formula cannot be computed, let alone verified).
+   * Provenance policy (Phase 3 pre-merge, task item 3, tightened in a
+   * follow-up provenance-cleanup pass on 2026-09-03): arithmetic consistency
+   * alone (`householdValues[7] - householdValues[6]`) is NOT accepted as
+   * sufficient justification for populating `eightPlusFormula` for a given
+   * year, and neither is a third-party site (e.g. a legal-info blog)
+   * reproducing the number — each year's increment must be independently
+   * confirmed against the ORIGINAL first-party government notice itself:
+   * either 국가법령정보센터 (law.go.kr), or the 보건복지부 (MOHW) 고시 원문/첨부파일
+   * itself. The initial pass of this policy (2026-09-03, task item 3) cited
+   * a third-party site (smart-law.co.kr) as corroboration; that did not meet
+   * the bar and has been replaced in a same-day follow-up pass with the
+   * actual 고시 PDF text, downloaded directly from mohw.go.kr's own notice
+   * board and parsed to confirm the exact wording, for every year 2022–2025
+   * (2021 and 2026 already had direct mohw.go.kr corroboration from an
+   * earlier checkpoint). Each 고시 PDF's "1. 기준 중위소득" section states, in a
+   * single footnote line directly under the 1–7인 table, BOTH the exact
+   * 8인가구 KRW total and the "1인 증가시마다 N원씩 증가" rule text — and the
+   * 1–7인 table itself, transcribed independently from this same PDF, also
+   * matches this table's `householdValues` exactly for every year checked
+   * (a further corroboration of the pre-existing 1–7인 figures, not just the
+   * 8+ formula):
+   *  - 2022 (보건복지부고시 제2021-211호, 공표 2021-08-05, 시행 2022-01-01):
+   *    PDF footnote reads "8인이상가구의 기준중위소득: 1인 증가시마다 873,588원씩
+   *    증가(8인가구: 8,654,180원)". Source (첨부파일 direct download from the
+   *    official 고시 게시글):
+   *    https://mohw.go.kr/boardDownload.es?bid=0026&list_no=366747&seq=1
+   *    (게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=366747)
+   *  - 2023 (보건복지부고시 제2022-191호, 공표 2022-08-08, 시행 2023-01-01):
+   *    PDF footnote reads "8인이상가구의 기준중위소득: 1인 증가시마다 879,534원씩
+   *    증가(8인가구: 8,987,049원)". Source:
+   *    https://mohw.go.kr/boardDownload.es?bid=0026&list_no=372980&seq=1
+   *    (게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=372980)
+   *  - 2024 (보건복지부고시 제2023-150호, 공표 2023-08-16, 시행 2024-01-01):
+   *    PDF footnote reads "8인이상가구의 기준중위소득: 1인 증가시마다 896,625원씩
+   *    증가(8인가구: 9,411,619원)". Source:
+   *    https://mohw.go.kr/boardDownload.es?bid=0026&list_no=377725&seq=1
+   *    (게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=377725)
+   *  - 2025 (보건복지부고시 제2024-162호, 공표 2024-08-01, 시행 2025-01-01):
+   *    PDF footnote reads "8인이상가구의 기준중위소득: 1인 증가시마다 923,623원씩
+   *    증가(8인가구: 9,912,051원)". Source (첨부파일 seq=2; seq=1 for this
+   *    posting is the .hwpx version of the same 고시):
+   *    https://mohw.go.kr/boardDownload.es?bid=0026&list_no=1482528&seq=2
+   *    (게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=1482528)
+   * All 6 years 2021-2026 now carry genuine per-year first-party government
+   * provenance for `eightPlusFormula`; no year's value was dropped, none
+   * relies on arithmetic-consistency-only reasoning, and no third-party site
+   * remains cited as production provenance for this field. 2027 has no
+   * `eightPlusFormula` (see that entry's own note: the 7인 figure itself is
+   * not yet verified from any source, so the formula cannot be computed,
+   * let alone verified).
    */
   eightPlusFormula?: {
     /** KRW added per household member beyond 7 (== householdValues[7] - householdValues[6] for a verified year). */
@@ -106,11 +129,15 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
     sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
     note:
-      "2022년도 기준 중위소득 (보건복지부고시 제2021-211호). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
-      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09). " +
-      "eightPlusFormula (873,588원/인): 제2021-211호를 인용하며 8인가구 8,654,180원과 " +
-      "'1인 증가시마다 873,588원씩 증가' 규정을 명시한 3자 출처로 재확인함 (task-item-3 pass, " +
-      "2026-09-03) — https://www.smart-law.co.kr/view/useful-legal-info/396",
+      "2022년도 기준 중위소득 (보건복지부고시 제2021-211호, 공표 2021-08-05). 1~7인 전 가구원수를 " +
+      "mohw.go.kr 공식 '연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, " +
+      "2026-09). eightPlusFormula (873,588원/인, 8인가구 8,654,180원): 제2021-211호 고시 원문 " +
+      "PDF를 mohw.go.kr 고시 게시판에서 직접 다운로드하여 '8인이상가구의 기준중위소득: 1인 " +
+      "증가시마다 873,588원씩 증가(8인가구: 8,654,180원)' 문구를 원문에서 직접 확인함 " +
+      "(provenance-cleanup pass, 2026-09-03; 이전 pass에서 인용했던 3자 출처 smart-law.co.kr는 " +
+      "1차 정부 출처로 교체됨) — " +
+      "https://mohw.go.kr/boardDownload.es?bid=0026&list_no=366747&seq=1 " +
+      "(게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=366747)",
   },
   {
     year: 2023,
@@ -120,11 +147,15 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
     sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
     note:
-      "2023년도 기준 중위소득 (보건복지부고시 제2022-191호). 1~7인 전 가구원수를 mohw.go.kr 공식 " +
-      "'연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, 2026-09). " +
-      "eightPlusFormula (879,534원/인): 제2022-191호를 인용하며 8인가구 8,987,049원과 " +
-      "'1인 증가시마다 879,534원씩 증가' 규정을 명시한 3자 출처로 재확인함 (task-item-3 pass, " +
-      "2026-09-03) — https://www.smart-law.co.kr/view/useful-legal-info/438",
+      "2023년도 기준 중위소득 (보건복지부고시 제2022-191호, 공표 2022-08-08). 1~7인 전 가구원수를 " +
+      "mohw.go.kr 공식 '연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance pass, " +
+      "2026-09). eightPlusFormula (879,534원/인, 8인가구 8,987,049원): 제2022-191호 고시 원문 " +
+      "PDF를 mohw.go.kr 고시 게시판에서 직접 다운로드하여 '8인이상가구의 기준중위소득: 1인 " +
+      "증가시마다 879,534원씩 증가(8인가구: 8,987,049원)' 문구를 원문에서 직접 확인함 " +
+      "(provenance-cleanup pass, 2026-09-03; 이전 pass에서 인용했던 3자 출처 smart-law.co.kr는 " +
+      "1차 정부 출처로 교체됨) — " +
+      "https://mohw.go.kr/boardDownload.es?bid=0026&list_no=372980&seq=1 " +
+      "(게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=372980)",
   },
   {
     year: 2024,
@@ -134,11 +165,15 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
     sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
     note:
-      "2024년도 기준 중위소득 (보건복지부고시 제2023-150호, 2023-08-16). 1~7인 전 가구원수를 " +
+      "2024년도 기준 중위소득 (보건복지부고시 제2023-150호, 공표 2023-08-16). 1~7인 전 가구원수를 " +
       "mohw.go.kr 공식 '연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance " +
-      "pass, 2026-09). eightPlusFormula (896,625원/인): 제2023-150호를 인용하며 8인가구 " +
-      "9,411,619원과 '1인 증가시마다 896,625원씩 증가' 규정을 명시한 3자 출처로 재확인함 " +
-      "(task-item-3 pass, 2026-09-03) — https://www.smart-law.co.kr/view/useful-legal-info/492",
+      "pass, 2026-09). eightPlusFormula (896,625원/인, 8인가구 9,411,619원): 제2023-150호 고시 " +
+      "원문 PDF를 mohw.go.kr 고시 게시판에서 직접 다운로드하여 '8인이상가구의 기준중위소득: 1인 " +
+      "증가시마다 896,625원씩 증가(8인가구: 9,411,619원)' 문구를 원문에서 직접 확인함 " +
+      "(provenance-cleanup pass, 2026-09-03; 이전 pass에서 인용했던 3자 출처 smart-law.co.kr는 " +
+      "1차 정부 출처로 교체됨) — " +
+      "https://mohw.go.kr/boardDownload.es?bid=0026&list_no=377725&seq=1 " +
+      "(게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=377725)",
   },
   {
     year: 2025,
@@ -148,11 +183,15 @@ export const MEDIAN_INCOME_TABLE: readonly MedianIncomeYearEntry[] = [
     sourceUrl: "https://www.mohw.go.kr/menu.es?mid=a10708010900",
     status: "verified",
     note:
-      "2025년도 기준 중위소득 (보건복지부고시 제2024-162호, 2024-08-01). 1~7인 전 가구원수를 " +
+      "2025년도 기준 중위소득 (보건복지부고시 제2024-162호, 공표 2024-08-01). 1~7인 전 가구원수를 " +
       "mohw.go.kr 공식 '연도별 기준중위소득' 페이지에서 직접 확인함 (checkpoint-4 provenance " +
-      "pass, 2026-09). eightPlusFormula (923,623원/인): 제2024-162호를 인용하며 8인가구 " +
-      "9,912,051원과 '1인 증가시마다 923,623원씩 증가' 규정을 명시한 3자 출처로 재확인함 " +
-      "(task-item-3 pass, 2026-09-03) — https://www.smart-law.co.kr/view/useful-legal-info/528",
+      "pass, 2026-09). eightPlusFormula (923,623원/인, 8인가구 9,912,051원): 제2024-162호 고시 " +
+      "원문 PDF를 mohw.go.kr 고시 게시판에서 직접 다운로드하여 '8인이상가구의 기준중위소득: 1인 " +
+      "증가시마다 923,623원씩 증가(8인가구: 9,912,051원)' 문구를 원문에서 직접 확인함 " +
+      "(provenance-cleanup pass, 2026-09-03; 이전 pass에서 인용했던 3자 출처 smart-law.co.kr는 " +
+      "1차 정부 출처로 교체됨; 이 고시 게시글의 첨부파일 seq=1은 .hwpx 버전이고 PDF는 seq=2임) — " +
+      "https://mohw.go.kr/boardDownload.es?bid=0026&list_no=1482528&seq=2 " +
+      "(게시글: https://mohw.go.kr/board.es?mid=a10409020000&bid=0026&act=view&list_no=1482528)",
   },
   {
     year: 2026,
