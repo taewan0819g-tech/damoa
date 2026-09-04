@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateEligibility, evaluateEligibilityDetailed } from "@/lib/eligibility/ruleEngine";
+import { derivePersonalizationEvidence } from "@/domain/benefit/personalization";
 import type { Benefit, EligibilityRuleGroup } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 
@@ -484,6 +485,47 @@ describe("evaluateEligibility", () => {
       // Only the age leaf (the branch that actually resolved to pass) is
       // surfaced — the failed region branch contributes nothing.
       expect(diag.passedLeaves).toEqual([{ field: "age", operator: "between", value: [19, 34] }]);
+    });
+
+    it("uses evidence from exactly ONE alternative branch when MULTIPLE branches all independently pass — never unions across them", () => {
+      // (age PASS) OR (region PASS) — both alternatives happen to hold for
+      // this user. The benefit only required ONE of the two paths, so only
+      // ONE path's evidence is real; unioning "age" + "region" from two
+      // independently-passing alternative branches would fabricate the same
+      // 2-dimension STRONG evidence this whole guard exists to prevent, just
+      // via multiple-pass instead of partial-pass branches.
+      const anyGroup: EligibilityRuleGroup = {
+        type: "any",
+        rules: [
+          {
+            type: "all",
+            rules: [{ id: "age", field: "age", operator: "between", value: [19, 34], required: true }],
+          },
+          {
+            type: "all",
+            rules: [{ id: "region", field: "residence", operator: "region_in", value: [{ province: "경기도" }], required: true }],
+          },
+        ],
+      };
+      const profile: UserProfile = {
+        birthDate: `${new Date().getFullYear() - 25}-01-01`, // age branch PASSes
+        residence: { province: "경기도" }, // region branch ALSO PASSes
+      };
+
+      const diag = evaluateEligibilityDetailed({ eligibility: anyGroup }, profile);
+
+      expect(diag.status).toBe("likely_eligible");
+      // Evidence must come from exactly ONE branch (deterministically the
+      // first passing branch in rule-declaration order — age here), never
+      // both. Must NOT equal the 2-leaf union [age, region].
+      expect(diag.passedLeaves).toEqual([{ field: "age", operator: "between", value: [19, 34] }]);
+      expect(diag.passedLeaves.length).toBe(1);
+
+      // The resulting personalization strength must not be artificially
+      // inflated to STRONG by a fabricated age+region combination.
+      const evidence = derivePersonalizationEvidence(diag.passedLeaves, profile);
+      expect(evidence.dimensions).not.toContain("region");
+      expect(evidence.specificDimensionCount).toBe(1);
     });
   });
 });

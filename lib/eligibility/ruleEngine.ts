@@ -232,11 +232,25 @@ function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile, leaves
   // DIFFERENT alternative branches (e.g. "age PASS + income UNKNOWN" OR
   // "region PASS + employment UNKNOWN") would fabricate combined dimension
   // coverage that no single verified path actually proves — measured and
-  // documented in docs/audits/or-branch-personalization-audit.md. So only a
-  // branch that ITSELF fully resolved to "pass" may contribute evidence;
+  // documented in docs/audits/or-branch-personalization-audit.json. So only
+  // a branch that ITSELF fully resolved to "pass" may contribute evidence;
   // branches that stayed unknown/fail contribute nothing, even if one of
   // their own leaves individually passed.
-  const evidenceLeaves = childEvals.filter((c) => c.result === "pass").flatMap((c) => c.evidenceLeaves);
+  //
+  // Remaining edge case: if MULTIPLE alternative branches all independently
+  // PASS for this user (e.g. "(age PASS) OR (region PASS)" where both
+  // happen to hold), evidence must still come from exactly ONE of them —
+  // otherwise unioning "age" + "region" from two independent alternative
+  // paths would fabricate the same kind of combined-dimension strength this
+  // whole guard exists to prevent, just via multiple-pass instead of
+  // partial-pass branches. A benefit only actually required ONE alternative
+  // path to hold, so only one path's evidence is real. We deterministically
+  // take the FIRST passing branch (in rule-declaration order) — arbitrary
+  // but stable, and simplest to reason about; there is currently no
+  // production case to prefer one passing branch over another (the frozen
+  // catalog has zero `any` groups — see the audit referenced above).
+  const firstPassingBranch = childEvals.find((c) => c.result === "pass");
+  const evidenceLeaves = firstPassingBranch ? firstPassingBranch.evidenceLeaves : [];
   return { result, evidenceLeaves };
 }
 

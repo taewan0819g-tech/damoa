@@ -31,11 +31,16 @@
  * Run with:
  *   npx tsx scripts/auditOrBranchInflation.ts
  *
- * Writes the full report to /tmp/or-branch-inflation-audit.json (large
- * output goes to a file, not stdout, per context budget) and prints only a
- * compact summary.
+ * Writes the full (scratch, uncommitted) report to
+ * /tmp/or-branch-inflation-audit.json (large output goes to a file, not
+ * stdout, per context budget), a compact deterministic COMMITTED artifact to
+ * docs/audits/or-branch-personalization-audit.json (hashes/counts/samples
+ * only — never the raw government snapshot rows), and prints only a compact
+ * summary to stdout.
  */
 import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 import {
   normalizeMOISServiceListItem,
   normalizeMOISSupportConditions,
@@ -54,12 +59,17 @@ const MOIS_LIST_PATH = "/tmp/mois_serviceList_full.json";
 const MOIS_CONDITIONS_PATH = "/tmp/mois_supportConditions_full.json";
 const YOUTH_PATH = "/tmp/youth_policy_full.json";
 const REPORT_PATH = "/tmp/or-branch-inflation-audit.json";
+const BASELINE_ARTIFACT_PATH = path.join(__dirname, "../docs/audits/or-branch-personalization-audit.json");
 
 const REQUIRED_INPUTS = [
   { path: MOIS_LIST_PATH, label: "MOIS service list" },
   { path: MOIS_CONDITIONS_PATH, label: "MOIS support conditions" },
   { path: YOUTH_PATH, label: "Youth Center policy list" },
 ];
+
+function sha256File(filePath: string): string {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
 
 function loadFrozenCatalog() {
   const missing = REQUIRED_INPUTS.filter((f) => !fs.existsSync(f.path));
@@ -71,7 +81,8 @@ function loadFrozenCatalog() {
   const moisRawList: MOISRawServiceListItem[] = JSON.parse(fs.readFileSync(MOIS_LIST_PATH, "utf8"));
   const moisRawConditions: MOISRawSupportCondition[] = JSON.parse(fs.readFileSync(MOIS_CONDITIONS_PATH, "utf8"));
   const youthRaw: YouthRawPolicy[] = JSON.parse(fs.readFileSync(YOUTH_PATH, "utf8"));
-  return { moisRawList, moisRawConditions, youthRaw };
+  const inputHashes = REQUIRED_INPUTS.map((f) => ({ path: f.path, label: f.label, sha256: sha256File(f.path) }));
+  return { moisRawList, moisRawConditions, youthRaw, inputHashes };
 }
 
 // Same 6 representative profiles used by auditPersonalizationBaseline.ts.
@@ -183,7 +194,7 @@ function dimensionKey(rule: EligibilityRule): string {
 }
 
 async function main() {
-  const { moisRawList, moisRawConditions, youthRaw } = loadFrozenCatalog();
+  const { moisRawList, moisRawConditions, youthRaw, inputHashes } = loadFrozenCatalog();
   const conditionsById = new Map<string, MOISRawSupportCondition>();
   for (const row of moisRawConditions) conditionsById.set(row.서비스ID, row);
 
@@ -280,13 +291,32 @@ async function main() {
 
   fs.writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2));
 
+  // Compact deterministic COMMITTED artifact (baseline of record) — hashes
+  // and derived counts/samples only, never the raw government snapshot rows.
+  const baselineArtifact = {
+    generatedAt: new Date().toISOString(),
+    frozenInputs: inputHashes.map((h) => ({ label: h.label, path: h.path, sha256: h.sha256 })),
+    catalogTotals: report.catalogTotals,
+    benefitsContainingAnyGroups: report.a_benefitsWithAnyGroup.count,
+    crossAlternativePassEvidenceCases: report.b_divergentPairs.count,
+    top20StrengthInflationCases: report.c_totalTop20Affected,
+    sampleIds: report.a_benefitsWithAnyGroup.sampleIds,
+    conclusion:
+      report.a_benefitsWithAnyGroup.count === 0
+        ? "The real, committed frozen MOIS + Youth Center catalog currently contains ZERO benefits with an `any` eligibility group anywhere in their tree — every adapter only ever constructs `type: \"all\"` groups, and the Korean free-text parser's OR-detection safety net (koreanEligibilityParser.ts's hasLocalCrossDimensionOr) bails out to unresolvedClauses instead of building a nested `any` group. Cross-branch/cross-alternative personalization evidence inflation is therefore not reachable in production today. lib/eligibility/ruleEngine.ts's branch-aware evidenceLeaves collection (single-passing-branch selection for `any` groups) is kept as defense-in-depth for if/when an `any` group is ever introduced."
+        : "Non-zero — see crossAlternativePassEvidenceCases/top20StrengthInflationCases and sampleIds above; the branch-aware fix in lib/eligibility/ruleEngine.ts addresses these cases.",
+  };
+  fs.mkdirSync(path.dirname(BASELINE_ARTIFACT_PATH), { recursive: true });
+  fs.writeFileSync(BASELINE_ARTIFACT_PATH, JSON.stringify(baselineArtifact, null, 2));
+
   console.log("=== OR-branch personalization inflation audit ===");
   console.log(`Catalog: ${allBenefits.length} benefits (MOIS ${moisBenefits.length}, Youth ${youthBenefits.length})`);
   console.log(`(a) Benefits with an 'any' group anywhere in their eligibility tree: ${benefitsWithAnyGroup.length}`);
   console.log(`(b) Profile x benefit pairs checked (benefit has 'any' group): ${profileBenefitPairsChecked}`);
   console.log(`(b) Divergent pairs (old flat-union != real branch-aware evidence): ${divergences.length}`);
   console.log(`(c) Top-20 results across all profiles affected by the divergence: ${report.c_totalTop20Affected}`);
-  console.log(`Full report: ${REPORT_PATH}`);
+  console.log(`Full (scratch) report: ${REPORT_PATH}`);
+  console.log(`Committed baseline artifact: ${BASELINE_ARTIFACT_PATH}`);
 }
 
 main().catch((err) => {
