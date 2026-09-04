@@ -194,10 +194,20 @@ describe("POST /api/benefits/match (non-paginated, bounded home-summary shape)",
     const json = await res.json();
 
     // Dataset is small enough that the full relevant set fits inside the
-    // preview caps, so likelyEligible+unknown (computed server-side over the
-    // FULL relevant set) equals exactly what's echoed back in the previews.
-    expect(json.counts.likelyEligible + json.counts.unknown).toBe(json.recommended.length);
+    // preview caps. `recommended` never drops likely_eligible items, so it
+    // always contains at least `likelyEligible` records; but per the home
+    // "recommended" admission rule, a WEAK-evidence unknown (e.g.
+    // "mixed-evidence-unknown", age-only) is excluded from `recommended` and
+    // surfaces in `needsReview` instead — so `recommended.length` can be
+    // LESS than `likelyEligible + unknown` even though nothing was silently
+    // dropped from the response as a whole.
+    expect(json.counts.likelyEligible).toBe(json.recommended.length);
     expect(json.counts.unknown).toBe(json.needsReview.length);
+    // recommended and needsReview must never overlap (each relevant benefit
+    // appears in at most one of the two bounded preview buckets).
+    const recommendedIds = new Set(json.recommended.map((b: Benefit) => b.id));
+    const needsReviewIds = new Set(json.needsReview.map((b: Benefit) => b.id));
+    for (const id of recommendedIds) expect(needsReviewIds.has(id)).toBe(false);
     expect(json.counts.totalEvaluated).toBe(mockBenefits.length);
     expect(json.counts.likelyEligible + json.counts.unknown + json.counts.notEligible + json.counts.excluded).toBe(
       mockBenefits.length

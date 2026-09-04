@@ -150,21 +150,34 @@ export function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeR
 }
 
 /**
+ * A single evaluated rule leaf (never a group's aggregate), paired with the
+ * originating rule so callers can inspect which field/operator/value
+ * produced a PASS — used by `derivePersonalizationEvidence` (see
+ * domain/benefit/personalization.ts) to classify ranking-only
+ * personalization evidence. Never used to alter the tri-state
+ * pass/fail/unknown status logic below.
+ */
+export interface LeafRecord {
+  rule: EligibilityRule;
+  result: NodeResult;
+}
+
+/**
  * `leaves` accumulates every individual rule's result (never a group's
  * aggregate), across the whole tree, in evaluation order — used by
  * `evaluateEligibilityDetailed` to compute evidence diagnostics without a
  * second traversal.
  */
-function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile, leaves: NodeResult[]): NodeResult {
+function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile, leaves: LeafRecord[]): NodeResult {
   if (isGroup(node)) {
     return evaluateGroup(node, profile, leaves);
   }
   const result = evaluateRule(node, profile);
-  leaves.push(result);
+  leaves.push({ rule: node, result });
   return result;
 }
 
-function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile, leaves: NodeResult[]): NodeResult {
+function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile, leaves: LeafRecord[]): NodeResult {
   const results = group.rules.map((child) => evaluateNode(child, profile, leaves)).filter((r) => r !== "skip");
 
   if (group.type === "all") {
@@ -242,6 +255,15 @@ export interface EligibilityDiagnostics {
    * true`) — a full pass on partial information is not full evidence.
    */
   downgradedFromPass: boolean;
+  /**
+   * Every leaf that resolved to a concrete "pass" against real profile
+   * data, with its originating field/operator/value — ranking-only raw
+   * material for `derivePersonalizationEvidence` (see
+   * domain/benefit/personalization.ts). NEVER used to compute `status`
+   * above, and never returned as-is from a user-facing API (see that
+   * module's docs for why raw rule details must stay server-internal).
+   */
+  passedLeaves: { field: string; operator: EligibilityRule["operator"]; value: unknown }[];
 }
 
 /**
@@ -287,19 +309,23 @@ export function evaluateEligibilityDetailed(
       hasEvidence: false,
       hasPositiveEvidence: false,
       downgradedFromPass: false,
+      passedLeaves: [],
     };
   }
 
-  const leaves: NodeResult[] = [];
+  const leaves: LeafRecord[] = [];
   const result = evaluateGroup(benefit.eligibility, profile, leaves);
   const normalized = result === "skip" ? "unknown" : result;
 
-  const passedRules = leaves.filter((r) => r === "pass").length;
-  const failedRules = leaves.filter((r) => r === "fail").length;
+  const passedRules = leaves.filter((l) => l.result === "pass").length;
+  const failedRules = leaves.filter((l) => l.result === "fail").length;
   const resolvedRules = passedRules + failedRules;
   const isIncomplete = benefit.eligibilityDataStatus === "incomplete" || benefit.hasUnresolvedEligibility === true;
   const downgradedFromPass = isIncomplete && normalized === "pass";
   const status = isIncomplete ? (normalized === "fail" ? "not_eligible" : "unknown") : NODE_RESULT_TO_STATUS[normalized];
+  const passedLeaves = leaves
+    .filter((l) => l.result === "pass")
+    .map((l) => ({ field: l.rule.field, operator: l.rule.operator, value: l.rule.value }));
 
   return {
     status,
@@ -309,6 +335,7 @@ export function evaluateEligibilityDetailed(
     failedRules,
     hasEvidence: resolvedRules > 0,
     hasPositiveEvidence: passedRules > 0,
+    passedLeaves,
     downgradedFromPass,
   };
 }
