@@ -15,7 +15,10 @@ import {
   deriveFinancialFacets,
   finalizeTopics,
   hasAssetBuildingSignal,
+  hasChildcareSignal,
   primaryCategory,
+  STARTUP_WORDS,
+  TRANSPORT_WORDS,
   type BenefitFinancialFacet,
   type BenefitTopic,
 } from "@/domain/benefit/topics";
@@ -151,12 +154,13 @@ function deriveYouthTopics(raw: YouthRawPolicy): BenefitTopic[] {
 
   const topics = new Set<BenefitTopic>();
   if (has("주거")) topics.add("housing");
-  if (has("보육", "육아", "출산")) topics.add("childcare");
+  // "보육" excludes business-incubator false positives — see hasChildcareSignal's docs.
+  if (hasChildcareSignal(generalText, ["보육", "육아", "출산"])) topics.add("childcare");
   if (has("교육", "직업훈련", "학비", "장학")) topics.add("education");
   if (has("일자리", "고용", "취업", "인턴")) topics.add("employment");
-  if (has("창업")) topics.add("startup");
+  if (has(...STARTUP_WORDS)) topics.add("startup");
   if (has("가족", "한부모")) topics.add("family");
-  if (has("교통")) topics.add("transport");
+  if (has(...TRANSPORT_WORDS)) topics.add("transport");
   if (hasAssetBuildingSignal(financeText)) topics.add("asset_building");
   return finalizeTopics(topics);
 }

@@ -103,3 +103,27 @@ describe("normalizeYouthPolicy eligibility", () => {
     expect(benefit.eligibility?.rules).toHaveLength(2);
   });
 });
+
+// Checkpoint 4 cross-topic precision audit regression — see
+// domain/benefit/topics.ts's hasChildcareSignal doc comment for the full
+// live-catalog evidence.
+describe("YouthAdapter — 보육 childcare/business-incubator homonym fix", () => {
+  it("does NOT tag childcare for a business-incubation-center program", () => {
+    const benefit = normalizeYouthPolicy(
+      rawPolicy({ plcyNm: "완주군 창업보육센터 운영", lclsfNm: "일자리", mclsfNm: "창업" })
+    );
+    expect(benefit.topics).not.toContain("childcare");
+    expect(benefit.topics).toContain("startup");
+  });
+
+  it("DOES still tag childcare for a genuine childcare-facility program using the bare 보육 word", () => {
+    const benefit = normalizeYouthPolicy(
+      rawPolicy({
+        plcyNm: "(광양시)아이양육하기좋은도시 광양만의 맞춤형 보육서비스제공",
+        lclsfNm: "금융·복지·문화",
+        mclsfNm: "문화활동 및 생활지원",
+      })
+    );
+    expect(benefit.topics).toContain("childcare");
+  });
+});

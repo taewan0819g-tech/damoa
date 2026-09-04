@@ -189,3 +189,99 @@ describe("신청기한 -> application.startDate/endDate/deadlineType", () => {
     expect(benefit.application?.startDate).toBeUndefined();
   });
 });
+
+// Checkpoint 4 cross-topic precision audit regressions — see
+// docs/audits/cross-topic-precision-audit.json and
+// domain/benefit/topics.ts's UNSAFE_COMBINED_SEOBISBUNYA /
+// hasChildcareSignal / hasHousingSignal doc comments for the full
+// live-catalog evidence behind each of these.
+describe("MOISAdapter — 서비스분야 combined-bucket exclusion (UNSAFE_COMBINED_SEOBISBUNYA)", () => {
+  it("does not tag childcare from the combined 보육·교육 field alone when the title is pure adult education", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 서비스명: "인문100년장학금", 서비스분야: "보육·교육" })
+    );
+    expect(benefit.topics).not.toContain("childcare");
+    expect(benefit.topics).toContain("education");
+  });
+
+  it("does not tag startup from the combined 고용·창업 field alone when the title is pure employment", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 서비스명: "선원복지고용센터 운영", 서비스분야: "고용·창업" })
+    );
+    expect(benefit.topics).not.toContain("startup");
+    expect(benefit.topics).toContain("employment");
+  });
+
+  it("does not tag housing from the combined 주거·자립 field alone when the title is unrelated self-reliance support", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 서비스명: "북한이탈주민 자산형성 지원 (미래행복통장)", 서비스분야: "주거·자립" })
+    );
+    expect(benefit.topics).not.toContain("housing");
+  });
+
+  it("still tags childcare/startup/housing when the title itself independently supports it, even under a combined field", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 서비스명: "영유아보육료 지원", 서비스분야: "보육·교육" })
+    );
+    expect(benefit.topics).toContain("childcare");
+  });
+
+  it("still scans a SAFE (non-combined) 서비스분야 value normally, e.g. 임신·출산 for a childcare-adjacent title", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 서비스명: "고위험 임산부 의료비 지원", 서비스분야: "임신·출산" })
+    );
+    expect(benefit.topics).toContain("childcare");
+  });
+});
+
+describe("MOISAdapter — 보육 childcare/business-incubator homonym fix", () => {
+  it("does NOT tag childcare for a business-incubation-center program", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "장애인기업 창업보육센터 운영" }));
+    expect(benefit.topics).not.toContain("childcare");
+    expect(benefit.topics).toContain("startup");
+  });
+
+  it("DOES still tag childcare for a genuine childcare-facility program using the bare 보육 word", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "시간제보육 지원" }));
+    expect(benefit.topics).toContain("childcare");
+  });
+});
+
+describe("MOISAdapter — 임대 housing/non-residential-lease homonym fix", () => {
+  it("does NOT tag housing for a farm-equipment lease program", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "농기계임대사업" }));
+    expect(benefit.topics).not.toContain("housing");
+  });
+
+  it("does NOT tag housing for a farmland-lease program", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "청년후계농 농지 임대료 지원" }));
+    expect(benefit.topics).not.toContain("housing");
+  });
+
+  it("does NOT tag housing for a commercial storefront-lease discount", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "구서시티타워상가 임대료 감면" }));
+    expect(benefit.topics).not.toContain("housing");
+  });
+
+  it("does NOT tag housing for the coincidental 퇴임대비 substring collision", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "퇴직예정 교직원 퇴임대비 연수" }));
+    expect(benefit.topics).not.toContain("housing");
+  });
+
+  it("DOES still tag housing for a genuine rental-deposit support program", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 서비스명: "전북특별자치도 신혼부부 및 청년 임대보증금 지원사업" })
+    );
+    expect(benefit.topics).toContain("housing");
+  });
+
+  it("DOES still tag housing for a genuine purchased-rental public housing program (매입임대)", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "매입임대 지원(청년)" }));
+    expect(benefit.topics).toContain("housing");
+  });
+
+  it("DOES still tag housing when a non-homonym housing word is present regardless of 임대 context", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 서비스명: "농지 임대주택 지원" }));
+    expect(benefit.topics).toContain("housing");
+  });
+});

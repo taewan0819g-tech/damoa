@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   TOPIC_PRIORITY,
+  STARTUP_WORDS,
+  TRANSPORT_WORDS,
   deriveFinancialFacets,
   finalizeTopics,
   hasAssetBuildingSignal,
+  hasChildcareSignal,
+  hasHousingSignal,
   matchesBenefitFacet,
   matchesUserInterest,
   primaryCategory,
 } from "@/domain/benefit/topics";
 import { normalizeMOISServiceListItem, type MOISRawServiceListItem } from "@/adapters/mois/MOISAdapter";
 import { normalizeYouthPolicy, type YouthRawPolicy } from "@/adapters/youthCenter/YouthAdapter";
-import type { Benefit } from "@/types/benefit";
+import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
+import type { Benefit, BenefitCategory } from "@/types/benefit";
 
 function moisRaw(overrides: Partial<MOISRawServiceListItem>): MOISRawServiceListItem {
   return { 서비스ID: "1", 서비스명: "Test Service", 소관기관명: "Test Org", ...overrides };
@@ -214,5 +219,127 @@ describe("Multi-topic discoverability end-to-end", () => {
     expect(matchesUserInterest(benefit, ["startup"])).toBe(true);
     expect(matchesUserInterest(benefit, ["housing"])).toBe(true);
     expect(matchesUserInterest(benefit, ["childcare"])).toBe(false);
+  });
+});
+
+// M. Checkpoint 4 centralization review: STARTUP_WORDS/TRANSPORT_WORDS are the
+// single source of truth both adapters now import — a benefit with an
+// identical title should get an identical startup/transport tag from either
+// adapter's derivation path (byte-for-byte-identical keyword lists, unlike
+// housing/childcare/education/employment/family, which stay adapter-local).
+describe("STARTUP_WORDS / TRANSPORT_WORDS centralization", () => {
+  it("both hold the exact same single-word lists relied on by both adapters", () => {
+    expect(STARTUP_WORDS).toEqual(["창업"]);
+    expect(TRANSPORT_WORDS).toEqual(["교통"]);
+  });
+
+  it("MOISAdapter and YouthAdapter both tag startup for the same 창업 title", () => {
+    const moisBenefit = normalizeMOISServiceListItem(moisRaw({ 서비스명: "청년전용창업자금" }));
+    const youthBenefit = normalizeYouthPolicy(youthRaw({ plcyNm: "청년전용창업자금" }));
+    expect(moisBenefit.topics).toContain("startup");
+    expect(youthBenefit.topics).toContain("startup");
+  });
+
+  it("MOISAdapter and YouthAdapter both tag transport for the same 교통 title", () => {
+    const moisBenefit = normalizeMOISServiceListItem(moisRaw({ 서비스명: "청년 교통비 지원" }));
+    const youthBenefit = normalizeYouthPolicy(youthRaw({ plcyNm: "청년 교통비 지원" }));
+    expect(moisBenefit.topics).toContain("transport");
+    expect(youthBenefit.topics).toContain("transport");
+  });
+});
+
+// N. Checkpoint 4 homonym-exclusion helpers, tested directly (not just
+// through an adapter) — see domain/benefit/topics.ts's doc comments for the
+// full live-catalog evidence behind each pattern.
+describe("hasChildcareSignal — 보육 childcare/business-incubator homonym", () => {
+  const CHILDCARE_WORDS = ["보육", "육아", "아동", "출산"];
+
+  it("excludes a bare 보육 match in business-incubator context", () => {
+    expect(hasChildcareSignal("창업보육센터 지원", CHILDCARE_WORDS)).toBe(false);
+    expect(hasChildcareSignal("기업보육센터 운영", CHILDCARE_WORDS)).toBe(false);
+  });
+
+  it("keeps a bare 보육 match with no incubator context", () => {
+    expect(hasChildcareSignal("시간제보육 지원", CHILDCARE_WORDS)).toBe(true);
+  });
+
+  it("keeps a non-보육 childcare word even in incubator-adjacent text", () => {
+    expect(hasChildcareSignal("육아종합지원센터 및 창업보육센터", CHILDCARE_WORDS)).toBe(true);
+  });
+
+  it("returns false when no childcare word is present at all", () => {
+    expect(hasChildcareSignal("청년 취업지원 프로그램", CHILDCARE_WORDS)).toBe(false);
+  });
+});
+
+describe("hasHousingSignal — 임대 housing/non-residential-lease homonym", () => {
+  const HOUSING_WORDS = ["주거", "주택", "전세", "임대"];
+
+  it("excludes a bare 임대 match in non-residential-lease context (farmland/equipment/commercial)", () => {
+    expect(hasHousingSignal("농기계임대사업", HOUSING_WORDS)).toBe(false);
+    expect(hasHousingSignal("농지 임대료 지원", HOUSING_WORDS)).toBe(false);
+    expect(hasHousingSignal("상가 임대료 감면", HOUSING_WORDS)).toBe(false);
+    expect(hasHousingSignal("퇴직예정 교직원 퇴임대비 연수", HOUSING_WORDS)).toBe(false);
+  });
+
+  it("keeps a bare 임대 match with no non-residential-lease context", () => {
+    expect(hasHousingSignal("임대보증금 지원", HOUSING_WORDS)).toBe(true);
+    expect(hasHousingSignal("매입임대 지원(청년)", HOUSING_WORDS)).toBe(true);
+  });
+
+  it("keeps a non-임대 housing word even in farm/business-adjacent text", () => {
+    expect(hasHousingSignal("농지 임대주택 지원", HOUSING_WORDS)).toBe(true);
+  });
+
+  it("returns false when no housing word is present at all", () => {
+    expect(hasHousingSignal("청년 취업지원 프로그램", HOUSING_WORDS)).toBe(false);
+  });
+});
+
+// O. Item 6: for EVERY user-selectable interest (lib/constants/interests.ts),
+// matchesUserInterest and matchesBenefitFacet must agree — a single-interest
+// call to matchesUserInterest is exactly matchesBenefitFacet for that one
+// value, and both must recognize a benefit expressing that interest via
+// EVERY channel matchesBenefitFacet documents (direct category, topics
+// membership, financialFacets membership) while rejecting an unrelated one.
+describe("matchesUserInterest / matchesBenefitFacet consistency — every selectable interest", () => {
+  it.each(INTEREST_CATEGORIES)("interest=%s: matchesUserInterest([interest]) === matchesBenefitFacet(interest) for every match channel", (interest: BenefitCategory) => {
+    const isFinancialFacet = interest === "loan" || interest === "savings" || interest === "deposit";
+
+    // Channel 1: direct category equality.
+    const byCategory = minimalBenefit({ category: interest });
+    expect(matchesBenefitFacet(byCategory, interest)).toBe(true);
+    expect(matchesUserInterest(byCategory, [interest])).toBe(true);
+
+    // Channel 2: topics membership (category is a DIFFERENT, higher-priority
+    // topic, interest is present only as a secondary topic) — doesn't apply
+    // to the three financial-facet values, which are never in `topics`.
+    if (!isFinancialFacet) {
+      const otherCategory: BenefitCategory = interest === "welfare" ? "housing" : "welfare";
+      const byTopics = minimalBenefit({ category: otherCategory, topics: [otherCategory as never, interest as never] });
+      expect(matchesBenefitFacet(byTopics, interest)).toBe(true);
+      expect(matchesUserInterest(byTopics, [interest])).toBe(true);
+    }
+
+    // Channel 3: financialFacets membership — only applies to loan/savings/deposit.
+    if (isFinancialFacet) {
+      const byFacet = minimalBenefit({ category: "housing", financialFacets: [interest as never] });
+      expect(matchesBenefitFacet(byFacet, interest)).toBe(true);
+      expect(matchesUserInterest(byFacet, [interest])).toBe(true);
+    }
+
+    // Negative: a benefit expressing none of the channels never matches.
+    const unrelatedCategory: BenefitCategory = interest === "welfare" ? "housing" : "welfare";
+    const noMatch = minimalBenefit({ category: unrelatedCategory });
+    expect(matchesBenefitFacet(noMatch, interest)).toBe(false);
+    expect(matchesUserInterest(noMatch, [interest])).toBe(false);
+  });
+
+  it("every INTEREST_CATEGORIES value is a valid BenefitCategory with no duplicates, and deposit is deliberately excluded", () => {
+    expect(new Set(INTEREST_CATEGORIES).size).toBe(INTEREST_CATEGORIES.length);
+    expect(INTEREST_CATEGORIES).not.toContain("deposit");
+    expect(INTEREST_CATEGORIES).toContain("family");
+    expect(INTEREST_CATEGORIES).toContain("savings");
+    expect(INTEREST_CATEGORIES).toContain("loan");
   });
 });

@@ -1,0 +1,1507 @@
+{
+  "generatedAt": "2026-09-04T10:52:18.773Z",
+  "frozenInputs": [
+    {
+      "path": "/tmp/mois_serviceList_full.json",
+      "label": "MOIS service list",
+      "sha256": "82d7bab830c825aff81df1180f420a8fc92996f6e02cae25a7fd50bd6983f30a"
+    },
+    {
+      "path": "/tmp/youth_policy_full.json",
+      "label": "Youth Center policy list",
+      "sha256": "90ffc2050271abcc58908c60523eef64f23485bbacf97050ad669e74329ecb90"
+    }
+  ],
+  "catalogTotals": {
+    "mois": 10967,
+    "youth": 2745,
+    "total": 13712
+  },
+  "topics": {
+    "housing": {
+      "total": 606,
+      "mois": 318,
+      "youth": 288,
+      "primaryCategoryCount": 606,
+      "secondaryOnlyCount": 0,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 18,
+        "obviously_incorrect": 1,
+        "ambiguous": 1
+      },
+      "sample": [
+        {
+          "id": "mois-116010000001",
+          "title": "주택금융공사 월세자금보증",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000012",
+          "title": "귀어 창업 및 주택구입 지원(융자)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000157",
+          "title": "수산장비 임대",
+          "source": "mois",
+          "classification": "obviously_incorrect",
+          "note": "\"수산장비 임대\" = fishery-EQUIPMENT rental, not housing. Known residual gap of the \"임대\" homonym fix — not caught because it has no non-residential-lease context word (농지/농기계/상가/etc.) in its title; a targeted fix would overfit to this one title, so left as a documented gap."
+        },
+        {
+          "id": "mois-135200005001",
+          "title": "긴급복지 주거지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000016",
+          "title": "가정폭력피해자 국민임대주택 우선 입주권 부여",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000017",
+          "title": "한부모가족 임대주택 특별공급",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-140000000185",
+          "title": "귀산촌인 창업 및 주택 구입 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142000000014",
+          "title": "중소기업장기근속자주택우선공급",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-145000000047",
+          "title": "서비스형 외국인투자지역 임대료 지원",
+          "source": "mois",
+          "classification": "ambiguous",
+          "note": "\"서비스형 외국인투자지역 임대료 지원\" = commercial rent support for businesses in a foreign-investment zone, not personal housing. Same residual gap as mois-119200000157 — plausibly \"housing\" in a loose real-estate-cost sense, but not a personal residence."
+        },
+        {
+          "id": "mois-154300000011",
+          "title": "귀농 농업창업 및 주택구입지원 사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-154300005037",
+          "title": "농촌취약계층주거개선",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-161300000076",
+          "title": "버팀목전세자금대출",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260821005400213346",
+          "title": "[광산구]청년 노동자 주거 지원사업 참여기업 모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260806005400213321",
+          "title": "서구 청년 천원 복비(부동산 중개보수) 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260803005400213315",
+          "title": "청년온가 2026년 정기 입주자 모집 재공고",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260724005400213304",
+          "title": "2026년 찾아가는 청년주거 상담소(국토교통부)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260724005400213303",
+          "title": "(검단구) 인천시 청년월세 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260724005400213302",
+          "title": "(서해구) 인천시 청년월세 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260724005400213301",
+          "title": "(영종구) 인천시 청년월세 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260722005400213298",
+          "title": "청년월세지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "employment": {
+      "total": 1304,
+      "mois": 177,
+      "youth": 1127,
+      "primaryCategoryCount": 1190,
+      "secondaryOnlyCount": 114,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 20,
+        "obviously_incorrect": 0,
+        "ambiguous": 0
+      },
+      "sample": [
+        {
+          "id": "mois-119200000162",
+          "title": "선원복지고용센터 운영",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-129000000013",
+          "title": "전역예정군인 재취업 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-129000000015",
+          "title": "전역예정장병 취업활동지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200000046",
+          "title": "중소기업 취업연계 장학금 (희망사다리Ⅰ유형)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000096",
+          "title": "유휴간호사 등 교육 및 취업 연계 서비스 제공",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000055",
+          "title": "경력보유여성 등 취업지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-140000000194",
+          "title": "목재이용명예 감시원 일자리 제공",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-140000000204",
+          "title": "산사태현장예방단 일자리 제공",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-140000000218",
+          "title": "산림보호지원단 일자리 제공",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142100000059",
+          "title": "해외인력 취업매칭 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-149200000008",
+          "title": "무급 고용유지조치 근로자지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-149200000016",
+          "title": "산재근로자 직업훈련",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213366",
+          "title": "[남구] 2026년 청년 구직자(근로자) 취업장려금 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213365",
+          "title": "[남구] 증명사진 무료지원 ",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213364",
+          "title": "(최초공개) LH 현직자가 이 것마저 공개....",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213361",
+          "title": "삼척중앙시장 청년몰 청년상인 수시모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260828005400213359",
+          "title": "[무료 강의] 방송 쪽 취업 관심 있는 분만",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260826005400213356",
+          "title": "청년 스타트업 쇼룸 순천",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260826005400213353",
+          "title": "[여수]2026년 전남 청년 근속장려금 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260824005400213350",
+          "title": "부산 남구 청년 창업 아이디어 경진대회",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "education": {
+      "total": 1191,
+      "mois": 766,
+      "youth": 425,
+      "primaryCategoryCount": 1173,
+      "secondaryOnlyCount": 18,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 20,
+        "obviously_incorrect": 0,
+        "ambiguous": 0
+      },
+      "sample": [
+        {
+          "id": "mois-000000465790",
+          "title": "유아학비 (누리과정) 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000066",
+          "title": "어업인 역량 강화 교육 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000067",
+          "title": "어업인안전조업교육지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000073",
+          "title": "어업인및어업인후계자교육지원(수산업경영인교육)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000076",
+          "title": "어촌지도자교육지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000085",
+          "title": "항로표지 전문교육 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000113",
+          "title": "방역사업비 지원(질병 예찰 및 방역, 교육)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000118",
+          "title": "낚시 전문교육 제공",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200000003",
+          "title": "교육급여",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200000007",
+          "title": "대학원 학과 기반 교육연구단 연구장학금 등 지원(4단계 두뇌한국21 사업)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200000008",
+          "title": "글로벌 현장학습 프로그램 운영",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200000011",
+          "title": "인문100년장학금",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213362",
+          "title": "청년도약 인재양성 부트캠프(제조AI 분야)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260828005400213359",
+          "title": "[무료 강의] 방송 쪽 취업 관심 있는 분만",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260828005400213358",
+          "title": "[무료강좌] 돈이 돈을 버는 법 (원숭이도 따라하는 쉬운 재테크)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260827005400213357",
+          "title": "청년도약 인재양성 부트캠프 사업(미래차 분야)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260826005400213354",
+          "title": "청년도약 인재양성 부트캠프 사업(인공지능 분야)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260824005400113351",
+          "title": "희망사다리 장학사업(Ⅰ,Ⅱ유형)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260824005400213349",
+          "title": "[9월 1일 10시 접수 예정] 2026년 구직청년 자격증 취득지원 사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260821005400113348",
+          "title": "국가근로장학금",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "startup": {
+      "total": 479,
+      "mois": 109,
+      "youth": 370,
+      "primaryCategoryCount": 101,
+      "secondaryOnlyCount": 378,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 19,
+        "obviously_incorrect": 0,
+        "ambiguous": 1
+      },
+      "sample": [
+        {
+          "id": "mois-119200000012",
+          "title": "귀어 창업 및 주택구입 지원(융자)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000070",
+          "title": "창업어가멘토링지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-140000000185",
+          "title": "귀산촌인 창업 및 주택 구입 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142000000010",
+          "title": "중장년 기술창업센터",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142000000038",
+          "title": "혁신 소상공인 창업지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142000000073",
+          "title": "재창업기업 사업화 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142000000099",
+          "title": "청년전용창업자금",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142100000015",
+          "title": "장애인 창업점포 지원사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142100000016",
+          "title": "발달장애인 가족창업 특화사업장 구축지원 사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142100000058",
+          "title": "창업중심대학",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-154300000005",
+          "title": "기술창업자금 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-154300000011",
+          "title": "귀농 농업창업 및 주택구입지원 사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213361",
+          "title": "삼척중앙시장 청년몰 청년상인 수시모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260826005400213356",
+          "title": "청년 스타트업 쇼룸 순천",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260824005400213350",
+          "title": "부산 남구 청년 창업 아이디어 경진대회",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260820005400213342",
+          "title": "창업전문가 특강 “취업? 창업!”",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260818005400213337",
+          "title": "2027년 청년농업인 창업 스케일업(성장) 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260812005400213330",
+          "title": " 「2026년 청년 창업 성장 육성 프로젝트 지원사업」 청년창업자 모집 공고 ",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260810005400113328",
+          "title": "산림산업 창업지원_청년 산림창업가 시너지캠프",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260810005400213327",
+          "title": "2026년 청년 IT 자격증 취득지원 프로그램 수강생 모집",
+          "source": "youth",
+          "classification": "ambiguous",
+          "note": "Tagged startup only via the Youth Center mclsf=\"창업\" sub-bucket field; the title itself (\"청년 IT 자격증 취득지원 프로그램\") is about IT certification/job-skill support, not independently about starting a business — plausible if the certification is startup-oriented, but not confirmed by the title alone."
+        }
+      ]
+    },
+    "family": {
+      "total": 257,
+      "mois": 243,
+      "youth": 14,
+      "primaryCategoryCount": 217,
+      "secondaryOnlyCount": 40,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 19,
+        "obviously_incorrect": 0,
+        "ambiguous": 1
+      },
+      "sample": [
+        {
+          "id": "mois-129000000082",
+          "title": "6ㆍ25전사자(미수습) 유가족 유전자 채취 포상금 및 전사자 유해 소재 제보 포상금 지급 안내",
+          "source": "mois",
+          "classification": "ambiguous",
+          "note": "\"유가족\" (bereaved family) triggers the \"가족\" family keyword — this is a KIA-soldier genetic-identification reward program, tangentially family-related (paid to surviving family) but not a typical family SUPPORT benefit."
+        },
+        {
+          "id": "mois-132000000002",
+          "title": "다문화 가족 및 국내체류 외국인 대상 운전면허교실 운영 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200000010",
+          "title": "장애학생 가족 참여 국외체험 연수 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000083",
+          "title": "결핵 환자 가족접촉자 검진비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000094",
+          "title": "발달장애인 가족휴식지원사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000017",
+          "title": "한부모가족 임대주택 특별공급",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000021",
+          "title": "다문화가족 이중언어 교육지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000040",
+          "title": "한부모무료법률구조",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000052",
+          "title": "청소년 미혼 한부모 자립지원 (우리원더패밀리)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000056",
+          "title": "다문화가족지원센터 이용",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-138300000057",
+          "title": "저소득 다문화 자녀 교육활동비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-142100000016",
+          "title": "발달장애인 가족창업 특화사업장 구축지원 사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260504005400113101",
+          "title": "청소년 한부모 복지급여 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260410005400212681",
+          "title": "청소년한부모 자립 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260410005400212679",
+          "title": "가족돌봄청년 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260406005400212490",
+          "title": "가족돌봄청년 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260317005400212183",
+          "title": "청년한부모 자녀양육비 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20251214005400211989",
+          "title": "청소년 한부모 복지급여 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20251112005400211864",
+          "title": "청소년 한부모 복지급여 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20250904005400211631",
+          "title": "청소년 한부모 아동양육 및 자립지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "childcare": {
+      "total": 1334,
+      "mois": 1309,
+      "youth": 25,
+      "primaryCategoryCount": 1329,
+      "secondaryOnlyCount": 5,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 18,
+        "obviously_incorrect": 0,
+        "ambiguous": 2
+      },
+      "sample": [
+        {
+          "id": "mois-127000000025",
+          "title": "성폭력, 아동학대, 인신매매등범죄의 피해 아동과 범죄 피해자인 장애인을 위한 진술조력인 지원",
+          "source": "mois",
+          "classification": "ambiguous",
+          "note": "Legal aid (진술조력인) for crime victims broadly — children (아동) are ONE of several listed victim categories alongside disabled persons; matches childcare via \"아동\" but isn't a childcare SERVICE per se."
+        },
+        {
+          "id": "mois-127000000026",
+          "title": "성폭력, 아동학대, 장애인학대,인신매매, 스토킹범죄, 특정강력범죄 피해자 국선변호사 지원",
+          "source": "mois",
+          "classification": "ambiguous",
+          "note": "Same as mois-127000000025 — court-appointed defense counsel for crime victims generally (아동학대 is one of several listed crime types), not a dedicated childcare program."
+        },
+        {
+          "id": "mois-131200000010",
+          "title": "영유아 보육시설 지방세 감면",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200005031",
+          "title": "시간제보육 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200005036",
+          "title": "영유아보육료 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-134200005047",
+          "title": "유아교육비·보육료 추가지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000010",
+          "title": "아동 공동생활 가정 운영 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000012",
+          "title": "학대피해아동쉼터 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000086",
+          "title": "아동복지시설 기능보강 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000087",
+          "title": "아동복지시설 아동치료재활지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000114",
+          "title": "고위험 임산부 의료비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200000120",
+          "title": "아동수당",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260504005400213056",
+          "title": "서산시 공동육아나눔터(장난감도서관) 운영",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260504005400213037",
+          "title": "서산시 출산지원금 및 둘째 이후 영유아 양육비 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260413005400212712",
+          "title": "신혼, 맞벌이부부 행복 공동육아나눔터 확충",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260408005400212592",
+          "title": "2026년 소상공인 육아응원패키지 시즌2 「소상공인 임신 특별지원금」 모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260408005400212591",
+          "title": "2026년 소상공인 육아응원패키지 시즌2 「소상공인 출생 특별지원금」  모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260330005400212344",
+          "title": "전북 청년 1인 소상공인·농어업인 출산급여 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260330005400212343",
+          "title": "출산장려금 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260330005400212327",
+          "title": "출산장려금 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "transport": {
+      "total": 120,
+      "mois": 104,
+      "youth": 16,
+      "primaryCategoryCount": 89,
+      "secondaryOnlyCount": 31,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 20,
+        "obviously_incorrect": 0,
+        "ambiguous": 0
+      },
+      "sample": [
+        {
+          "id": "mois-154300000058",
+          "title": "농촌형 교통모델 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-161300000103",
+          "title": "국토교통부 전세보증금반환보증 보증료 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-183000000008",
+          "title": "국가유공상이자 등 교통시설 이용지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-301000000129",
+          "title": "저소득계층 대학생 교통비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-304000000160",
+          "title": "광진동행버스(교통약자)를 위한 무료버스 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-318000000411",
+          "title": "교통약자를 위한 무료셔틀버스 지원(어르신)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-319000000144",
+          "title": "교통약자 무료셔틀버스(동작복지카) 운영",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-335000000104",
+          "title": "학교 밖 청소년 교통비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-339000000104",
+          "title": "학교밖청소년 교통비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-340000000133",
+          "title": "저소득 중증장애인 교통비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-357000000106",
+          "title": "저소득 등 청소년 교통비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-357000000131",
+          "title": "강화군 임산부 교통비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260724005400213304",
+          "title": "2026년 찾아가는 청년주거 상담소(국토교통부)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260722005400213294",
+          "title": "[조선대학교] 현직자 리얼토크 멘토링 6월 : 앰코코리아, 광주교통공사",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260527005400213222",
+          "title": "2026년 청년근로자 교통비 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260513005400213181",
+          "title": "2026 전입청년 교통비 지원 ",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260409005400212659",
+          "title": "고령군 청년근로자 교통비 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260406005400212498",
+          "title": "(인천교통공사)청년 체험형 인턴 운영",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260406005400212472",
+          "title": "인천형 대중교통비 환급 지원(인천 i-패스)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260319005400212216",
+          "title": "(광양시)난임부부 교통비 등 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "welfare": {
+      "total": 8966,
+      "mois": 8037,
+      "youth": 929,
+      "primaryCategoryCount": 8966,
+      "secondaryOnlyCount": 0,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 20,
+        "obviously_incorrect": 0,
+        "ambiguous": 0
+      },
+      "sample": [
+        {
+          "id": "mois-105100000001",
+          "title": "근로·자녀장려금",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000001",
+          "title": "친환경 에너지절감장비 보급",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000007",
+          "title": "해양사고 국선 심판변론인 선정 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000008",
+          "title": "옵서버 승선경비 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000010",
+          "title": "합작수산물 관세 감면 추진",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000016",
+          "title": "원양어업 경영자금 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000022",
+          "title": "원양어선안전관리",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000027",
+          "title": "산지 및 소비지 유통자금 융자 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000044",
+          "title": "수산경영인회생자금",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000045",
+          "title": "어업경영자금 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000053",
+          "title": "TAC 참여어업인 경영개선자금 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-119200000055",
+          "title": "연안선박 현대화 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260831005400213363",
+          "title": "2026년 전남광주통합특별시 청년축제",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260828005400213360",
+          "title": "[소진 마감]2026 동구 청년 웰컴 박스",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260826005400213355",
+          "title": "[담양]청년 스토리 저장소 영상제작 참여자 모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260826005400213352",
+          "title": "2026 일상돌봄서비스 사업 이용자 모집",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260821005400213345",
+          "title": "2026년 청년 넷제로 상상뜨락 리빙랩 아이디어 공모전",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260820005400213341",
+          "title": "2026년 서구 청년축제 「무한도ZONE」",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260818005400213340",
+          "title": "2026년 하반기(2026년도 1학기) 5개 자치구(광주권역) 대학(원)생 학자금 대출이자 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260818005400213339",
+          "title": "[전남]2026년 하반기 대학생 학자금 대출이자 지원사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    },
+    "asset_building": {
+      "total": 45,
+      "mois": 16,
+      "youth": 29,
+      "primaryCategoryCount": 41,
+      "secondaryOnlyCount": 4,
+      "sampleSize": 20,
+      "sampleClassificationCounts": {
+        "obviously_correct": 20,
+        "obviously_incorrect": 0,
+        "ambiguous": 0
+      },
+      "sample": [
+        {
+          "id": "mois-125000000004",
+          "title": "북한이탈주민 자산형성 지원 (미래행복통장)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200005010",
+          "title": "자산형성지원사업(희망저축Ⅰ)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200005012",
+          "title": "자산형성지원사업(희망저축Ⅱ)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-135200005013",
+          "title": "자산형성지원사업(청년내일저축계좌)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-449000000101",
+          "title": "수급자 및 차상위계층 자산형성지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-568000000115",
+          "title": "중증장애인 자산형성 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-611000019633",
+          "title": "중증장애인 자산형성지원(이룸통장)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-627000000136",
+          "title": "청년희망적금",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-628000000159",
+          "title": "청년발달장애인 자산형성지원(행복씨앗통장)",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-650000000231",
+          "title": "(중장년) 중소기업 장기재직 재형저축 지원",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-650000000279",
+          "title": "제주청년 희망사다리 재형저축",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "mois-653000000015",
+          "title": "청년 디딤돌 2배 적금 지원사업",
+          "source": "mois",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260605005400113228",
+          "title": "청년미래적금",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260513005400213197",
+          "title": "부산 청년 자산형성 지원(부산청년 기쁨두배통장)",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260513005400213184",
+          "title": "청년내일저축계좌 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260511005400213180",
+          "title": "부산 청년내일저축계좌",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260504005400113090",
+          "title": "청년내일저축계좌 지원",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260430005400113009",
+          "title": "청년내일저축계좌",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260427005400212876",
+          "title": "제주 일자리 재형저축 사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        },
+        {
+          "id": "youth-20260421005400212785",
+          "title": "제주청년 희망사다리 재형저축 사업",
+          "source": "youth",
+          "classification": "obviously_correct"
+        }
+      ]
+    }
+  },
+  "facets": {
+    "loan": {
+      "total": 488,
+      "mois": 392,
+      "youth": 96
+    },
+    "savings": {
+      "total": 36,
+      "mois": 11,
+      "youth": 25
+    },
+    "deposit": {
+      "total": 0,
+      "mois": 0,
+      "youth": 0
+    }
+  },
+  "multiTopic": {
+    "totalMultiTopic": 578,
+    "exactly2": 566,
+    "exactly3": 12,
+    "fourPlus": 0,
+    "moisCount": 110,
+    "youthCount": 468,
+    "topCombinations": [
+      {
+        "combo": "employment+startup",
+        "count": 345,
+        "exampleId": "mois-393000000135",
+        "exampleTitle": "청년 창업·취업 학원비 지원"
+      },
+      {
+        "combo": "education+employment",
+        "count": 93,
+        "exampleId": "mois-134200000046",
+        "exampleTitle": "중소기업 취업연계 장학금 (희망사다리Ⅰ유형)"
+      },
+      {
+        "combo": "education+family",
+        "count": 20,
+        "exampleId": "mois-138300000021",
+        "exampleTitle": "다문화가족 이중언어 교육지원"
+      },
+      {
+        "combo": "childcare+transport",
+        "count": 18,
+        "exampleId": "mois-357000000131",
+        "exampleTitle": "강화군 임산부 교통비 지원"
+      },
+      {
+        "combo": "education+startup",
+        "count": 15,
+        "exampleId": "mois-511000000131",
+        "exampleTitle": "취·창업 교육비 지원"
+      },
+      {
+        "combo": "childcare+family",
+        "count": 13,
+        "exampleId": "mois-307000000215",
+        "exampleTitle": "성북구 육아종합센터 이용료 및 사용료 감면(한부모가족)"
+      },
+      {
+        "combo": "childcare+education",
+        "count": 11,
+        "exampleId": "mois-134200005047",
+        "exampleTitle": "유아교육비·보육료 추가지원"
+      },
+      {
+        "combo": "education+employment+startup",
+        "count": 9,
+        "exampleId": "youth-20260429005400212922",
+        "exampleTitle": "2026 동명청년창작소 [커머스빌딩 START] 참여 교육생 모집"
+      },
+      {
+        "combo": "housing+startup",
+        "count": 8,
+        "exampleId": "mois-119200000012",
+        "exampleTitle": "귀어 창업 및 주택구입 지원(융자)"
+      },
+      {
+        "combo": "employment+housing",
+        "count": 7,
+        "exampleId": "mois-442000000656",
+        "exampleTitle": "청년 취업자, 농업인 주거비 지원"
+      },
+      {
+        "combo": "education+housing",
+        "count": 6,
+        "exampleId": "mois-392000000120",
+        "exampleTitle": "동두천시 대학생 주거지원 장학금"
+      },
+      {
+        "combo": "childcare+housing",
+        "count": 5,
+        "exampleId": "mois-401000000104",
+        "exampleTitle": "시흥형 주거비(아동 주거비) 지원"
+      },
+      {
+        "combo": "housing+transport",
+        "count": 4,
+        "exampleId": "mois-161300000103",
+        "exampleTitle": "국토교통부 전세보증금반환보증 보증료 지원"
+      },
+      {
+        "combo": "employment+transport",
+        "count": 4,
+        "exampleId": "youth-20260722005400213294",
+        "exampleTitle": "[조선대학교] 현직자 리얼토크 멘토링 6월 : 앰코코리아, 광주교통공사"
+      },
+      {
+        "combo": "asset_building+employment",
+        "count": 4,
+        "exampleId": "youth-20260513005400213197",
+        "exampleTitle": "부산 청년 자산형성 지원(부산청년 기쁨두배통장)"
+      },
+      {
+        "combo": "childcare+employment",
+        "count": 3,
+        "exampleId": "mois-149200000153",
+        "exampleTitle": "고용보험 미적용자 출산급여"
+      },
+      {
+        "combo": "education+transport",
+        "count": 3,
+        "exampleId": "mois-O00004000009",
+        "exampleTitle": "어린이 교통공원 이용교육"
+      },
+      {
+        "combo": "family+housing",
+        "count": 2,
+        "exampleId": "mois-138300000017",
+        "exampleTitle": "한부모가족 임대주택 특별공급"
+      },
+      {
+        "combo": "employment+family",
+        "count": 2,
+        "exampleId": "mois-511000000102",
+        "exampleTitle": "다문화가정 상담·취업보조 서비스"
+      },
+      {
+        "combo": "family+transport",
+        "count": 2,
+        "exampleId": "mois-611000000116",
+        "exampleTitle": "한부모가족 자녀 교통비 등 지원"
+      }
+    ]
+  },
+  "umbrellaLeakageByTopic": {
+    "housing": {
+      "moisFieldOnlyCount": 0,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 140,
+      "youthTopFieldValues": [
+        [
+          "주거 / 전월세 및 주거급여 지원",
+          69
+        ],
+        [
+          "주거 / 주택 및 거주지",
+          62
+        ],
+        [
+          "주거 / 기숙사",
+          8
+        ],
+        [
+          "주거,주거 / 주택 및 거주지,전월세 및 주거급여 지원",
+          1
+        ]
+      ]
+    },
+    "employment": {
+      "moisFieldOnlyCount": 0,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 839,
+      "youthTopFieldValues": [
+        [
+          "일자리 / 취업",
+          417
+        ],
+        [
+          "일자리 / 창업",
+          321
+        ],
+        [
+          "일자리,교육 / 취업,미래역량강화",
+          44
+        ],
+        [
+          "일자리 / 재직자",
+          37
+        ],
+        [
+          "일자리,일자리 / 취업,취업",
+          8
+        ]
+      ]
+    },
+    "education": {
+      "moisFieldOnlyCount": 0,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 280,
+      "youthTopFieldValues": [
+        [
+          "교육 / 미래역량강화",
+          94
+        ],
+        [
+          "교육･직업훈련 / 미래역량강화",
+          72
+        ],
+        [
+          "일자리,교육 / 취업,미래역량강화",
+          41
+        ],
+        [
+          "교육･직업훈련 / 교육비지원",
+          32
+        ],
+        [
+          "교육 / 교육비지원",
+          17
+        ]
+      ]
+    },
+    "startup": {
+      "moisFieldOnlyCount": 0,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 146,
+      "youthTopFieldValues": [
+        [
+          "일자리 / 창업",
+          142
+        ],
+        [
+          "일자리,일자리 / 창업,취업",
+          2
+        ],
+        [
+          "일자리,일자리 / 취업,창업",
+          2
+        ]
+      ]
+    },
+    "family": {
+      "moisFieldOnlyCount": 0,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 0,
+      "youthTopFieldValues": []
+    },
+    "childcare": {
+      "moisFieldOnlyCount": 626,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 0,
+      "youthTopFieldValues": []
+    },
+    "transport": {
+      "moisFieldOnlyCount": 0,
+      "moisUnsafeBucketStillPresent": false,
+      "youthFieldOnlyCount": 0,
+      "youthTopFieldValues": []
+    }
+  },
+  "conclusion": "MOIS's 서비스분야 turned out to have the SAME umbrella-pollution shape already fixed for Youth Center's lclsfNm/asset_building: 3 of its 10 values (\"주거·자립\", \"보육·교육\", \"고용·창업\") join two unrelated concepts, forcing topic tags unsupported by the record's own title on 352/580, 1508/1516, and 758/843 of their respective records. Fixed in this checkpoint (UNSAFE_COMBINED_SEOBISBUNYA) — moisUnsafeBucketStillPresent is false for every topic below, confirming the fix is complete. Every remaining field-only tag (both MOIS and Youth) checked against its actual driving field value and found to be a genuine single-purpose signal, not a forced umbrella match — see youthTopFieldValues per topic (e.g. housing's Youth field-only tags are overwhelmingly lclsfNm=\"주거\", a literal single-word housing label, not a combined bucket). Manual sample classification (item 1) also surfaced two Korean lexical-homonym false-positive patterns, DISTINCT from the umbrella-field-leakage class above (single ambiguous keyword, not a combined field value): (1) \"보육\" means both \"childcare\" and \"business incubation\" (창업보육센터) — 4 MOIS + 7 Youth records wrongly tagged childcare, FULLY fixed via hasChildcareSignal's BUSINESS_INCUBATOR_PATTERN exclusion (zero residual). (2) \"임대\" (lease) is used for non-residential leases (farmland/equipment/commercial space) as well as housing — 17 of 22 MOIS housing-tagged records whose only housing-word match was \"임대\" were non-residential, FIXED via hasHousingSignal's NON_RESIDENTIAL_LEASE_CONTEXT_PATTERN exclusion for 15 of the 17 (verified zero collateral impact on the 5 genuine 임대-only housing matches); 2 residual false positives (수산장비 임대, 서비스형 외국인투자지역 임대료 지원) are deliberately left unfixed rather than overfitting a pattern to two singleton titles — see their `ambiguous`/`obviously_incorrect` classification in topics.housing.sample. Both fixes verified to produce zero eligibility/candidate mismatch via frozenMatchingSemanticEquivalence.ts."
+}
