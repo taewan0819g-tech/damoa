@@ -1,0 +1,203 @@
+{
+  "checkpoint": "D — Damoa Closed-Beta Readiness Audit",
+  "auditType": "AUDIT_ONLY_NO_IMPLEMENTATION",
+  "branch": "wip/beta-personalization-pass",
+  "auditedShaBeforeThisCheckpointsOwnCommit": "d8296250349dad384d14633cf0b0bdf5547c1270",
+  "divergedFromMainAt": "b4f5eb923930ff85ff6d35e103160dcb247970b4",
+  "branchRelationToMain": "main is a strict ancestor of wip/beta-personalization-pass (linear, no conflicts)",
+  "verdict": "READY_AFTER_SMALL_FIXES",
+  "coreJourneys": {
+    "A_onboarding_to_home": "PASS",
+    "B_home_rec_to_detail_to_home": "PASS",
+    "C_list_search_filter_sort_page_to_detail_to_back_exact_state": "PASS",
+    "D_saved_to_detail_to_saved": "PASS",
+    "E_profile_edit_partial_merge": "PASS",
+    "F_province_city_edit_canonical": "PASS",
+    "G_refresh_deep_link_identical_request": "PASS",
+    "allPass": true,
+    "total": 7,
+    "passed": 7
+  },
+  "personalizationAuditCurrentState": {
+    "catalogSize": 13712,
+    "sourceArtifact": "docs/audits/beta-readiness-personalization.json",
+    "sourceScript": "scripts/auditBetaReadiness.ts",
+    "likelyEligibleAcrossAllProfiles": 0,
+    "profiles": [
+      { "id": "A_icheon_unemployed_youth", "label": "A 이천 무직 청년", "likely_eligible": 0, "unknown": 7805, "not_eligible": 5907, "relevantFeedSize": 6413, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "B_seoul_university_student", "label": "B 서울 대학생", "likely_eligible": 0, "unknown": 7974, "not_eligible": 5738, "relevantFeedSize": 6365, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "C_suwon_high_income_worker", "label": "C 수원 고소득 직장인", "likely_eligible": 0, "unknown": 7557, "not_eligible": 6155, "relevantFeedSize": 6149, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "D_icheon_newlywed", "label": "D 이천 신혼부부", "likely_eligible": 0, "unknown": 7950, "not_eligible": 5762, "relevantFeedSize": 6248, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "E_jeonnam_single_parent", "label": "E 전남 한부모", "likely_eligible": 0, "unknown": 8032, "not_eligible": 5680, "relevantFeedSize": 6305, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "F_minimal_input", "label": "F 최소 입력", "likely_eligible": 0, "unknown": 9844, "not_eligible": 3868, "relevantFeedSize": 8091, "homeRecommended": 0, "homeRecommendedPctUnknown": null, "homeNeedsReview": 10 }
+    ],
+    "top10HomeRecommendedProfilesAtoE": {
+      "strengthStrongPct": 100,
+      "sourceGovernmentPct": 100,
+      "sourceYouthPolicyPct": 0,
+      "regionSpecificEvidenceRange": "5/10 (A) to 10/10 (C,D,E)",
+      "interestOverlapRange": "0/10 to 10/10 depending on profile"
+    },
+    "likelyEligibleRegressionStatus": "unchanged from pre-pass baseline (docs/beta-personalization-audit.md); known, previously-flagged, not a regression"
+  },
+  "youthRegionLeakage": {
+    "measuredNotFixed": true,
+    "zipCdImplemented": false,
+    "icheonProfiles": [
+      {
+        "profile": "A_icheon_unemployed_youth",
+        "homeTop10YouthCount": 0,
+        "homeTop20YouthCount": 0,
+        "relevantFeedYouthCount": 831,
+        "relevantFeedSize": 6413,
+        "relevantFeedYouthPct": 13.0,
+        "suspiciousLocalTitlesInRelevantFeed": 545
+      },
+      {
+        "profile": "D_icheon_newlywed",
+        "homeTop10YouthCount": 0,
+        "homeTop20YouthCount": 0,
+        "relevantFeedYouthCount": 604,
+        "relevantFeedSize": 6248,
+        "relevantFeedYouthPct": 9.7,
+        "suspiciousLocalTitlesInRelevantFeed": 476
+      }
+    ],
+    "riskClassification": {
+      "homeSurface": "LOW (measured 0/10 Top-10, 0/20 Top-20 for both Icheon profiles)",
+      "fullCatalogBrowse": "MODERATE (13.0% / 9.7% of relevant feed is Youth, with unverified but geographically-suggestive titles)"
+    },
+    "cause": "Side effect of strength-based ranking (built for personalization, not region-leakage mitigation) deprioritizing Youth's single-dimension region-blind matches below MOIS's multi-dimension matches — zipCd enforcement gap itself remains completely unresolved"
+  },
+  "eligibilityStatusProductRisk": {
+    "likelyEligibleReachable": false,
+    "likelyEligibleCountAllProfilesAllCatalog": 0,
+    "pctHomeRecommendedUnknownNonEmptyProfiles": 100,
+    "unknownAlwaysLabeled": true,
+    "unknownLabelText": "확인이 필요해요",
+    "labelOmissionCodePathFound": false,
+    "risk": "product-copy/comprehension risk only, not a bug — '다모아 추천' heading plus small badge could be misread as confirmed eligibility by first-time testers"
+  },
+  "deadOrMisleadingControls": [
+    {
+      "id": "dead_deposit_category_chip",
+      "location": "app/(app)/benefits/BenefitsPageClient.tsx:29 (ALL_CATEGORIES = Object.keys(CATEGORY_LABELS))",
+      "coverage": "0/13712 (financialFacetCoverage.deposit: 0 in docs/audits/category-topic-precision-audit.json)",
+      "newlyConfirmedThisCheckpoint": false,
+      "note": "onboarding INTEREST_CATEGORIES already correctly excludes deposit; this is a list-page-only straggler"
+    },
+    {
+      "id": "always_empty_financial_group_tab",
+      "location": "domain/benefit/sourceGroup.ts (getSourceGroup), providers/index.ts (FSSFinancialProductProvider never registered)",
+      "coverage": "0 real records ever classified as source group 'financial' (MOIS=government, Youth=youth_policy, neither maps to financial types)",
+      "newlyConfirmedThisCheckpoint": true,
+      "note": "empty state renders correctly, not a crash, but the '금융상품' top-level nav tab is always empty in production"
+    }
+  ],
+  "performance": {
+    "benchmarkScript": "scripts/benchmarkProductionStability.ts",
+    "isRealProductionTiming": false,
+    "note": "local benchmark only, frozen snapshots, zero live calls; NOT a substitute for real Vercel production timing",
+    "stages": [
+      { "stage": "MOIS catalog build", "coldMs": 422.1, "warmMs": 0.0 },
+      { "stage": "Youth catalog build", "coldMs": 98.8, "warmMs": 0.0 },
+      { "stage": "Merged catalog + candidate index", "coldMs": 34.4, "warmMs": 0.1 },
+      { "stage": "Total (first request in a fresh process)", "coldMs": 555, "warmMs": 0.1 },
+      { "stage": "Representative match request (candidates=6850/12356)", "coldMs": 38.3, "warmMs": null }
+    ],
+    "cacheArchitecture": "resilientCache: uninitialized/healthy/stale/unavailable, stale-if-error, process-local (not shared across serverless instances)",
+    "betaBlocker": false,
+    "widerScaleBlocker": "possible, if hosting platform recycles instances frequently"
+  },
+  "safetyAudit": {
+    "allPass": true,
+    "checks": [
+      { "name": "No mock backfill when a real provider key is configured", "result": "PASS" },
+      { "name": "Server-only API keys never reach the client bundle", "result": "PASS" },
+      { "name": "No secrets committed", "result": "PASS" },
+      { "name": "Invalid returnTo cannot cause an open redirect", "result": "PASS" },
+      { "name": "Missing official/application URL hidden, never invented", "result": "PASS" },
+      { "name": "not_eligible never shown as a personalized recommendation", "result": "PASS" },
+      { "name": "UNKNOWN never presented as confirmed eligibility", "result": "PASS (comprehension risk only, see eligibilityStatusProductRisk)" },
+      { "name": "Malformed benefits-list URL params fail safely", "result": "PASS" },
+      { "name": "API failure has a user-visible, non-crashing state", "result": "PASS" }
+    ]
+  },
+  "mobileUx": {
+    "codeLevelOnly": true,
+    "notPixelAuditedOnRealDevice": true,
+    "findings": [
+      "AppShell is max-w-md mx-auto mobile-first single-column shell with pb-24 clearance for BottomNav",
+      "Filter/category chip rows use horizontal scroll (-mx-4 overflow-x-auto px-4), not wrap/clip",
+      "All selects are native <select> elements (OS picker, no custom-dropdown risk)",
+      "Home, /benefits, and detail all have an EmptyState with actionable recovery copy; no dead ends found"
+    ]
+  },
+  "qualityGates": {
+    "typecheck": "pass",
+    "lint": "pass (0 errors, 1 pre-existing unrelated warning: scripts/auditPersonalizationBaseline.ts:421 unused var)",
+    "test": "pass (937/937 tests, 57/57 files)",
+    "build": "pass (route shapes unchanged: /benefits static, /benefits/[id] dynamic)",
+    "gitDiffCheck": "pass (clean, no whitespace errors)",
+    "ciEvidence": "none claimed or referenced; no GitHub Actions run checked/exists for this SHA"
+  },
+  "issues": {
+    "p0": [],
+    "p1": [
+      {
+        "id": "P1-1",
+        "title": "Dead '예금' (deposit) category filter chip",
+        "evidence": "BenefitsPageClient.tsx:29; financialFacetCoverage.deposit: 0",
+        "smallestNextCheckpoint": "Exclude 'deposit' from the list page's ALL_CATEGORIES the same way INTEREST_CATEGORIES already excludes it (one-line change, no logic risk)"
+      },
+      {
+        "id": "P1-2",
+        "title": "Always-empty '금융상품' group tab",
+        "evidence": "domain/benefit/sourceGroup.ts; providers/index.ts (FSS never registered)",
+        "smallestNextCheckpoint": "Hide the 'financial' tab from GROUP_FILTERS until FSS is a real provider, or add a distinct '곧 추가돼요' empty-state variant for that tab"
+      },
+      {
+        "id": "P1-3",
+        "title": "likely_eligible structurally unreachable",
+        "evidence": "personalizationAuditCurrentState.likelyEligibleAcrossAllProfiles = 0; unchanged from pre-pass baseline",
+        "smallestNextCheckpoint": "Explicit product sign-off on loosening the MOIS/Youth 'incomplete' downgrade for well-verified dimension combinations, OR a copy-only disclaimer strengthening change; beta test plan item 9 is designed to inform this decision"
+      },
+      {
+        "id": "P1-4",
+        "title": "Youth Center region leakage in full-catalog browse",
+        "evidence": "youthRegionLeakage: 13.0% (A) / 9.7% (D) of relevant feed, mitigated only on Home (0/10, 0/20)",
+        "smallestNextCheckpoint": "A zipCd -> 행정동 crosswalk research spike (no implementation yet)"
+      }
+    ],
+    "p2": [
+      { "id": "P2-1", "title": "Process-local/cold-start cache architecture", "note": "fine at 5-tester scale, revisit before wider rollout" },
+      { "id": "P2-2", "title": "Youth zipCd remains fundamentally unresolved", "note": "root cause of P1-4, tracked separately as the underlying architecture gap" },
+      { "id": "P2-3", "title": "'확인이 필요해요' comprehension", "note": "explicitly the subject of the beta test plan item 9; better learned from real testers than guessed at" }
+    ],
+    "counts": { "p0": 0, "p1": 4, "p2": 3 }
+  },
+  "betaTestPlan": {
+    "instrumentation": "manual only — no analytics infrastructure exists in this codebase today (no analytics SDK/event-tracking imports found in app/, components/, hooks/)",
+    "testerCount": 5,
+    "recordPerTester": [
+      "Onboarding completion (yes/no, abandonment step if no)",
+      "Onboarding time (wall-clock start-to-finish)",
+      "Top-10 perceived relevance (0-10, direct question)",
+      "Useful new benefit discovered (yes/no + which one)",
+      "Obvious mismatch count (of the 10)",
+      "Detail clicks (count)",
+      "Official-link clicks (count)",
+      "Save usage (yes/no + count)",
+      "'확인이 필요해요' understanding (direct probe for P1-3)",
+      "Loading/error complaints (spontaneous mentions)"
+    ],
+    "suggestedModeration": "watch each session live or via screen-share where possible, especially for relevance/mismatch/comprehension items which need a follow-up question, not just click data"
+  },
+  "filesAddedThisCheckpoint": [
+    "docs/beta-readiness-audit.md",
+    "docs/audits/beta-readiness.json",
+    "docs/audits/beta-readiness-personalization.json",
+    "scripts/auditBetaReadiness.ts"
+  ],
+  "noProductionCodeChanged": true
+}
