@@ -138,6 +138,7 @@ function getRequiredApiKey(): string {
 const catalogCache = createResilientCache(() => buildCatalog(getRequiredApiKey()), {
   ttlMs: CACHE_MS,
   label: "MOIS catalog",
+  count: (benefits) => benefits.length,
 });
 const conditionsCache = createResilientCache(() => buildConditionsMap(getRequiredApiKey()), {
   ttlMs: CACHE_MS,
@@ -215,13 +216,29 @@ export class MOISBenefitProvider implements BenefitProvider {
         provider: "mois",
         configured: false,
         status: "unavailable",
+        lastAttemptAt: null,
         lastSuccessAt: null,
         lastFailureAt: null,
         lastError: null,
         ageMs: null,
+        isStale: false,
+        refreshInFlight: false,
+        currentCatalogCount: null,
       };
     }
     const diag = catalogCache.getDiagnostics();
-    return { provider: "mois", configured: true, ...diag };
+    return {
+      provider: "mois",
+      configured: true,
+      status: diag.status,
+      lastAttemptAt: diag.lastAttemptAt,
+      lastSuccessAt: diag.lastSuccessAt,
+      lastFailureAt: diag.lastFailureAt,
+      lastError: diag.lastError,
+      ageMs: diag.ageMs,
+      isStale: diag.status === "stale",
+      refreshInFlight: diag.refreshInFlight,
+      currentCatalogCount: diag.currentCount,
+    };
   }
 }

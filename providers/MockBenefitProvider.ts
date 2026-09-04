@@ -26,10 +26,14 @@ export class MockBenefitProvider implements BenefitProvider {
       provider: "mock",
       configured: true,
       status: "healthy",
+      lastAttemptAt: Date.now(),
       lastSuccessAt: Date.now(),
       lastFailureAt: null,
       lastError: null,
       ageMs: 0,
+      isStale: false,
+      refreshInFlight: false,
+      currentCatalogCount: mockBenefits.length,
     };
   }
 }

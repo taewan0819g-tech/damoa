@@ -27,26 +27,45 @@
  *    re-hammering the upstream on every subsequent SEQUENTIAL (non
  *    -concurrent) request; the stale value (or the failure) is served
  *    immediately until the cooldown elapses.
+ *
+ * Cold-start fix (post-Phase-5 pre-beta correction): a cache that has never
+ * had ANY refresh attempt yet ("uninitialized"/"cold" — a brand-new process
+ * that simply hasn't been asked for data yet) is a materially different
+ * state from one that HAS attempted a refresh and failed with nothing to
+ * fall back to ("unavailable" — a confirmed, attempted failure). Conflating
+ * the two previously made `status` report "unavailable" for a provider that
+ * had simply never been called yet, which caused the match route to return
+ * a false 503 on a fresh process's very first request. `status` now
+ * distinguishes "uninitialized" (never attempted: `lastAttemptAt === null`)
+ * from "unavailable" (attempted at least once, no usable value).
  */
 
-export type ResilientCacheStatus = "healthy" | "stale" | "unavailable";
+export type ResilientCacheStatus = "healthy" | "stale" | "unavailable" | "uninitialized";
 
 export interface ResilientCacheDiagnostics {
   status: ResilientCacheStatus;
+  /** When the most recent refresh attempt (success or failure) started, or null if never attempted. */
+  lastAttemptAt: number | null;
   lastSuccessAt: number | null;
   lastFailureAt: number | null;
   lastError: string | null;
   /** Age of the currently cached value in ms, or null if there is no cached value. */
   ageMs: number | null;
+  /** Whether a refresh is currently in flight (safe to expose — never blocks/awaits anything). */
+  refreshInFlight: boolean;
+  /** Size of the current cached value per `opts.count`, or null if there's no value / no `count` was configured. */
+  currentCount: number | null;
 }
 
-export interface ResilientCacheOptions {
+export interface ResilientCacheOptions<T> {
   /** How long a successfully-fetched value is considered fresh ("healthy"). */
   ttlMs: number;
   /** Cooldown after a failed refresh before another refresh attempt is triggered. Default 30_000ms. */
   cooldownMs?: number;
   /** Label used only for diagnostics/log context (never logs secrets). */
   label?: string;
+  /** Optional sizing function (e.g. array length, Map size) surfaced as `currentCount` in diagnostics. Never exposes the value itself. */
+  count?: (value: T) => number;
 }
 
 export interface ResilientCache<T> {
@@ -60,13 +79,14 @@ export interface ResilientCache<T> {
   getDiagnostics(): ResilientCacheDiagnostics;
 }
 
-export function createResilientCache<T>(refresh: () => Promise<T>, opts: ResilientCacheOptions): ResilientCache<T> {
+export function createResilientCache<T>(refresh: () => Promise<T>, opts: ResilientCacheOptions<T>): ResilientCache<T> {
   const ttlMs = opts.ttlMs;
   const cooldownMs = opts.cooldownMs ?? 30_000;
 
   let value: T | undefined;
   let valueFetchedAt: number | null = null;
   let inFlight: Promise<T> | null = null;
+  let lastAttemptAt: number | null = null;
   let lastSuccessAt: number | null = null;
   let lastFailureAt: number | null = null;
   let lastError: string | null = null;
@@ -80,6 +100,10 @@ export function createResilientCache<T>(refresh: () => Promise<T>, opts: Resilie
   }
 
   function startRefresh(): Promise<T> {
+    // Set synchronously (before the first await below) so even a
+    // diagnostics read that races the in-flight promise sees "an attempt is
+    // underway/has happened", never "never attempted".
+    lastAttemptAt = Date.now();
     const attempt = (async () => {
       try {
         const result = await refresh();
@@ -132,7 +156,11 @@ export function createResilientCache<T>(refresh: () => Promise<T>, opts: Resilie
   function getDiagnostics(): ResilientCacheDiagnostics {
     let status: ResilientCacheStatus;
     if (value === undefined) {
-      status = "unavailable";
+      // Never attempted at all vs. attempted-and-failed-with-nothing-to-
+      // fall-back-to are materially different states -- see the module doc
+      // comment. A brand-new process that hasn't been asked for data yet
+      // must never be reported as a confirmed outage.
+      status = lastAttemptAt === null ? "uninitialized" : "unavailable";
     } else if (isFresh()) {
       status = "healthy";
     } else {
@@ -140,10 +168,13 @@ export function createResilientCache<T>(refresh: () => Promise<T>, opts: Resilie
     }
     return {
       status,
+      lastAttemptAt,
       lastSuccessAt,
       lastFailureAt,
       lastError,
       ageMs: valueFetchedAt !== null ? Date.now() - valueFetchedAt : null,
+      refreshInFlight: inFlight !== null,
+      currentCount: value !== undefined && opts.count ? opts.count(value) : null,
     };
   }
 
