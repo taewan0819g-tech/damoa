@@ -53,7 +53,7 @@ export default function HomePage() {
         ) : (
           <div className="flex flex-col gap-2">
             {recommended.map((benefit) => (
-              <BenefitMiniRow key={benefit.id} benefit={benefit} status={statuses[benefit.id]} />
+              <BenefitMiniRow key={benefit.id} benefit={benefit} status={statuses[benefit.id]} returnTo="/home" />
             ))}
           </div>
         )}
@@ -69,7 +69,7 @@ export default function HomePage() {
           </div>
           <div className="flex flex-col gap-2">
             {needsReview.map((benefit) => (
-              <BenefitMiniRow key={benefit.id} benefit={benefit} status={statuses[benefit.id]} />
+              <BenefitMiniRow key={benefit.id} benefit={benefit} status={statuses[benefit.id]} returnTo="/home" />
             ))}
           </div>
         </section>

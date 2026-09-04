@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { SOURCE_TYPE_LABELS } from "@/lib/labels";
+import { buildReturnToQuery } from "@/lib/benefits/returnTo";
 import type { Benefit, EligibilityStatus } from "@/types/benefit";
 
 interface BenefitMiniRowProps {
@@ -16,12 +17,14 @@ interface BenefitMiniRowProps {
    * Omitted entirely for likely_eligible/not_eligible (no label shown).
    */
   status?: EligibilityStatus;
+  /** Where the detail page should navigate back to (e.g. `/home`). See BenefitCard's `returnTo`. */
+  returnTo?: string;
 }
 
-export function BenefitMiniRow({ benefit, status }: BenefitMiniRowProps) {
+export function BenefitMiniRow({ benefit, status, returnTo }: BenefitMiniRowProps) {
   return (
     <Link
-      href={`/benefits/${benefit.id}`}
+      href={`/benefits/${benefit.id}${buildReturnToQuery(returnTo)}`}
       className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3.5 transition-colors hover:bg-surface-muted"
     >
       <div className="min-w-0">

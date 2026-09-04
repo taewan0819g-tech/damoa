@@ -8,19 +8,28 @@ import { DemoBadge } from "./DemoBadge";
 import { getSourceGroup } from "@/domain/benefit/sourceGroup";
 import { SOURCE_TYPE_LABELS } from "@/lib/labels";
 import { formatPercent } from "@/lib/utils/format";
+import { buildReturnToQuery } from "@/lib/benefits/returnTo";
 import type { Benefit, EligibilityStatus } from "@/types/benefit";
 
 interface BenefitCardProps {
   benefit: Benefit;
   status: EligibilityStatus;
+  /**
+   * Where the detail page should navigate back to (e.g. the exact current
+   * benefits-list URL, `/home`, or `/saved`). Encoded into the detail link
+   * as `?returnTo=...`; omitted entirely when not provided, in which case
+   * the detail page's BackLink falls back to `/benefits` (see
+   * lib/benefits/returnTo.ts).
+   */
+  returnTo?: string;
 }
 
-export function BenefitCard({ benefit, status }: BenefitCardProps) {
+export function BenefitCard({ benefit, status, returnTo }: BenefitCardProps) {
   const group = getSourceGroup(benefit);
   const isFinancial = group === "financial";
 
   return (
-    <Link href={`/benefits/${benefit.id}`} className="block">
+    <Link href={`/benefits/${benefit.id}${buildReturnToQuery(returnTo)}`} className="block">
       <Card className="flex flex-col gap-3 transition-shadow hover:shadow-md">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
