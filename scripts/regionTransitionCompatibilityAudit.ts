@@ -69,6 +69,59 @@ function matchRegionExactMatchOnly(
   return "fail";
 }
 
+/**
+ * Checkpoint: Final tiny Region OR-union hardening.
+ *
+ * Reproduction of `matchRegion()` as it existed immediately BEFORE this
+ * checkpoint's OR-union fix: transition-aware single-spec containment (via
+ * the real `gwangjuJeonnamRelation`/`incheonCityRelation` from
+ * `domain/region/adminTransition.ts`, unchanged by this checkpoint), but
+ * WITHOUT union-of-overlapping-specs completion. Used ONLY to isolate how
+ * many real frozen-catalog (profile, rule) results change specifically
+ * because of the new `transitionUnionCoversUser()` layer, as opposed to the
+ * broader pre-existing exact-match -> transition-aware change already
+ * measured by `matchRegionExactMatchOnly` above. Audit-only, never used at
+ * runtime.
+ */
+function matchRegionSingleSpecOnly(
+  residence: { province?: string; city?: string } | undefined | null,
+  allowed: RegionSpec[],
+  normalizeProvince: (p?: string | null) => string | undefined,
+  gwangjuJeonnamRelation: (
+    userProvince: string,
+    userCity: string | undefined,
+    specProvince: string,
+    specCity: string | undefined
+  ) => "contained" | "overlap" | "disjoint" | undefined,
+  incheonCityRelation: (userCity: string, specCity: string) => "contained" | "overlap" | "disjoint" | undefined
+): "pass" | "fail" | "unknown" {
+  const normalizeCity = (c?: string | null) => c?.trim() || undefined;
+  const province = normalizeProvince(residence?.province);
+  if (!province) return "unknown";
+  const city = normalizeCity(residence?.city);
+  const user = { province, city };
+
+  let sawOverlap = false;
+  for (const spec of allowed) {
+    const specProvince = normalizeProvince(spec.province);
+    if (!specProvince) continue;
+    const specCity = normalizeCity(spec.city);
+    let relation: "contained" | "overlap" | "disjoint";
+    if (user.province === specProvince) {
+      if (!specCity) relation = "contained";
+      else if (!user.city) relation = "overlap";
+      else if (user.city === specCity) relation = "contained";
+      else if (user.province === "인천광역시") relation = incheonCityRelation(user.city, specCity) ?? "disjoint";
+      else relation = "disjoint";
+    } else {
+      relation = gwangjuJeonnamRelation(user.province, user.city, specProvince, specCity) ?? "disjoint";
+    }
+    if (relation === "contained") return "pass";
+    if (relation === "overlap") sawOverlap = true;
+  }
+  return sawOverlap ? "unknown" : "fail";
+}
+
 const GENERAL_PROFILES: Record<string, UserProfile> = {
   empty: {},
   singleUnemployedUniv: {
@@ -214,6 +267,7 @@ async function main() {
   const { getCandidateBenefits } = await import("../lib/eligibility/candidateIndex");
   const { matchBenefitsDetailed } = await import("../domain/eligibility/matchBenefits");
   const { normalizeProvince, matchRegion } = await import("../lib/eligibility/region");
+  const { gwangjuJeonnamRelation, incheonCityRelation } = await import("../domain/region/adminTransition");
 
   const catalog = await getCatalogWithCandidateIndex();
 
@@ -230,14 +284,41 @@ async function main() {
     "인천광역시:검단구": 0,
     "인천광역시:서해구": 0,
   };
-  let totalRegionRuleBenefits = 0;
+  let uniqueBenefitsWithRegionRules = 0; // count of BENEFITS with >=1 region_in rule (unique)
+  let totalRegionRuleCount = 0; // count of region_in RULES themselves (a benefit may have >1)
+
+  // Checkpoint: Final tiny Region OR-union hardening — Section 5 real-catalog audit.
+  let rulesWithTwoOrMoreSpecs = 0;
+  let rulesContainingBothGwangjuAndJeonnamProvince = 0; // both 광주광역시 (no city) + 전라남도 (no city) in the SAME rule's allowed[]
+  let rulesContainingOldJungAndOldDong = 0; // 인천광역시/중구 + 인천광역시/동구 in the SAME rule
+  let rulesContainingSeohaeAndGeomdan = 0; // 인천광역시/서해구 + 인천광역시/검단구 in the SAME rule
+  let rulesContainingYeongjongAndJemulpo = 0; // 인천광역시/영종구 + 인천광역시/제물포구 in the SAME rule
+
   const allBenefits: Benefit[] = (catalog as unknown as { benefits: Benefit[] }).benefits;
   for (const benefit of allBenefits) {
     const collected: { specs: RegionSpec[]; rule: EligibilityRule }[] = [];
     collectRegionRules(benefit.eligibility, collected);
     if (collected.length === 0) continue;
-    totalRegionRuleBenefits++;
+    uniqueBenefitsWithRegionRules++;
+    totalRegionRuleCount += collected.length;
+
     for (const { specs } of collected) {
+      if (specs.length >= 2) rulesWithTwoOrMoreSpecs++;
+
+      const normSpecs = specs.map((s) => ({
+        province: normalizeProvince(s.province),
+        city: s.city?.trim() || undefined,
+      }));
+      const has = (province: string, city?: string) =>
+        normSpecs.some((s) => s.province === province && s.city === city);
+
+      if (has("광주광역시", undefined) && has("전라남도", undefined)) {
+        rulesContainingBothGwangjuAndJeonnamProvince++;
+      }
+      if (has("인천광역시", "중구") && has("인천광역시", "동구")) rulesContainingOldJungAndOldDong++;
+      if (has("인천광역시", "서해구") && has("인천광역시", "검단구")) rulesContainingSeohaeAndGeomdan++;
+      if (has("인천광역시", "영종구") && has("인천광역시", "제물포구")) rulesContainingYeongjongAndJemulpo++;
+
       for (const spec of specs) {
         const province = normalizeProvince(spec.province);
         if (province === "광주광역시" && !spec.city) nameUsageCounts["province:광주광역시"]++;
@@ -272,6 +353,21 @@ async function main() {
     after: string;
   }[] = [];
 
+  // Checkpoint: Final tiny Region OR-union hardening — Section 5: isolate
+  // how many real (profile, rule) results change SPECIFICALLY because of the
+  // new union-completion layer (single-spec-transition-aware "before" vs.
+  // union-aware current matchRegion "after"), separate from the broader
+  // exact-match -> transition-aware delta already tracked above.
+  let unionCausedChangeCount = 0;
+  const unionCausedChangeDetails: {
+    profile: string;
+    benefitId: string;
+    benefitTitle: string;
+    specs: RegionSpec[];
+    singleSpecResult: string;
+    unionAwareResult: string;
+  }[] = [];
+
   for (const [profileName, profile] of Object.entries(ALL_PROFILES)) {
     const before: Tally = { pass: 0, unknown: 0, fail: 0 };
     const after: Tally = { pass: 0, unknown: 0, fail: 0 };
@@ -293,6 +389,25 @@ async function main() {
             specs,
             before: beforeResult,
             after: afterResult,
+          });
+        }
+
+        const singleSpecResult = matchRegionSingleSpecOnly(
+          profile.residence,
+          specs,
+          normalizeProvince,
+          gwangjuJeonnamRelation,
+          incheonCityRelation
+        );
+        if (singleSpecResult !== afterResult) {
+          unionCausedChangeCount++;
+          unionCausedChangeDetails.push({
+            profile: profileName,
+            benefitId: benefit.id,
+            benefitTitle: benefit.title,
+            specs,
+            singleSpecResult,
+            unionAwareResult: afterResult,
           });
         }
       }
@@ -318,9 +433,30 @@ async function main() {
     method: {
       frozenInputs: [MOIS_SERVICE_LIST_PATH, MOIS_SUPPORT_CONDITIONS_PATH, YOUTH_POLICY_PATH],
       catalogCounts: catalog.counts,
-      totalBenefitsWithAtLeastOneRegionRule: totalRegionRuleBenefits,
+      // Checkpoint: Final tiny Region OR-union hardening — Section 6 labeling
+      // fix. The old single field `totalBenefitsWithAtLeastOneRegionRule` was
+      // misleadingly named: it counted unique BENEFITS, but the per-profile
+      // tallies below (`transitionProfilePassUnknownFailBeforeAfter` etc.)
+      // sum over region_in RULES, and a benefit can contain more than one
+      // region_in rule -- so the two numbers could differ (e.g. 2521 vs
+      // 2522) even though they look like they should match. Split into two
+      // explicit, unambiguous fields instead of one field whose name implied
+      // it was the same denominator as the rule-level tallies.
+      uniqueBenefitsWithRegionRules,
+      totalRegionRuleCount,
       procedure:
         "For every region_in rule actually present in the frozen catalog's extracted eligibility rules, evaluated matchRegion() twice per (profile, rule) pair: once with a verbatim reproduction of the pre-checkpoint exact-match-only algorithm (matchRegionExactMatchOnly, audit-only, never used at runtime), and once with the real current matchRegion() import. Tallied PASS/UNKNOWN/FAIL counts per profile, and individually recorded every (profile, rule) pair where the result changed.",
+    },
+    // Checkpoint: Final tiny Region OR-union hardening — Section 5 real
+    // frozen-catalog occurrence audit for the OR-union completion fix.
+    unionCompletionAudit: {
+      rulesWithTwoOrMoreSpecs,
+      rulesContainingBothGwangjuAndJeonnamProvince,
+      rulesContainingOldJungAndOldDong,
+      rulesContainingSeohaeAndGeomdan,
+      rulesContainingYeongjongAndJemulpo,
+      unionCausedChangeCount,
+      unionCausedChangeDetails,
     },
     oldCurrentNameUsageCounts: nameUsageCounts,
     transitionProfilePassUnknownFailBeforeAfter: Object.fromEntries(

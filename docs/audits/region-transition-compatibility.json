@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T15:03:13.757Z",
+  "generatedAt": "2026-09-04T15:21:26.783Z",
   "checkpoint": "Final Region Transition Compatibility",
   "purpose": "Measures the real frozen-catalog impact of replacing matchRegion()'s pure exact-match algorithm with the new domain/region/adminTransition.ts set-containment model, expanding on the prior checkpoint's 6-profile audit (docs/audits/region-transition-candidate-diff.json) which had zero residents in 인천/광주/전남/전남광주통합특별시 and therefore could not exercise this checkpoint's transitions at all.",
   "method": {
@@ -15,8 +15,36 @@
       "expiredCount": 1343,
       "dateUnknownCount": 11558
     },
-    "totalBenefitsWithAtLeastOneRegionRule": 2521,
+    "uniqueBenefitsWithRegionRules": 2521,
+    "totalRegionRuleCount": 2522,
     "procedure": "For every region_in rule actually present in the frozen catalog's extracted eligibility rules, evaluated matchRegion() twice per (profile, rule) pair: once with a verbatim reproduction of the pre-checkpoint exact-match-only algorithm (matchRegionExactMatchOnly, audit-only, never used at runtime), and once with the real current matchRegion() import. Tallied PASS/UNKNOWN/FAIL counts per profile, and individually recorded every (profile, rule) pair where the result changed."
+  },
+  "unionCompletionAudit": {
+    "rulesWithTwoOrMoreSpecs": 236,
+    "rulesContainingBothGwangjuAndJeonnamProvince": 1,
+    "rulesContainingOldJungAndOldDong": 0,
+    "rulesContainingSeohaeAndGeomdan": 1,
+    "rulesContainingYeongjongAndJemulpo": 0,
+    "unionCausedChangeCount": 1,
+    "unionCausedChangeDetails": [
+      {
+        "profile": "legacy_incheon_seo",
+        "benefitId": "mois-O00027100003",
+        "benefitTitle": "노인여가복지서비스",
+        "specs": [
+          {
+            "province": "인천광역시",
+            "city": "서해구"
+          },
+          {
+            "province": "인천광역시",
+            "city": "검단구"
+          }
+        ],
+        "singleSpecResult": "unknown",
+        "unionAwareResult": "pass"
+      }
+    ]
   },
   "oldCurrentNameUsageCounts": {
     "province:광주광역시": 59,
@@ -170,8 +198,8 @@
         "fail": 2468
       },
       "after": {
-        "pass": 54,
-        "unknown": 3,
+        "pass": 55,
+        "unknown": 2,
         "fail": 2465
       }
     }
@@ -759,7 +787,7 @@
           }
         ],
         "before": "fail",
-        "after": "unknown"
+        "after": "pass"
       },
       {
         "profile": "legacy_jeonnam_mokpo",
@@ -780,8 +808,8 @@
       "changedRuleCount": 484,
       "uniqueChangedBenefitCount": 365,
       "byBeforeAfterTransition": {
-        "fail->pass": 171,
-        "fail->unknown": 313
+        "fail->pass": 172,
+        "fail->unknown": 312
       }
     }
   },

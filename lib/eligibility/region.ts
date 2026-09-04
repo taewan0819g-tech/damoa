@@ -22,7 +22,13 @@
  * exact-match behavior, unchanged from before this checkpoint.
  */
 
-import { gwangjuJeonnamRelation, incheonCityRelation, type TerritoryRelation } from "@/domain/region/adminTransition";
+import {
+  gwangjuJeonnamRelation,
+  incheonCityRelation,
+  transitionUnionCoversUser,
+  type NormalizedRegion,
+  type TerritoryRelation,
+} from "@/domain/region/adminTransition";
 
 export interface RegionSpec {
   /** Province/metropolitan-city name, e.g. "경기도", "서울특별시". */
@@ -165,12 +171,25 @@ export function matchRegion(
   const user = { province, city };
 
   let sawOverlap = false;
+  const overlappingSpecs: NormalizedRegion[] = [];
 
   for (const spec of allowed) {
     const relation = regionRelation(user, spec);
     if (relation === "contained") return "pass";
-    if (relation === "overlap") sawOverlap = true;
+    if (relation === "overlap") {
+      sawOverlap = true;
+      const specProvince = normalizeProvince(spec.province);
+      if (specProvince) {
+        overlappingSpecs.push({ province: specProvince, city: normalizeCity(spec.city) });
+      }
+    }
   }
+
+  // `allowed` is an OR list: the policy's true territory P is the UNION of
+  // every allowed spec, not any single spec in isolation. A user can be
+  // "overlap" against every spec individually yet still be fully covered
+  // once two+ overlapping specs are combined (see adminTransition.ts).
+  if (sawOverlap && transitionUnionCoversUser(user, overlappingSpecs)) return "pass";
 
   return sawOverlap ? "unknown" : "fail";
 }

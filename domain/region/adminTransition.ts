@@ -181,3 +181,84 @@ export function gwangjuJeonnamRelation(
 
   return undefined;
 }
+
+// ---------------------------------------------------------------------------
+// OR-union completion: `allowed: RegionSpec[]` in a policy is an OR list, so
+// the policy's true territory P is the UNION of every allowed spec, not any
+// single spec in isolation. A user can be individually "overlap" (not
+// "contained") against EVERY spec on its own, yet still be fully covered
+// once two or more of those overlapping specs are combined — e.g. a current
+// 제물포구 resident is only "overlap" against old 중구 alone (제물포구 also
+// draws from old 동구) AND only "overlap" against old 동구 alone (old 동구
+// doesn't cover the 중구-derived part of 제물포구), but old 중구 + old 동구
+// TOGETHER exhaustively cover all of 제물포구.
+//
+// This is intentionally a small, hand-verified partition table — NOT a
+// generic set-union/geometry engine. Each entry encodes one already-modeled
+// 2026-07-01 transition fact: "this user territory is exactly the union of
+// these specific specs, verified by the same fact tables used above."
+// ---------------------------------------------------------------------------
+
+/** A normalized (post `normalizeProvince`/`normalizeCity`) residence or spec territory. */
+export interface NormalizedRegion {
+  province: string;
+  city?: string;
+}
+
+const UNION_PARTITIONS: { user: NormalizedRegion; requiredSpecs: NormalizedRegion[] }[] = [
+  // 광주광역시 + 전라남도 together exhaustively cover 전남광주통합특별시 (lossless merge).
+  {
+    user: { province: JEONNAM_GWANGJU_NEW_PROVINCE, city: undefined },
+    requiredSpecs: [{ province: "광주광역시" }, { province: "전라남도" }],
+  },
+  // old 중구 + old 동구 together exhaustively cover current 제물포구.
+  {
+    user: { province: "인천광역시", city: "제물포구" },
+    requiredSpecs: [
+      { province: "인천광역시", city: "중구" },
+      { province: "인천광역시", city: "동구" },
+    ],
+  },
+  // current 서해구 + current 검단구 together exhaustively cover old 서구.
+  {
+    user: { province: "인천광역시", city: "서구" },
+    requiredSpecs: [
+      { province: "인천광역시", city: "서해구" },
+      { province: "인천광역시", city: "검단구" },
+    ],
+  },
+  // current 영종구 + current 제물포구 together exhaustively cover old 중구
+  // (제물포구 also draws territory from old 동구, but that only makes the
+  // union bigger, not smaller — old 중구 is still fully inside it).
+  {
+    user: { province: "인천광역시", city: "중구" },
+    requiredSpecs: [
+      { province: "인천광역시", city: "영종구" },
+      { province: "인천광역시", city: "제물포구" },
+    ],
+  },
+];
+
+function regionEquals(a: NormalizedRegion, b: NormalizedRegion): boolean {
+  return a.province === b.province && (a.city ?? undefined) === (b.city ?? undefined);
+}
+
+/**
+ * Given the user's normalized residence territory and the list of policy
+ * specs that were each individually "overlap" (not "contained", not
+ * "disjoint") against the user, determine whether those overlapping specs,
+ * COMBINED, exhaustively cover the user's entire territory (U ⊆ P1 ∪ P2 ∪
+ * ...) per a verified 2026-07-01 transition partition. Returns false for any
+ * user/spec-set combination not in `UNION_PARTITIONS` — this never expands
+ * coverage beyond the hand-verified facts already encoded above.
+ */
+export function transitionUnionCoversUser(user: NormalizedRegion, overlappingSpecs: NormalizedRegion[]): boolean {
+  for (const partition of UNION_PARTITIONS) {
+    if (!regionEquals(user, partition.user)) continue;
+    const covered = partition.requiredSpecs.every((required) =>
+      overlappingSpecs.some((spec) => regionEquals(spec, required))
+    );
+    if (covered) return true;
+  }
+  return false;
+}

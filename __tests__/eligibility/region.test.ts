@@ -258,3 +258,102 @@ describe("matchRegion — administrative transition compatibility (Checkpoint: F
     });
   });
 });
+
+/**
+ * Checkpoint: Final tiny Region OR-union hardening.
+ *
+ * `allowed: RegionSpec[]` is an OR list, so the policy's true territory P is
+ * the UNION of every allowed spec, not any single spec evaluated in
+ * isolation. These cases prove `matchRegion` now unions overlapping specs
+ * before falling back to "unknown"/"fail" — while a single overlapping
+ * alternative alone still correctly stays "unknown" (no over-inference from
+ * partial coverage).
+ */
+describe("matchRegion — OR-union completion (Checkpoint: Final tiny Region OR-union hardening)", () => {
+  it("A: merged province user + [old 광주광역시, old 전라남도] together -> pass", () => {
+    expect(
+      matchRegion({ province: "전남광주통합특별시" }, [{ province: "광주광역시" }, { province: "전라남도" }])
+    ).toBe("pass");
+  });
+
+  it("B: merged province user + [old 광주광역시] alone -> unknown", () => {
+    expect(matchRegion({ province: "전남광주통합특별시" }, [{ province: "광주광역시" }])).toBe("unknown");
+  });
+
+  it("C: 제물포구 user + [old 중구, old 동구] together -> pass", () => {
+    expect(
+      matchRegion({ province: "인천광역시", city: "제물포구" }, [
+        { province: "인천광역시", city: "중구" },
+        { province: "인천광역시", city: "동구" },
+      ])
+    ).toBe("pass");
+  });
+
+  it("D: 제물포구 user + [old 중구] alone -> unknown", () => {
+    expect(
+      matchRegion({ province: "인천광역시", city: "제물포구" }, [{ province: "인천광역시", city: "중구" }])
+    ).toBe("unknown");
+  });
+
+  it("E: old 서구 user + [현재 서해구, 현재 검단구] together -> pass", () => {
+    expect(
+      matchRegion({ province: "인천광역시", city: "서구" }, [
+        { province: "인천광역시", city: "서해구" },
+        { province: "인천광역시", city: "검단구" },
+      ])
+    ).toBe("pass");
+  });
+
+  it("F: old 서구 user + [현재 서해구] alone -> unknown", () => {
+    expect(
+      matchRegion({ province: "인천광역시", city: "서구" }, [{ province: "인천광역시", city: "서해구" }])
+    ).toBe("unknown");
+  });
+
+  it("G: old 중구 user + [현재 영종구, 현재 제물포구] together -> pass", () => {
+    expect(
+      matchRegion({ province: "인천광역시", city: "중구" }, [
+        { province: "인천광역시", city: "영종구" },
+        { province: "인천광역시", city: "제물포구" },
+      ])
+    ).toBe("pass");
+  });
+
+  it("H: ordinary unrelated multi-region OR behavior is unchanged", () => {
+    expect(
+      matchRegion({ province: "부산광역시" }, [{ province: "서울특별시" }, { province: "대구광역시" }])
+    ).toBe("fail");
+    expect(
+      matchRegion({ province: "경기도", city: "이천시" }, [
+        { province: "서울특별시" },
+        { province: "경기도", city: "이천시" },
+      ])
+    ).toBe("pass");
+  });
+
+  it("I: exact Icheon/Gyeonggi regressions unchanged", () => {
+    const icheonResident = { province: "경기도", city: "이천시" };
+    expect(matchRegion(icheonResident, [{ province: "경기도" }])).toBe("pass");
+    expect(matchRegion(icheonResident, [{ province: "경기도", city: "이천시" }])).toBe("pass");
+    expect(matchRegion(icheonResident, [{ province: "경기도", city: "수원시" }])).toBe("fail");
+  });
+
+  it("J: no fuzzy matching introduced — unmodeled multi-spec combos stay unknown/fail, never silently pass", () => {
+    // 미추홀구 is an unaffected district; combining it with a transitioned
+    // spec must not manufacture a false "pass".
+    expect(
+      matchRegion({ province: "인천광역시", city: "미추홀구" }, [
+        { province: "인천광역시", city: "중구" },
+        { province: "인천광역시", city: "동구" },
+      ])
+    ).toBe("fail");
+    // A spec combo not in UNION_PARTITIONS (중구 + 영종구, not 중구 + 동구) must
+    // not be treated as covering 제물포구 -> stays unknown, never a false "pass".
+    expect(
+      matchRegion({ province: "인천광역시", city: "제물포구" }, [
+        { province: "인천광역시", city: "중구" },
+        { province: "인천광역시", city: "영종구" },
+      ])
+    ).toBe("unknown");
+  });
+});
