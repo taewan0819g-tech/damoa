@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateEligibility } from "@/lib/eligibility/ruleEngine";
+import { evaluateEligibility, evaluateEligibilityDetailed } from "@/lib/eligibility/ruleEngine";
 import type { Benefit, EligibilityRuleGroup } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 
@@ -390,6 +390,100 @@ describe("evaluateEligibility", () => {
         annualHouseholdIncome: THRESHOLD_50PCT_4PERSON_2026 + 1,
       });
       expect(status).toBe("not_eligible");
+    });
+  });
+
+  describe("OR-branch personalization evidence isolation (ranker-hardening checkpoint, issue #2)", () => {
+    // Regression for "OR-branch personalization inflation": `passedLeaves`
+    // (the evidence `derivePersonalizationEvidence` uses for ranking
+    // strength — see domain/benefit/personalization.ts) must never union PASS
+    // leaves from mutually ALTERNATIVE branches of an `any` group. An audit
+    // of the real, committed frozen MOIS + Youth Center catalog
+    // (scripts/auditOrBranchInflation.ts, /tmp/or-branch-inflation-audit.json)
+    // found ZERO benefits whose eligibility tree contains an `any` group at
+    // all — every adapter (MOISAdapter, YouthAdapter) only ever constructs
+    // `type: "all"` groups, and the Korean free-text parser's OR-detection
+    // safety net (koreanEligibilityParser.ts's hasLocalCrossDimensionOr)
+    // deliberately bails out to `unresolvedClauses` instead of building a
+    // nested `any` group. So this scenario is not reachable today. This test
+    // documents the invariant directly against a synthetic `any` group so it
+    // stays enforced if a future adapter/parser ever starts emitting one.
+    it("does not union PASS evidence across mutually alternative `any`-group branches", () => {
+      // (age PASS + income UNKNOWN) OR (region PASS + employment UNKNOWN) —
+      // neither branch fully resolves to "pass" on its own (each has an
+      // unresolved sibling condition), so the group's overall result is
+      // "unknown". The OLD flat-leaf-union strategy would still have
+      // collected BOTH the age leaf and the region leaf into `passedLeaves`
+      // (since evaluateNode pushes every visited leaf's result into the flat
+      // `leaves` array regardless of which branch "wins"), inflating
+      // specificDimensionCount to 2 and wrongly reporting STRONG evidence for
+      // a benefit whose eligibility is actually still fully unresolved.
+      const anyGroup: EligibilityRuleGroup = {
+        type: "any",
+        rules: [
+          {
+            type: "all",
+            rules: [
+              { id: "age", field: "age", operator: "between", value: [19, 34], required: true },
+              { id: "income", field: "individualIncomeRange", operator: "lte", value: 30_000_000, required: true },
+            ],
+          },
+          {
+            type: "all",
+            rules: [
+              { id: "region", field: "residence", operator: "region_in", value: [{ province: "경기도" }], required: true },
+              { id: "employment", field: "employmentStatus", operator: "eq", value: "unemployed", required: true },
+            ],
+          },
+        ],
+      };
+      const profile: UserProfile = {
+        birthDate: `${new Date().getFullYear() - 25}-01-01`, // age PASS
+        // individualIncomeRange omitted -> income UNKNOWN (branch 1 unresolved)
+        residence: { province: "경기도" }, // region PASS
+        // employmentStatus omitted -> employment UNKNOWN (branch 2 unresolved)
+      };
+
+      const diag = evaluateEligibilityDetailed({ eligibility: anyGroup }, profile);
+
+      // Neither alternative branch fully passed, so the group (and status)
+      // must resolve to unknown — never a guessed pass.
+      expect(diag.status).toBe("unknown");
+
+      // The critical assertion: passedLeaves must be EMPTY. Both age and
+      // region individually evaluated to "pass" as leaves, but neither of
+      // their own branches (as a whole `all` group) resolved to "pass", so
+      // branch-aware evidence collection must not surface either of them as
+      // ranking evidence — union-ing them would let a fully-unresolved
+      // benefit masquerade as a 2-dimension STRONG match.
+      expect(diag.passedLeaves).toEqual([]);
+    });
+
+    it("DOES surface evidence from a branch that fully resolves to pass, even inside an `any` group", () => {
+      const anyGroup: EligibilityRuleGroup = {
+        type: "any",
+        rules: [
+          {
+            type: "all",
+            rules: [{ id: "age", field: "age", operator: "between", value: [19, 34], required: true }],
+          },
+          {
+            type: "all",
+            rules: [{ id: "region", field: "residence", operator: "region_in", value: [{ province: "전라남도" }], required: true }],
+          },
+        ],
+      };
+      const profile: UserProfile = {
+        birthDate: `${new Date().getFullYear() - 25}-01-01`, // age branch fully PASSes
+        residence: { province: "경기도" }, // region branch FAILs outright (not unknown)
+      };
+
+      const diag = evaluateEligibilityDetailed({ eligibility: anyGroup }, profile);
+
+      expect(diag.status).toBe("likely_eligible");
+      // Only the age leaf (the branch that actually resolved to pass) is
+      // surfaced — the failed region branch contributes nothing.
+      expect(diag.passedLeaves).toEqual([{ field: "age", operator: "between", value: [19, 34] }]);
     });
   });
 });
