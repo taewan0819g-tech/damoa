@@ -1,0 +1,2166 @@
+{
+  "generatedAt": "2026-09-04T05:52:54.197Z",
+  "frozenInputs": [
+    {
+      "label": "MOIS service list",
+      "path": "/tmp/mois_serviceList_full.json",
+      "sha256": "82d7bab830c825aff81df1180f420a8fc92996f6e02cae25a7fd50bd6983f30a"
+    },
+    {
+      "label": "MOIS support conditions",
+      "path": "/tmp/mois_supportConditions_full.json",
+      "sha256": "9d73e6b89d7a5eb3c1a3b6c7e37e681b1e09c714929760e603b7d37e29239714"
+    },
+    {
+      "label": "Youth Center policy list",
+      "path": "/tmp/youth_policy_full.json",
+      "sha256": "90ffc2050271abcc58908c60523eef64f23485bbacf97050ad669e74329ecb90"
+    }
+  ],
+  "snapshot": {
+    "moisCount": 10967,
+    "youthCount": 2745,
+    "totalCount": 13712,
+    "moisListMtime": "2026-09-02T05:18:10.052Z",
+    "youthMtime": "2026-09-02T05:30:21.293Z"
+  },
+  "profiles": [
+    {
+      "key": "A_icheon_unemployed_youth",
+      "label": "이천시 청년 무직 (경기도 이천시, 26세, 무직, 저소득)",
+      "profile": {
+        "birthDate": "2000-03-15",
+        "residence": {
+          "province": "경기도",
+          "city": "이천시"
+        },
+        "maritalStatus": "single",
+        "employmentStatus": "unemployed",
+        "individualIncomeBand": "under_1000",
+        "homeowner": false,
+        "interests": [
+          "employment",
+          "housing",
+          "asset_building"
+        ]
+      }
+    },
+    {
+      "key": "B_seoul_university_student",
+      "label": "서울 대학생 (서울특별시 관악구, 22세, 대학생, 무소득)",
+      "profile": {
+        "birthDate": "2004-05-01",
+        "residence": {
+          "province": "서울특별시",
+          "city": "관악구"
+        },
+        "maritalStatus": "single",
+        "employmentStatus": "student",
+        "educationStatus": "university",
+        "individualIncomeBand": "none",
+        "interests": [
+          "education",
+          "deposit",
+          "savings"
+        ]
+      }
+    },
+    {
+      "key": "C_suwon_high_income_employed",
+      "label": "수원시 직장인 고소득 (경기도 수원시, 34세, 재직, 고소득, 자가)",
+      "profile": {
+        "birthDate": "1992-01-01",
+        "residence": {
+          "province": "경기도",
+          "city": "수원시"
+        },
+        "maritalStatus": "single",
+        "employmentStatus": "employed",
+        "individualIncomeBand": "over_7000",
+        "homeowner": true,
+        "housingType": "own",
+        "interests": [
+          "asset_building",
+          "loan"
+        ]
+      }
+    },
+    {
+      "key": "D_icheon_newlywed",
+      "label": "이천시 신혼부부 (경기도 이천시, 30세, 기혼, 혼인 1.5년차, 가구소득 3~4천)",
+      "profile": {
+        "birthDate": "1996-06-01",
+        "residence": {
+          "province": "경기도",
+          "city": "이천시"
+        },
+        "maritalStatus": "married",
+        "marriageDate": "2025-03-01",
+        "householdIncomeBand": "3000_4000",
+        "householdSize": 2,
+        "interests": [
+          "housing",
+          "childcare"
+        ]
+      }
+    },
+    {
+      "key": "E_jeonnam_single_parent",
+      "label": "전남 한부모가족 (전라남도, 38세, 프리랜서, 자녀 1명)",
+      "profile": {
+        "birthDate": "1988-01-01",
+        "residence": {
+          "province": "전라남도"
+        },
+        "maritalStatus": "divorced",
+        "singleParentFamily": true,
+        "employmentStatus": "freelancer",
+        "householdIncomeBand": "2000_3000",
+        "childrenCount": 1,
+        "interests": [
+          "welfare",
+          "childcare"
+        ]
+      }
+    },
+    {
+      "key": "F_minimal_just_onboarded",
+      "label": "온보딩 직후 최소 입력 (생년월일만 입력, 나머지 미입력)",
+      "profile": {
+        "birthDate": "1998-01-01"
+      }
+    }
+  ],
+  "aggregateEligibility": [
+    {
+      "profile": "A_icheon_unemployed_youth",
+      "totals": {
+        "likelyEligible": 0,
+        "unknownWithPositiveEvidence": 6418,
+        "unknownNoEvidence": 1392,
+        "notEligible": 5902,
+        "totalCatalog": 13712
+      },
+      "personalizedFeedSize": 6418,
+      "personalizedFeedTargetScopeOnlyCount": 40,
+      "personalizedFeedTargetScopeOnlyPct": 0.6
+    },
+    {
+      "profile": "B_seoul_university_student",
+      "totals": {
+        "likelyEligible": 0,
+        "unknownWithPositiveEvidence": 6370,
+        "unknownNoEvidence": 1609,
+        "notEligible": 5733,
+        "totalCatalog": 13712
+      },
+      "personalizedFeedSize": 6370,
+      "personalizedFeedTargetScopeOnlyCount": 38,
+      "personalizedFeedTargetScopeOnlyPct": 0.6
+    },
+    {
+      "profile": "C_suwon_high_income_employed",
+      "totals": {
+        "likelyEligible": 0,
+        "unknownWithPositiveEvidence": 6153,
+        "unknownNoEvidence": 1408,
+        "notEligible": 6151,
+        "totalCatalog": 13712
+      },
+      "personalizedFeedSize": 6153,
+      "personalizedFeedTargetScopeOnlyCount": 40,
+      "personalizedFeedTargetScopeOnlyPct": 0.7
+    },
+    {
+      "profile": "D_icheon_newlywed",
+      "totals": {
+        "likelyEligible": 0,
+        "unknownWithPositiveEvidence": 6253,
+        "unknownNoEvidence": 1702,
+        "notEligible": 5757,
+        "totalCatalog": 13712
+      },
+      "personalizedFeedSize": 6253,
+      "personalizedFeedTargetScopeOnlyCount": 40,
+      "personalizedFeedTargetScopeOnlyPct": 0.6
+    },
+    {
+      "profile": "E_jeonnam_single_parent",
+      "totals": {
+        "likelyEligible": 0,
+        "unknownWithPositiveEvidence": 6310,
+        "unknownNoEvidence": 1727,
+        "notEligible": 5675,
+        "totalCatalog": 13712
+      },
+      "personalizedFeedSize": 6310,
+      "personalizedFeedTargetScopeOnlyCount": 41,
+      "personalizedFeedTargetScopeOnlyPct": 0.6
+    },
+    {
+      "profile": "F_minimal_just_onboarded",
+      "totals": {
+        "likelyEligible": 0,
+        "unknownWithPositiveEvidence": 8091,
+        "unknownNoEvidence": 1753,
+        "notEligible": 3868,
+        "totalCatalog": 13712
+      },
+      "personalizedFeedSize": 8091,
+      "personalizedFeedTargetScopeOnlyCount": 43,
+      "personalizedFeedTargetScopeOnlyPct": 0.5
+    }
+  ],
+  "top20ByProfile": [
+    {
+      "profile": "A_icheon_unemployed_youth",
+      "top20": [
+        {
+          "id": "youth-20260407005400212567",
+          "title": "2026년 MICE 광주 관광기업 성장단계별 맞춤지원 프로그램 참여사 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213036",
+          "title": "청년의 날 행사",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260430005400212968",
+          "title": "대학생 행복기숙사 지원 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260410005400212664",
+          "title": "2026년 임신부 가사지원서비스 지원사업 시행",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260408005400212628",
+          "title": "(2차) 2026 광주청년 구직활동수당 및 활동지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20250529005400110881",
+          "title": "산림산업 창업지원_청년 산림인 성장지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "employmentStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260413005400212689",
+          "title": "2026 시제품 제작 프로그램(예비창업자 지원 과정) 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260527005400213221",
+          "title": "2026년 청년창업자 임차료 지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "employmentStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260410005400212665",
+          "title": "2026년 기술기반 예비창업가 사업화자금지원 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260406005400212394",
+          "title": "부산 청년 마음이음 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260313005400212143",
+          "title": "용인시 일자리센터를 통한 청년 취업 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "employmentStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260824005400213350",
+          "title": "부산 남구 청년 창업 아이디어 경진대회",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-370000000129",
+          "title": "청년 자격시험 응시료 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in",
+            "employmentStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260522005400213211",
+          "title": "2026 광주광역시 전략사업별 지역생태계 활성화 사업 「내일을 만드는 청년 직무형 일경험 사업」",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260511005400213179",
+          "title": "여성창업지원(사업화지원)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213061",
+          "title": "공공근로 일자리(청년 우선 선발)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "employmentStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260430005400213004",
+          "title": "청년농업인 후원결연 멘토링 지원 시범",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260429005400212920",
+          "title": "2026년 문화예술단체 및 생활예술동아리 지방보조금 지원 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260421005400212783",
+          "title": "청년4·3 세대전승 프로젝트(청년4·3정감)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260413005400212692",
+          "title": "청년행정도우미",
+          "status": "unknown",
+          "passedDimensions": [
+            "employmentStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        }
+      ]
+    },
+    {
+      "profile": "B_seoul_university_student",
+      "top20": [
+        {
+          "id": "mois-477100000002",
+          "title": "(순창군)장애인 평생교육이용권 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260430005400212963",
+          "title": "대학생 학자금 대출이자 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "educationStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260408005400212620",
+          "title": "GCC사관학교 3기 교육생 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213063",
+          "title": "서산시 자립준비청년 운전면허 취득지원 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213030",
+          "title": "아산시 청년 재무상담 서비스 「영앤리치」",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260408005400212632",
+          "title": "2026년 광산구 구직청년 자격증 취득비용 지원사업 ",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260702005400213247",
+          "title": "2026년 완도군 청년 자격증 응시료 지원사업 ",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260408005400212626",
+          "title": "[남구]2026년 청년 자격증 취득 지원 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260831005400213362",
+          "title": "청년도약 인재양성 부트캠프(제조AI 분야)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260824005400213349",
+          "title": "[9월 1일 10시 접수 예정] 2026년 구직청년 자격증 취득지원 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260731005400213314",
+          "title": "[8월 마감] 2026년 구직청년 자격증 취득지원 사업(9월 1일 10시 접수 예정)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260618005400213240",
+          "title": "2026년 성인진로상담",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113119",
+          "title": "청년농업인 역량강화 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113117",
+          "title": "청년·사회초년생을 위한 필수 교육 운영",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113097",
+          "title": "청년수산인단체 역량강화 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113092",
+          "title": "스마트팜 청년 창업 교육",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113082",
+          "title": "청년농업인 창농 신성장 활동",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213033",
+          "title": "홍성 대학 4-H회 과제 교육",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "educationStatus"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260429005400212918",
+          "title": "마을교육공동체코디네이터 및 마을청년활동가 채용",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260422005400212841",
+          "title": "평생교육이용권 지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        }
+      ]
+    },
+    {
+      "profile": "C_suwon_high_income_employed",
+      "top20": [
+        {
+          "id": "youth-20260504005400213036",
+          "title": "청년의 날 행사",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260406005400212394",
+          "title": "부산 청년 마음이음 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260429005400212920",
+          "title": "2026년 문화예술단체 및 생활예술동아리 지방보조금 지원 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260421005400212783",
+          "title": "청년4·3 세대전승 프로젝트(청년4·3정감)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113124",
+          "title": "충남콘텐츠기업지원센터 운영",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260812005400213329",
+          "title": "2026년 청년정책 종합상담 참여자 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260728005400213310",
+          "title": "2026년 하반기 임신부 가사지원서비스 지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260722005400213289",
+          "title": "2026 마음건강상담소 2차 참여자 모집 (접수 마감)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113129",
+          "title": "청년예술인 해외 공연",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113126",
+          "title": "충남 청년 뮤직 페스타",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113125",
+          "title": "충남 음악창작소운영",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113116",
+          "title": "정신건강 심리상담 바우처 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113114",
+          "title": "지역사회서비스 청년사업단",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113090",
+          "title": "청년내일저축계좌 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113077",
+          "title": "청년 등 생애주기별 마음건강사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113076",
+          "title": "청년 자살예방 조기검진 및 심리지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400113075",
+          "title": "청년 정신건강 관리 협력·홍보체계 구축·운영",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213041",
+          "title": "인생 설계 프로그램",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213035",
+          "title": "홍성 4-H회 활동 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213031",
+          "title": "아산시 청년정책조정위원회 운영",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        }
+      ]
+    },
+    {
+      "profile": "D_icheon_newlywed",
+      "top20": [
+        {
+          "id": "mois-B55252100005",
+          "title": "발전소주변지역 장학금 지원(보령발전본부)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800004",
+          "title": "학업성취도 향상 고등학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800006",
+          "title": "고교 진학 후 성적우수 학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260518005400213206",
+          "title": "2026 농식품가공창업보육센터 이용자 모집 공고(공유주방 창업팀 1기)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260430005400212968",
+          "title": "대학생 행복기숙사 지원 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-O00101000019",
+          "title": "전북특별자치도서울장학숙 입사생 수시 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in",
+            "residence"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": true,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "other",
+          "source": "government"
+        },
+        {
+          "id": "mois-GES000000100",
+          "title": "일반 상환 학자금대출",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-GES000000110",
+          "title": "취업 후 상환 학자금대출",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-560000000143",
+          "title": "포천시 청년·신혼부부 공공임대주택 주거비 지원(임대보증금)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in",
+            "maritalStatus",
+            "marriageDate"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800001",
+          "title": "우리지역 성적우수 대학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800007",
+          "title": "예체능 우수 학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260406005400212463",
+          "title": "(중구) 2026년 중구 청년 이사비 지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-474000000115",
+          "title": "귀농·귀향인 임시거주지 임대료 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-474000000151",
+          "title": "귀농·귀촌·귀향인 건축설계 비용 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-647000000176",
+          "title": "2026년 다자녀 가정 이사비 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-402000000150",
+          "title": "영구피임 복원시술비 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-559000000433",
+          "title": "저소득층지원사업 특기교육비",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-352000000123",
+          "title": "여성장애인 출산비용 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-B55101300001",
+          "title": "국가대표선수촌 개방 프로그램(견학) 제공",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "other",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260803005400213315",
+          "title": "청년온가 2026년 정기 입주자 모집 재공고",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "housing",
+          "benefitType": "other",
+          "source": "youth_policy"
+        }
+      ]
+    },
+    {
+      "profile": "E_jeonnam_single_parent",
+      "top20": [
+        {
+          "id": "youth-20260513005400213185",
+          "title": "2026년도 광주형 청년갭이어 지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-B55252100005",
+          "title": "발전소주변지역 장학금 지원(보령발전본부)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800004",
+          "title": "학업성취도 향상 고등학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800006",
+          "title": "고교 진학 후 성적우수 학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260722005400213280",
+          "title": "2026 북구청춘페스타 추진기획단 모집(~6.14.)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260518005400213206",
+          "title": "2026 농식품가공창업보육센터 이용자 모집 공고(공유주방 창업팀 1기)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213044",
+          "title": "홍성 청년의 날 기념행사",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260429005400212917",
+          "title": "청년 모임 지원사업 [청년모힘]",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-647000000130",
+          "title": "장애인용 하이패스 감면 단말기 보급",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "discount",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260522005400213214",
+          "title": "2026 청년자율예산 「청년정책실험실」 참여자 모집 공고",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260522005400213212",
+          "title": "제23회 광주 추억의 충장축제 청년기획단 ‘찐이’ 4기 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-GES000000100",
+          "title": "일반 상환 학자금대출",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-374000000580",
+          "title": "(수원시) 녹물없는 우리집 수도관 개량사업 안내",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-137100000236",
+          "title": "통합문화이용권(문화누리카드)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "service",
+          "source": "government"
+        },
+        {
+          "id": "mois-515000000141",
+          "title": "가축재해보험료지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800001",
+          "title": "우리지역 성적우수 대학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800007",
+          "title": "예체능 우수 학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260618005400213239",
+          "title": "2026년 서구 하반기 청년강사 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213043",
+          "title": "홍성청년네트워크 운영",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260430005400212979",
+          "title": "천안형 청년도전 프로젝트",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": true,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        }
+      ]
+    },
+    {
+      "profile": "F_minimal_just_onboarded",
+      "top20": [
+        {
+          "id": "youth-20260513005400213185",
+          "title": "2026년도 광주형 청년갭이어 지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-477100000002",
+          "title": "(순창군)장애인 평생교육이용권 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260407005400212567",
+          "title": "2026년 MICE 광주 관광기업 성장단계별 맞춤지원 프로그램 참여사 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-B55252100005",
+          "title": "발전소주변지역 장학금 지원(보령발전본부)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-650000001089",
+          "title": "제주 플랫폼 배달 및 이동노동자 산재보험료 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800004",
+          "title": "학업성취도 향상 고등학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "mois-O00096800006",
+          "title": "고교 진학 후 성적우수 학생 장학금",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260722005400213280",
+          "title": "2026 북구청춘페스타 추진기획단 모집(~6.14.)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260518005400213206",
+          "title": "2026 농식품가공창업보육센터 이용자 모집 공고(공유주방 창업팀 1기)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "childcare",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213044",
+          "title": "홍성 청년의 날 기념행사",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "welfare",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260504005400213036",
+          "title": "청년의 날 행사",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "asset_building",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260430005400212968",
+          "title": "대학생 행복기숙사 지원 사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "housing",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260430005400212963",
+          "title": "대학생 학자금 대출이자 지원",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "education",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260410005400212664",
+          "title": "2026년 임신부 가사지원서비스 지원사업 시행",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260408005400212628",
+          "title": "(2차) 2026 광주청년 구직활동수당 및 활동지원사업",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260413005400212689",
+          "title": "2026 시제품 제작 프로그램(예비창업자 지원 과정) 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "employment",
+          "benefitType": "other",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-B55252100003",
+          "title": "발전소 주변지역 장학금 지원(인천)",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        },
+        {
+          "id": "youth-20260429005400212917",
+          "title": "청년 모임 지원사업 [청년모힘]",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "welfare",
+          "benefitType": "cash",
+          "source": "youth_policy"
+        },
+        {
+          "id": "youth-20260408005400212620",
+          "title": "GCC사관학교 3기 교육생 모집",
+          "status": "unknown",
+          "passedDimensions": [
+            "age"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "education",
+          "benefitType": "service",
+          "source": "youth_policy"
+        },
+        {
+          "id": "mois-567000000751",
+          "title": "창원 새내기 지원금 신청",
+          "status": "unknown",
+          "passedDimensions": [
+            "age",
+            "target_scope_in"
+          ],
+          "targetScopeOnlyEvidence": false,
+          "regionEvidence": false,
+          "matchesUserInterest": false,
+          "category": "childcare",
+          "benefitType": "cash",
+          "source": "government"
+        }
+      ]
+    }
+  ],
+  "categoryFrequency": {
+    "mois": [
+      [
+        "welfare",
+        6452
+      ],
+      [
+        "childcare",
+        2647
+      ],
+      [
+        "employment",
+        845
+      ],
+      [
+        "housing",
+        650
+      ],
+      [
+        "family",
+        146
+      ],
+      [
+        "education",
+        124
+      ],
+      [
+        "transport",
+        65
+      ],
+      [
+        "asset_building",
+        26
+      ],
+      [
+        "startup",
+        12
+      ]
+    ],
+    "youth": [
+      [
+        "employment",
+        1021
+      ],
+      [
+        "welfare",
+        558
+      ],
+      [
+        "education",
+        419
+      ],
+      [
+        "asset_building",
+        396
+      ],
+      [
+        "housing",
+        288
+      ],
+      [
+        "childcare",
+        32
+      ],
+      [
+        "family",
+        14
+      ],
+      [
+        "transport",
+        9
+      ],
+      [
+        "startup",
+        8
+      ]
+    ]
+  },
+  "benefitTypeFrequency": {
+    "mois": [
+      [
+        "cash",
+        6212
+      ],
+      [
+        "other",
+        1910
+      ],
+      [
+        "service",
+        1568
+      ],
+      [
+        "discount",
+        1277
+      ]
+    ],
+    "youth": [
+      [
+        "service",
+        1192
+      ],
+      [
+        "cash",
+        760
+      ],
+      [
+        "other",
+        747
+      ],
+      [
+        "loan",
+        46
+      ]
+    ]
+  },
+  "fieldUtilization": {
+    "mois": [
+      [
+        "age",
+        12443
+      ],
+      [
+        "target_scope_in",
+        10967
+      ],
+      [
+        "residence",
+        2606
+      ],
+      [
+        "educationStatus",
+        882
+      ],
+      [
+        "singleParentFamily",
+        370
+      ],
+      [
+        "employmentStatus",
+        178
+      ],
+      [
+        "homeowner",
+        170
+      ],
+      [
+        "multiculturalFamily",
+        130
+      ],
+      [
+        "marriageDate",
+        62
+      ],
+      [
+        "maritalStatus",
+        39
+      ],
+      [
+        "individualIncomeRange",
+        37
+      ],
+      [
+        "childrenCount",
+        32
+      ],
+      [
+        "businessOwner",
+        19
+      ],
+      [
+        "median_income_threshold",
+        19
+      ]
+    ],
+    "youth": [
+      [
+        "age",
+        1264
+      ],
+      [
+        "employmentStatus",
+        494
+      ],
+      [
+        "educationStatus",
+        274
+      ],
+      [
+        "maritalStatus",
+        71
+      ],
+      [
+        "individualIncomeRange",
+        29
+      ]
+    ]
+  }
+}

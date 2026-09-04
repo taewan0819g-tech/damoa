@@ -6,11 +6,12 @@
  * MOIS + Youth Center catalogs (same three files auditEligibilityCoverage.ts
  * and the Phase 2/4 audits already used: /tmp/mois_serviceList_full.json,
  * /tmp/mois_supportConditions_full.json, /tmp/youth_policy_full.json —
- * fetched live on 2026-09-02, 10,967 MOIS rows / 2,745 Youth rows). If any
- * of those files are missing, this script fetches them fresh (same
- * pagination logic as auditEligibilityCoverage.ts) and writes them back to
- * those exact paths so subsequent runs stay reproducible from the same
- * snapshot.
+ * fetched live on 2026-09-02, 10,967 MOIS rows / 2,745 Youth rows).
+ *
+ * This script performs ZERO network calls. It NEVER fetches live MOIS or
+ * Youth Center data. If any of the three frozen input files are missing, it
+ * fails immediately and prints exactly which frozen input(s) are missing —
+ * it does not fall back to a live fetch under any circumstance.
  *
  * Never modifies production matching/ranking code — only imports and calls
  * the real, unmodified functions (evaluateEligibilityDetailed,
@@ -19,10 +20,14 @@
  * Run with:
  *   node --env-file=.env.local -r tsx/cjs scripts/auditPersonalizationBaseline.ts
  *
- * Writes a full JSON report to /tmp/personalization-audit.json and prints a
- * condensed summary to stdout.
+ * Writes a full JSON report to /tmp/personalization-audit.json (local
+ * scratch, not committed) and a compact deterministic baseline artifact to
+ * docs/audits/personalization-baseline.json (committed — the baseline of
+ * record). Prints a condensed summary to stdout.
  */
 import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 import {
   normalizeMOISServiceListItem,
   normalizeMOISSupportConditions,
@@ -40,74 +45,38 @@ const MOIS_LIST_PATH = "/tmp/mois_serviceList_full.json";
 const MOIS_CONDITIONS_PATH = "/tmp/mois_supportConditions_full.json";
 const YOUTH_PATH = "/tmp/youth_policy_full.json";
 const REPORT_PATH = "/tmp/personalization-audit.json";
+const BASELINE_ARTIFACT_PATH = path.join(__dirname, "../docs/audits/personalization-baseline.json");
 
-const MOIS_BASE = "https://api.odcloud.kr/api/gov24/v3";
-const YOUTH_BASE = "https://www.youthcenter.go.kr/go/ythip/getPlcy";
+const REQUIRED_INPUTS: { path: string; label: string }[] = [
+  { path: MOIS_LIST_PATH, label: "MOIS service list" },
+  { path: MOIS_CONDITIONS_PATH, label: "MOIS support conditions" },
+  { path: YOUTH_PATH, label: "Youth Center policy list" },
+];
 
-async function fetchMoisAll<T>(path: string, key: string): Promise<T[]> {
-  const PER_PAGE = 1000;
-  const MAX_PAGES = 30;
-  const results: T[] = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await fetch(`${MOIS_BASE}${path}?page=${page}&perPage=${PER_PAGE}`, {
-      headers: { Authorization: `Infuser ${key}` },
-    });
-    if (!res.ok) break;
-    const json = (await res.json()) as { data: T[]; totalCount: number };
-    results.push(...json.data);
-    if (json.data.length < PER_PAGE || page * PER_PAGE >= json.totalCount) break;
-  }
-  return results;
+function sha256File(filePath: string): string {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-async function fetchYouthAll(key: string): Promise<YouthRawPolicy[]> {
-  const PAGE_SIZE = 1000;
-  const MAX_PAGES = 20;
-  const results: YouthRawPolicy[] = [];
-  for (let pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
-    const url = `${YOUTH_BASE}?apiKeyNm=${key}&pageType=1&rtnType=json&pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
-    const res = await fetch(url);
-    if (!res.ok) break;
-    const json = (await res.json()) as {
-      resultCode: number;
-      result?: { pagging?: { totCount: number }; youthPolicyList?: YouthRawPolicy[] };
-    };
-    if (json.resultCode !== 200) break;
-    const list = json.result?.youthPolicyList ?? [];
-    const totCount = json.result?.pagging?.totCount ?? 0;
-    results.push(...list);
-    if (list.length < PAGE_SIZE || pageNum * PAGE_SIZE >= totCount) break;
-  }
-  return results;
-}
-
-async function loadFrozenCatalog(): Promise<{
+function loadFrozenCatalog(): {
   moisRawList: MOISRawServiceListItem[];
   moisRawConditions: MOISRawSupportCondition[];
   youthRaw: YouthRawPolicy[];
   snapshotAge: { moisListMtime: string; youthMtime: string };
-}> {
-  const haveAll =
-    fs.existsSync(MOIS_LIST_PATH) && fs.existsSync(MOIS_CONDITIONS_PATH) && fs.existsSync(YOUTH_PATH);
-
-  if (!haveAll) {
-    const moisKey = process.env.MOIS_API_KEY;
-    const youthKey = process.env.YOUTH_POLICY_API_KEY;
-    if (!moisKey || !youthKey) throw new Error("Frozen snapshot missing and MOIS_API_KEY/YOUTH_POLICY_API_KEY not set");
-    console.log("Frozen snapshot not found on disk — fetching fresh and caching to /tmp for reproducibility...");
-    const [moisRawList, moisRawConditions, youthRaw] = await Promise.all([
-      fetchMoisAll<MOISRawServiceListItem>("/serviceList", moisKey),
-      fetchMoisAll<MOISRawSupportCondition>("/supportConditions", moisKey),
-      fetchYouthAll(youthKey),
-    ]);
-    fs.writeFileSync(MOIS_LIST_PATH, JSON.stringify(moisRawList));
-    fs.writeFileSync(MOIS_CONDITIONS_PATH, JSON.stringify(moisRawConditions));
-    fs.writeFileSync(YOUTH_PATH, JSON.stringify(youthRaw));
+  inputHashes: { path: string; label: string; sha256: string }[];
+} {
+  const missing = REQUIRED_INPUTS.filter((f) => !fs.existsSync(f.path));
+  if (missing.length > 0) {
+    console.error("Frozen input file(s) missing. This audit NEVER fetches live MOIS/Youth data — it requires all frozen snapshots to already exist on disk.");
+    console.error("Missing:");
+    for (const m of missing) console.error(`  - ${m.label}: ${m.path}`);
+    process.exit(1);
   }
 
   const moisRawList: MOISRawServiceListItem[] = JSON.parse(fs.readFileSync(MOIS_LIST_PATH, "utf8"));
   const moisRawConditions: MOISRawSupportCondition[] = JSON.parse(fs.readFileSync(MOIS_CONDITIONS_PATH, "utf8"));
   const youthRaw: YouthRawPolicy[] = JSON.parse(fs.readFileSync(YOUTH_PATH, "utf8"));
+
+  const inputHashes = REQUIRED_INPUTS.map((f) => ({ path: f.path, label: f.label, sha256: sha256File(f.path) }));
 
   return {
     moisRawList,
@@ -117,6 +86,7 @@ async function loadFrozenCatalog(): Promise<{
       moisListMtime: fs.statSync(MOIS_LIST_PATH).mtime.toISOString(),
       youthMtime: fs.statSync(YOUTH_PATH).mtime.toISOString(),
     },
+    inputHashes,
   };
 }
 
@@ -238,7 +208,7 @@ function sortedFreq<T>(m: Map<T, number>): [T, number][] {
 }
 
 async function main() {
-  const { moisRawList, moisRawConditions, youthRaw, snapshotAge } = await loadFrozenCatalog();
+  const { moisRawList, moisRawConditions, youthRaw, snapshotAge, inputHashes } = loadFrozenCatalog();
   console.log(`Frozen snapshot: MOIS ${moisRawList.length} rows (mtime ${snapshotAge.moisListMtime}), Youth ${youthRaw.length} rows (mtime ${snapshotAge.youthMtime})`);
 
   const conditionsById = new Map<string, MOISRawSupportCondition>();
@@ -455,17 +425,28 @@ async function main() {
     const relevantFeedTargetScopeOnly = relevantFeed.filter((b) => targetScopeOnlyById.get(b.id));
 
     const top20 = getRecommendedBenefits(relevantFeed, statusById, profile, 20);
-    const top20Detail = top20.map((b) => ({
-      id: b.id,
-      title: b.title,
-      source: b.source.type,
-      category: b.category,
-      benefitType: b.benefitType,
-      status: statusById.get(b.id),
-      hasPositiveEvidence: hasPositiveEvidenceById.get(b.id),
-      targetScopeOnlyEvidence: targetScopeOnlyById.get(b.id),
-      matchesUserInterest: (profile.interests ?? []).includes(b.category),
-    }));
+    const top20Detail = top20.map((b) => {
+      const leaves: LeafTrace[] = [];
+      if (b.eligibility) traceLeaves(b.eligibility, profile, leaves);
+      const passed = leaves.filter((l) => l.result === "pass");
+      const passedDimensions = [
+        ...new Set(passed.map((l) => (l.operator === "target_scope_in" || l.operator === "median_income_threshold" ? l.operator : l.field))),
+      ];
+      const regionEvidence = passed.some((l) => l.field === "residence" || l.operator === "region_in");
+      return {
+        id: b.id,
+        title: b.title,
+        source: b.source.type,
+        category: b.category,
+        benefitType: b.benefitType,
+        status: statusById.get(b.id),
+        hasPositiveEvidence: hasPositiveEvidenceById.get(b.id),
+        targetScopeOnlyEvidence: targetScopeOnlyById.get(b.id),
+        matchesUserInterest: (profile.interests ?? []).includes(b.category),
+        passedDimensions,
+        regionEvidence,
+      };
+    });
     const top20TargetScopeOnlyCount = top20Detail.filter((b) => b.targetScopeOnlyEvidence).length;
     const top20InterestMatchCount = top20Detail.filter((b) => b.matchesUserInterest).length;
     const top20CategoryFreq = sortedFreq(freq(top20Detail.map((b) => b.category)));
@@ -507,6 +488,47 @@ async function main() {
 
   fs.writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2));
   console.log(`\nFull report written to ${REPORT_PATH}`);
+
+  // =========================================================================
+  // Compact deterministic baseline artifact — committed to the repo as the
+  // baseline of record (docs/audits/personalization-baseline.json). Does NOT
+  // include the raw government snapshot rows themselves, only hashes/counts
+  // and derived audit results.
+  // =========================================================================
+  const baselineArtifact = {
+    generatedAt: new Date().toISOString(),
+    frozenInputs: inputHashes.map((h) => ({ label: h.label, path: h.path, sha256: h.sha256 })),
+    snapshot: { moisCount: moisRawList.length, youthCount: youthRaw.length, totalCount: moisRawList.length + youthRaw.length, ...snapshotAge },
+    profiles: PROFILES.map((p) => ({ key: p.key, label: p.label, profile: p.profile })),
+    aggregateEligibility: perProfileReports.map((r) => ({
+      profile: r.key,
+      totals: r.totals,
+      personalizedFeedSize: r.personalizedFeedSize,
+      personalizedFeedTargetScopeOnlyCount: r.personalizedFeedTargetScopeOnlyCount,
+      personalizedFeedTargetScopeOnlyPct: r.personalizedFeedTargetScopeOnlyPct,
+    })),
+    top20ByProfile: perProfileReports.map((r) => ({
+      profile: r.key,
+      top20: r.top20.map((b) => ({
+        id: b.id,
+        title: b.title,
+        status: b.status,
+        passedDimensions: b.passedDimensions,
+        targetScopeOnlyEvidence: b.targetScopeOnlyEvidence,
+        regionEvidence: b.regionEvidence,
+        matchesUserInterest: b.matchesUserInterest,
+        category: b.category,
+        benefitType: b.benefitType,
+        source: b.source,
+      })),
+    })),
+    categoryFrequency: { mois: moisCategoryFreq, youth: youthCategoryFreq },
+    benefitTypeFrequency: { mois: moisBenefitTypeFreq, youth: youthBenefitTypeFreq },
+    fieldUtilization: { mois: moisFieldUtilization, youth: youthFieldUtilization },
+  };
+  fs.mkdirSync(path.dirname(BASELINE_ARTIFACT_PATH), { recursive: true });
+  fs.writeFileSync(BASELINE_ARTIFACT_PATH, JSON.stringify(baselineArtifact, null, 2));
+  console.log(`Committed baseline artifact written to ${BASELINE_ARTIFACT_PATH}`);
 
   console.log("\n=== Category frequency (MOIS) ===");
   console.table(moisCategoryFreq.map(([c, n]) => ({ category: c, count: n, pct: Number(((n / moisBenefits.length) * 100).toFixed(1)) })));

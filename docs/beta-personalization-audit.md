@@ -3,14 +3,15 @@
 **Status: AUDIT ONLY. No production code was changed. No PR opened.**
 
 Date: 2026-09-04
-Branch: `wip/beta-personalization-pass` (currently identical to `main` @ `b4f5eb923930ff85ff6d35e103160dcb247970b4` — zero diff, confirmed via `git diff main...HEAD --stat`)
+Branch: `wip/beta-personalization-pass` — diverged from `main` @ `b4f5eb923930ff85ff6d35e103160dcb247970b4` by audit-only commits (this doc, the audit script, and the committed baseline artifact under `docs/audits/`). No production code differs from `main`; confirm with `git diff main...HEAD -- . ':!docs' ':!scripts/auditPersonalizationBaseline.ts'`.
 Script: [`scripts/auditPersonalizationBaseline.ts`](../scripts/auditPersonalizationBaseline.ts) (read-only; imports and calls the real, unmodified `evaluateEligibilityDetailed`, `getRecommendedBenefits`, `isRelevantForFeed`, and adapter normalizer functions — never reimplements matching/ranking logic, only mirrors adapter `mapCategory` internally for keyword-attribution reporting)
 
 ## 0. Method
 
-- Catalog: a **frozen** snapshot of the real MOIS (`/serviceList` + `/supportConditions`) and Youth Center (`getPlcy`) APIs, fetched live on **2026-09-02** and cached at `/tmp/mois_serviceList_full.json` (10,967 rows), `/tmp/mois_supportConditions_full.json` (10,967 rows), `/tmp/youth_policy_full.json` (2,745 rows). Combined catalog after normalization: **13,712 benefits**. The script reuses these files if present (reproducible, no live-API dependency); if absent it re-fetches and re-caches to the same paths.
-- 6 representative profiles (A–F), chosen to exercise: the region PASS/FAIL example from the product spec (경기도 이천시 vs 수원시), asset_building/interest pollution, marital/family rules, and a "just finished onboarding, minimal fields" degenerate case. Full profile definitions are in the script.
-- Run: `node --env-file=.env.local -r tsx/cjs scripts/auditPersonalizationBaseline.ts`. Full JSON: `/tmp/personalization-audit.json` (not committed — regenerate on demand).
+- Catalog: a **frozen** snapshot of the real MOIS (`/serviceList` + `/supportConditions`) and Youth Center (`getPlcy`) APIs, fetched live on **2026-09-02** and cached at `/tmp/mois_serviceList_full.json` (10,967 rows), `/tmp/mois_supportConditions_full.json` (10,967 rows), `/tmp/youth_policy_full.json` (2,745 rows). Combined catalog after normalization: **13,712 benefits**.
+- **Frozen inputs are required, not optional.** The script performs **zero network calls**. If any of the three frozen input files is missing, it fails immediately (exit code 1) and prints exactly which file(s) are missing — there is no live-API fallback. SHA256 hashes of the exact three input files used for this run are recorded in the committed baseline artifact (see below), so any future run can be checked byte-for-byte against this one.
+- 6 representative profiles (A–F), chosen to exercise: the region PASS/FAIL example from the product spec (경기도 이천시 vs 수원시), asset_building/interest pollution, marital/family rules, and a "just finished onboarding, minimal fields" degenerate case. Full profile definitions are in the script and in the committed artifact.
+- Run: `node --env-file=.env.local -r tsx/cjs scripts/auditPersonalizationBaseline.ts`. Full JSON: `/tmp/personalization-audit.json` (local scratch, not committed, regenerate on demand). **Baseline of record (committed):** [`docs/audits/personalization-baseline.json`](audits/personalization-baseline.json) — a compact, deterministic artifact containing snapshot row counts, input file hashes, profile definitions, aggregate eligibility/feed counts, targetScope-only counts, Top-20 detail per profile (status, passed dimensions, targetScope-only flag, region evidence, interest overlap, category, benefitType, source), and category/benefitType/field-utilization frequency tables. The raw MOIS/Youth government snapshot files themselves are **not** committed (only their hashes).
 
 ---
 
