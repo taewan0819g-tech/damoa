@@ -1,5 +1,6 @@
 import type { Benefit } from "@/types/benefit";
 import type { BenefitProvider } from "./BenefitProvider";
+import type { ProviderHealth } from "./health";
 import { mockBenefits } from "@/data/mockBenefits";
 import { parseBenefitList } from "@/lib/validation/benefitSchema";
 
@@ -17,5 +18,18 @@ export class MockBenefitProvider implements BenefitProvider {
   async getBenefit(id: string): Promise<Benefit | null> {
     const benefits = await this.getBenefits();
     return benefits.find((b) => b.id === id) ?? null;
+  }
+
+  /** Static in-memory data, so it's always trivially "healthy" -- reported for symmetry with the real providers. */
+  getHealthStatus(): ProviderHealth {
+    return {
+      provider: "mock",
+      configured: true,
+      status: "healthy",
+      lastSuccessAt: Date.now(),
+      lastFailureAt: null,
+      lastError: null,
+      ageMs: 0,
+    };
   }
 }

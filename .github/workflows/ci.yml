@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same branch/PR to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    # Deliberately NO secrets/env vars here. Every test and the production
+    # build must succeed without MOIS_API_KEY / YOUTH_POLICY_API_KEY /
+    # Supabase credentials (Phase 5 §14/§15): tests mock the provider layer
+    # or use frozen local fixtures instead of live upstream APIs, and the
+    # app must degrade to MockBenefitProvider at build/runtime when no real
+    # key is configured (see providers/index.ts).
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: "npm"
+
+      - name: Install dependencies (deterministic, from lockfile)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
