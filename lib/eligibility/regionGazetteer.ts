@@ -53,12 +53,15 @@
  *  2. 인천광역시 abolished 중구/동구 and created 제물포구 (inland 중구+동구),
  *     영종구 (영종도, the island part of former 중구), and 검단구 (검단
  *     New Town area, split off former 서구) — 「인천광역시 제물포구ㆍ영종구 및
- *     검단구 설치 등에 관한 법률」, 시행 2026-07-01.
- *     https://www.law.go.kr/lsInfoP.do?lsiSeq=281877&viewCls=lsRvsDocInfoR
+ *     검단구 설치 등에 관한 법률」, 법률 제20161호 (제정, 공포 2024-01-30),
+ *     later 법률 제21247호 (일부개정, 공포 2025-12-30), 시행 2026-07-01.
+ *     https://www.law.go.kr/lsInfoP.do?lsiSeq=259479&viewCls=lsRvsDocInfoR (제정)
+ *     https://www.law.go.kr/lsInfoP.do?lsiSeq=281877&viewCls=lsRvsDocInfoR (일부개정)
  *
  *  3. 인천광역시 서구 (the portion NOT split into 검단구) renamed to
  *     서해구 — 「인천광역시 서구 명칭 변경에 관한 법률」, 법률 제21734호,
- *     시행 2026-07-01.
+ *     공포 2026-06-02, 시행 2026-07-01.
+ *     https://www.law.go.kr/법령/인천광역시서구명칭변경에관한법률
  *
  * `CURRENT_RESIDENCE_GAZETTEER` reflects these changes: it no longer offers
  * 광주광역시/전라남도/인천 중구/동구/서구 as new-user-selectable. But
@@ -92,17 +95,23 @@
  * ---------------------------------------------------------------------------
  */
 
-/** Districts unaffected by the 2026-07-01 Incheon reorganization. */
-const INCHEON_UNAFFECTED_DISTRICTS = ["미추홀구", "연수구", "남동구", "부평구", "계양구", "강화군", "옹진군"];
+/**
+ * Districts unaffected by the 2026-07-01 Incheon reorganization.
+ * Exported (alongside the four lists below) purely so
+ * `domain/region/adminTransition.ts` can build its containment-relation
+ * facts from this same source data instead of duplicating it — never
+ * imported for any fuzzy/alias purpose.
+ */
+export const INCHEON_UNAFFECTED_DISTRICTS = ["미추홀구", "연수구", "남동구", "부평구", "계양구", "강화군", "옹진군"];
 /** Abolished 2026-07-01 — kept in POLICY_REGION_GAZETTEER only (historical text), never in CURRENT_RESIDENCE_GAZETTEER. */
-const INCHEON_HISTORICAL_DISTRICTS = ["중구", "동구", "서구"];
+export const INCHEON_HISTORICAL_DISTRICTS = ["중구", "동구", "서구"];
 /** Created/renamed-into 2026-07-01 — the only Incheon sub-units a new user may select. */
-const INCHEON_CURRENT_DISTRICTS = ["제물포구", "영종구", "검단구", "서해구"];
+export const INCHEON_CURRENT_DISTRICTS = ["제물포구", "영종구", "검단구", "서해구"];
 
 /** 광주광역시's 5 자치구 — unchanged by the merger, still real places under the new province name. */
-const GWANGJU_DISTRICTS = ["동구", "서구", "남구", "북구", "광산구"];
+export const GWANGJU_DISTRICTS = ["동구", "서구", "남구", "북구", "광산구"];
 /** 전라남도's 22 시/군 — unchanged by the merger, still real places under the new province name. */
-const JEONNAM_CITIES = [
+export const JEONNAM_CITIES = [
   "목포시", "여수시", "순천시", "나주시", "광양시",
   "담양군", "곡성군", "구례군", "고흥군", "보성군", "화순군", "장흥군", "강진군",
   "해남군", "영암군", "무안군", "함평군", "영광군", "장성군", "완도군", "진도군",
@@ -196,19 +205,20 @@ export const CURRENT_RESIDENCE_GAZETTEER_METADATA = {
     },
     {
       law: "인천광역시 제물포구ㆍ영종구 및 검단구 설치 등에 관한 법률",
-      lawNumber: null,
-      promulgatedDate: null,
+      lawNumber: "법률 제20161호 (제정) / 법률 제21247호 (일부개정)",
+      promulgatedDate: "2024-01-30 (제정) / 2025-12-30 (일부개정)",
       effectiveDate: "2026-07-01",
-      url: "https://www.law.go.kr/lsInfoP.do?lsiSeq=281877&viewCls=lsRvsDocInfoR",
+      url: "https://www.law.go.kr/lsInfoP.do?lsiSeq=259479&viewCls=lsRvsDocInfoR",
+      amendmentUrl: "https://www.law.go.kr/lsInfoP.do?lsiSeq=281877&viewCls=lsRvsDocInfoR",
       change: "인천광역시 중구+동구 폐지 -> 제물포구 신설; 중구 영종도 지역 -> 영종구 신설; 서구 일부(검단 신도시) -> 검단구 신설",
-      note: "Independent lookups for this law's exact 법률 번호/공포일 returned inconsistent values (법률 제20161호/2024-01-30 vs 법률 제21247호/2025-12-30) — recorded here as unresolved rather than guessed. The 2026-07-01 effective date and the district-establishment substance are independently corroborated by multiple sources including the law.go.kr detail page itself.",
+      note: "Previously recorded as unresolved (an earlier lookup pass found 법률 제20161호/2024-01-30 and 법률 제21247호/2025-12-30 as two conflicting candidates and could not tell which was authoritative). Re-verified directly against 국가법령정보센터: both are real and non-conflicting — 법률 제20161호/2024-01-30 is this law's ORIGINAL ENACTMENT (제정, https://www.law.go.kr/lsInfoP.do?lsiSeq=259479&viewCls=lsRvsDocInfoR), and 법률 제21247호/2025-12-30 is a later PARTIAL AMENDMENT (일부개정, https://www.law.go.kr/lsInfoP.do?lsiSeq=281877&viewCls=lsRvsDocInfoR) of the same law, still effective 2026-07-01.",
     },
     {
       law: "인천광역시 서구 명칭 변경에 관한 법률",
       lawNumber: "법률 제21734호",
-      promulgatedDate: null,
+      promulgatedDate: "2026-06-02",
       effectiveDate: "2026-07-01",
-      url: null,
+      url: "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%9D%B8%EC%B2%9C%EA%B4%91%EC%97%AD%EC%8B%9C%EC%84%9C%EA%B5%AC%EB%AA%85%EC%B9%AD%EB%B3%80%EA%B2%BD%EC%97%90%EA%B4%80%ED%95%9C%EB%B2%95%EB%A5%A0",
       change: "인천광역시 서구(검단구로 분리된 부분 제외) -> 서해구로 명칭 변경",
     },
   ],

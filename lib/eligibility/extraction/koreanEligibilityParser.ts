@@ -1,6 +1,6 @@
 import type { EligibilityRule } from "@/types/benefit";
 import { normalizeProvince, PROVINCE_ALIAS_KEYS, type RegionSpec } from "../region";
-import { resolveCityProvinces, getShortDistrictNames } from "../regionGazetteer";
+import { resolveCityProvinces, getShortDistrictNames, getCitiesForProvince } from "../regionGazetteer";
 import { intervalFromBoundaryWord } from "../interval";
 import { EMPLOYMENT_TARGET_SPECS } from "../employment";
 import type { MarriageDurationBoundary, MarriageDurationSpec } from "@/domain/profile/marriageDuration";
@@ -700,11 +700,29 @@ function isInstitutionMention(text: string, matchEndIndex: number): boolean {
  * stated province) or a wholly unrecognized token safely falls back to the
  * broader, still-correct province-only spec rather than asserting a wrong
  * city-level restriction.
+ *
+ * `POLICY_REGION_GAZETTEER` (job B, backing `resolveCityProvinces`)
+ * deliberately has no "전남광주통합특별시" province key — see
+ * regionGazetteer.ts's file header — so a bare city mention never becomes
+ * newly ambiguous between the old and new province names. But that means an
+ * EXPLICIT "전남광주통합특별시 목포시"/"전남광주통합특별시 광산구" mention would
+ * otherwise lose its city specificity here (resolveCityProvinces("목포시")
+ * only ever returns ["전라남도"]), even though the text unambiguously named
+ * both the current province AND a real city that belongs to it. When the
+ * text explicitly names the current merged province, fall back to
+ * `getCitiesForProvince` (job A's exact current-roster lookup, which DOES
+ * list 전남광주통합특별시's cities) to keep that specificity — this is still
+ * driven entirely by what the text itself said, not a guess, and does NOT
+ * touch the lone-city (`findLoneCityCandidates`) path or its global reverse
+ * index at all.
  */
 function resolveCitySpec(province: string, cityToken: string | undefined): RegionSpec {
   if (!cityToken) return { province };
   const cityProvinces = resolveCityProvinces(cityToken);
   if (cityProvinces.includes(province)) {
+    return { province, city: cityToken };
+  }
+  if (getCitiesForProvince(province).includes(cityToken)) {
     return { province, city: cityToken };
   }
   return { province };

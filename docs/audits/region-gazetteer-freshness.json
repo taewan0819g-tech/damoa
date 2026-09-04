@@ -12,14 +12,23 @@
   "verificationDate": "2026-09-04",
   "sourcesUsed": [
     {
-      "type": "web_search",
-      "description": "Multiple independent Korean news sources reporting on 전남광주통합특별시 (Gwangju + Jeollanam-do merger) enactment and effective date.",
-      "claim": "「전남광주통합특별시 설치 및 지원에 관한 특별법」 passed 국회 2026-06-24; 광주광역시와 전라남도가 단일 광역자치단체 '전남광주통합특별시'로 통합, 시행일 2026-07-01. Korea's first 광역단위 (metropolitan-tier) merger."
+      "type": "official_law_go_kr",
+      "description": "국가법령정보센터 (law.go.kr) — 「전남광주통합특별시 설치를 위한 특별법」 제정·개정문.",
+      "claim": "법률 제21446호, 제정/공포 2026-03-05, 시행 2026-07-01. 광주광역시와 전라남도가 단일 광역자치단체 '전남광주통합특별시'로 통합. Korea's first 광역단위 (metropolitan-tier) merger.",
+      "url": "https://www.law.go.kr/lsInfoP.do?lsiSeq=284111&viewCls=lsRvsDocInfoR"
     },
     {
-      "type": "web_search",
-      "description": "Multiple independent Korean news sources reporting on 인천광역시 구제 개편 enactment and effective date.",
-      "claim": "「인천광역시 제물포구, 영종구 및 검단구 설치 등에 관한 법률」 enacted 2023, effective 2026-07-01: 중구+동구 폐지 -> 제물포구 신설; 서구 분구 -> 검단구 신설, 잔여 서구 -> 서해구로 개명; 영종구 신설(기존 중구 영종·영종하늘도시 등 편입)."
+      "type": "official_law_go_kr",
+      "description": "국가법령정보센터 (law.go.kr) — 「인천광역시 제물포구ㆍ영종구 및 검단구 설치 등에 관한 법률」 원 제정문 및 일부개정문 (checkpoint: Final Region Transition Compatibility — this superseded the prior checkpoint's unresolved lawNumber/promulgatedDate note; both candidate values were real and non-conflicting once independently re-verified).",
+      "claim": "원 제정: 법률 제20161호, 공포 2024-01-30. 이후 일부개정: 법률 제21247호, 공포 2025-12-30. 시행일(제정·개정 공통) 2026-07-01: 인천광역시 중구+동구 폐지 -> 제물포구 신설; 중구 영종도 지역 -> 영종구 신설; 서구 일부(검단 신도시) -> 검단구 신설.",
+      "url": "https://www.law.go.kr/lsInfoP.do?lsiSeq=259479&viewCls=lsRvsDocInfoR",
+      "amendmentUrl": "https://www.law.go.kr/lsInfoP.do?lsiSeq=281877&viewCls=lsRvsDocInfoR"
+    },
+    {
+      "type": "official_law_go_kr",
+      "description": "국가법령정보센터 (law.go.kr) — 「인천광역시 서구 명칭 변경에 관한 법률」.",
+      "claim": "법률 제21734호, 공포 2026-06-02, 시행 2026-07-01. 인천광역시 서구(검단구로 분리된 부분 제외)를 서해구로 명칭 변경.",
+      "url": "https://www.law.go.kr/%EB%B2%95%EB%A0%B9/%EC%9D%B8%EC%B2%9C%EA%B4%91%EC%97%AD%EC%8B%9C%EC%84%9C%EA%B5%AC%EB%AA%85%EC%B9%AD%EB%B3%80%EA%B2%BD%EC%97%90%EA%B4%80%ED%95%9C%EB%B2%95%EB%A5%A0"
     },
     {
       "type": "web_search",

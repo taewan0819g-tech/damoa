@@ -1215,4 +1215,43 @@ describe("Phase 2: marital/family eligibility", () => {
       );
     });
   });
+
+  // ---------------------------------------------------------------------
+  // REGION — Checkpoint: Final Region Transition Compatibility.
+  // resolveCitySpec's explicit-current-province fallback must keep city
+  // specificity for "전남광주통합특별시 <city>" mentions, without touching the
+  // bare-city (province-less) parsing path or its conservative ambiguity
+  // handling at all.
+  // ---------------------------------------------------------------------
+  describe("전남광주통합특별시 explicit province+city parsing (city-specificity fix)", () => {
+    it('"전남광주통합특별시 목포시" resolves to {province, city} instead of losing city specificity', () => {
+      const result = extractEligibilityFromText("지원대상", "전남광주통합특별시 목포시에 거주하는 자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전남광주통합특별시", city: "목포시" }]);
+    });
+
+    it('"전남광주통합특별시 광산구" resolves to {province, city} instead of losing city specificity', () => {
+      const result = extractEligibilityFromText("지원대상", "전남광주통합특별시 광산구에 거주하는 자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전남광주통합특별시", city: "광산구" }]);
+    });
+
+    it('a "전남광주통합특별시"-prefixed city NOT in the current roster still falls back to province-only (no guessing)', () => {
+      const result = extractEligibilityFromText("지원대상", "전남광주통합특별시 없는시에 거주하는 자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전남광주통합특별시" }]);
+    });
+
+    it("bare '목포시' with no province prefix stays exactly as conservative as before (still resolves only to the historical province, never to the new merged name)", () => {
+      const result = extractEligibilityFromText("지원대상", "목포시 관내 거주자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전라남도", city: "목포시" }]);
+    });
+
+    it("bare '광산구' with no province prefix does not become newly ambiguous or resolve to 전남광주통합특별시", () => {
+      const result = extractEligibilityFromText("지원대상", "광산구 관내 거주자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "광주광역시", city: "광산구" }]);
+    });
+  });
 });
