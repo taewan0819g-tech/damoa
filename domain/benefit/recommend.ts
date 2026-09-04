@@ -1,6 +1,7 @@
 import type { Benefit, EligibilityStatus } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 import { getDDayInfo } from "@/lib/dates/dday";
+import { matchesUserInterest } from "./topics";
 import {
   resolvePersonalizationEvidence,
   STRENGTH_RANK,
@@ -44,11 +45,12 @@ export interface GetRecommendedBenefitsOptions {
  *   4. region specificity (exact city > province-wide > no verified region
  *      match) — ranking/tie-breaking only, never changes matchRegion()'s
  *      own pass/fail/unknown result
- *   5. existing user-interest overlap — LOW-PRIORITY tie-breaker only. The
- *      category/interest taxonomy is known to have real bugs (e.g.
- *      asset_building over-tagging — see docs/beta-personalization-audit.md
- *      §4/§6), so it must never outrank verified eligibility/personalization
- *      evidence.
+ *   5. user-interest overlap, via `matchesUserInterest` (see
+ *      domain/benefit/topics.ts) — LOW-PRIORITY tie-breaker only, even though
+ *      the historical over-tagging bugs it used to inherit from raw
+ *      `category` equality (see docs/beta-personalization-audit.md §4/§6)
+ *      are now fixed at the source. It must still never outrank verified
+ *      eligibility/personalization evidence.
  *   6. application deadline proximity (sooner first)
  *   7. benefit id — stable final tie-breaker so ordering is deterministic
  *      even when every prior key ties.
@@ -87,7 +89,8 @@ export function getRecommendedBenefits(
         REGION_SPECIFICITY_RANK[a.evidence.regionSpecificity] - REGION_SPECIFICITY_RANK[b.evidence.regionSpecificity];
       if (regionDiff !== 0) return regionDiff;
 
-      const interestDiff = Number(interests.has(b.benefit.category)) - Number(interests.has(a.benefit.category));
+      const interestDiff =
+        Number(matchesUserInterest(b.benefit, interests)) - Number(matchesUserInterest(a.benefit, interests));
       if (interestDiff !== 0) return interestDiff;
 
       const aDday = getDDayInfo(a.benefit.application?.endDate);

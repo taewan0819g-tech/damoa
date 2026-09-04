@@ -9,6 +9,7 @@ import { getSourceGroup, type BenefitSourceGroup } from "@/domain/benefit/source
 import { getBenefitSummary, type BenefitSummary } from "@/domain/benefit/summary";
 import { getRecommendedBenefits } from "@/domain/benefit/recommend";
 import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
+import { matchesBenefitFacet } from "@/domain/benefit/topics";
 import { parseUserProfile } from "@/lib/validation/profileSchema";
 import { logger } from "@/lib/log/logger";
 import type { UserProfile } from "@/types/profile";
@@ -307,7 +308,8 @@ export async function POST(request: Request) {
       filtered = filtered.filter((b) => getSourceGroup(b) === body.group);
     }
     if (body.category && body.category !== "all") {
-      filtered = filtered.filter((b) => b.category === body.category);
+      const category = body.category;
+      filtered = filtered.filter((b) => matchesBenefitFacet(b, category));
     }
     filtered = sortBenefits(filtered, statusById, profile, body.sort ?? "recommended", evidenceById);
 

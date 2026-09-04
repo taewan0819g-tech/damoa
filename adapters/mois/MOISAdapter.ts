@@ -1,6 +1,5 @@
 import type {
   Benefit,
-  BenefitCategory,
   BenefitType,
   EligibilityRule,
   EligibilityRuleGroup,
@@ -9,6 +8,14 @@ import type {
 import { parseMOISUserScope } from "@/lib/eligibility/targetScope";
 import { extractEligibilityFromText } from "@/lib/eligibility/extraction/koreanEligibilityParser";
 import { parseMoisDeadline } from "@/lib/eligibility/extraction/moisDeadlineParser";
+import {
+  deriveFinancialFacets,
+  finalizeTopics,
+  hasAssetBuildingSignal,
+  primaryCategory,
+  type BenefitFinancialFacet,
+  type BenefitTopic,
+} from "@/domain/benefit/topics";
 
 /**
  * Raw record shapes confirmed live against the 행정안전부 "대한민국 공공서비스
@@ -85,20 +92,37 @@ export interface MOISRawSupportCondition {
   [key: string]: unknown;
 }
 
-function mapCategory(raw: MOISRawServiceListItem | MOISRawServiceDetail): BenefitCategory {
+/**
+ * Multi-topic purpose classification (see domain/benefit/topics.ts). Every
+ * bucket below is checked independently (not first-match-wins) so a record
+ * can genuinely carry more than one topic. `서비스분야` is a proper
+ * single-purpose MOIS categorical field (unlike Youth Center's combined
+ * `lclsfNm` umbrella — see YouthAdapter.ts), so it's safe to include in the
+ * `asset_building` finance scan without the umbrella-pollution risk
+ * documented in docs/beta-personalization-audit.md §4.
+ */
+function deriveMoisTopics(raw: MOISRawServiceListItem | MOISRawServiceDetail): BenefitTopic[] {
   const field = "서비스분야" in raw ? raw.서비스분야 : undefined;
   const text = `${field ?? ""} ${raw.서비스명 ?? ""}`;
   const has = (...needles: string[]) => needles.some((n) => text.includes(n));
 
-  if (has("보육", "육아", "아동", "출산")) return "childcare";
-  if (has("주거", "주택", "전세", "임대")) return "housing";
-  if (has("교육", "학비", "장학")) return "education";
-  if (has("고용", "취업", "일자리", "직업훈련")) return "employment";
-  if (has("창업")) return "startup";
-  if (has("가족", "한부모", "다문화")) return "family";
-  if (has("교통")) return "transport";
-  if (has("금융", "저축", "자산형성")) return "asset_building";
-  return "welfare";
+  const topics = new Set<BenefitTopic>();
+  if (has("보육", "육아", "아동", "출산")) topics.add("childcare");
+  if (has("주거", "주택", "전세", "임대")) topics.add("housing");
+  if (has("교육", "학비", "장학")) topics.add("education");
+  if (has("고용", "취업", "일자리", "직업훈련")) topics.add("employment");
+  if (has("창업")) topics.add("startup");
+  if (has("가족", "한부모", "다문화")) topics.add("family");
+  if (has("교통")) topics.add("transport");
+  // Bare "금융" deliberately excluded — see hasAssetBuildingSignal's docs.
+  if (hasAssetBuildingSignal(text)) topics.add("asset_building");
+  return finalizeTopics(topics);
+}
+
+function deriveMoisFinancialFacets(raw: MOISRawServiceListItem | MOISRawServiceDetail): BenefitFinancialFacet[] {
+  const field = "서비스분야" in raw ? raw.서비스분야 : undefined;
+  const text = `${field ?? ""} ${raw.서비스명 ?? ""} ${raw.지원유형 ?? ""}`;
+  return deriveFinancialFacets(text);
 }
 
 function mapBenefitType(지원유형?: string): BenefitType {
@@ -209,11 +233,14 @@ function buildEligibility(
 export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEligibility?: EligibilityRuleGroup): Benefit {
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
   const deadline = parseMoisDeadline(raw.신청기한);
+  const topics = deriveMoisTopics(raw);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
     shortDescription: raw.서비스목적요약 || raw.지원내용 || raw.서비스명,
-    category: mapCategory(raw),
+    category: primaryCategory(topics),
+    topics,
+    financialFacets: deriveMoisFinancialFacets(raw),
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,
@@ -236,11 +263,14 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEli
 export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, ageEligibility?: EligibilityRuleGroup): Benefit {
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
   const deadline = parseMoisDeadline(raw.신청기한);
+  const topics = deriveMoisTopics(raw);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
     shortDescription: raw.서비스목적 || raw.지원내용 || raw.서비스명,
-    category: mapCategory(raw),
+    category: primaryCategory(topics),
+    topics,
+    financialFacets: deriveMoisFinancialFacets(raw),
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,

@@ -1,6 +1,5 @@
 import type {
   Benefit,
-  BenefitCategory,
   BenefitType,
   EligibilityRule,
   EligibilityRuleGroup,
@@ -12,6 +11,14 @@ import {
   buildMaritalStatusRule,
   classifyYouthDimension,
 } from "@/domain/youthCodebook/compatibility";
+import {
+  deriveFinancialFacets,
+  finalizeTopics,
+  hasAssetBuildingSignal,
+  primaryCategory,
+  type BenefitFinancialFacet,
+  type BenefitTopic,
+} from "@/domain/benefit/topics";
 
 /**
  * Raw record shape confirmed live against the 온통청년(Youth Center) Open API
@@ -113,19 +120,52 @@ export interface YouthRawPolicy {
   [key: string]: unknown;
 }
 
-function mapCategory(raw: YouthRawPolicy): BenefitCategory {
-  const text = `${raw.lclsfNm ?? ""} ${raw.mclsfNm ?? ""} ${raw.plcyNm}`;
-  const has = (...needles: string[]) => needles.some((n) => text.includes(n));
+/**
+ * Multi-topic purpose classification (see domain/benefit/topics.ts). Every
+ * bucket below is checked independently (not first-match-wins) so a record
+ * can genuinely carry more than one topic — confirmed live: Youth Center
+ * routinely returns comma-joined `lclsfNm`/`mclsfNm` for records with more
+ * than one real category (e.g. "일자리,교육" | "취업,미래역량강화", 50 records
+ * in the frozen catalog), and some genuine asset-building programs are
+ * filed under an unrelated primary bucket (e.g. "부산 청년 자산형성 지원(부산청년
+ * 기쁨두배통장)" is lclsfNm="일자리"/mclsfNm="취업").
+ *
+ * CRITICAL: `raw.lclsfNm` is NEVER passed to `hasAssetBuildingSignal`. It's
+ * Youth Center's own combined top-level taxonomy label — literally
+ * "금융·복지·문화" for its entire welfare/health/culture supercategory — so a
+ * bare "금융" substring match against it produced 372/422 (88.2%)
+ * false-positive `asset_building` tags (mental-health counseling,
+ * music/culture programs, youth-day events; none of them a financial
+ * product). See docs/beta-personalization-audit.md §4. `mclsfNm`'s own
+ * "취약계층 및 금융지원" sub-bucket was ALSO checked and rejected as a safe
+ * allowlist target: live sampling shows only 50/297 records in that bucket
+ * contain a genuine savings/deposit/loan/자산형성 word — the rest are things
+ * like 상해보험 가입, 생활안정 지원, 소송대리 서비스, K-패스 교통카드. Genuine keyword
+ * signal in `mclsfNm`/`plcyKywdNm`/`plcyNm` (title) is therefore the only
+ * source of truth used here, exactly like MOISAdapter.ts.
+ */
+function deriveYouthTopics(raw: YouthRawPolicy): BenefitTopic[] {
+  const generalText = `${raw.lclsfNm ?? ""} ${raw.mclsfNm ?? ""} ${raw.plcyNm}`;
+  const financeText = `${raw.mclsfNm ?? ""} ${raw.plcyKywdNm ?? ""} ${raw.plcyNm}`;
+  const has = (...needles: string[]) => needles.some((n) => generalText.includes(n));
 
-  if (has("주거")) return "housing";
-  if (has("보육", "육아", "출산")) return "childcare";
-  if (has("교육", "직업훈련", "학비", "장학")) return "education";
-  if (has("일자리", "고용", "취업", "인턴")) return "employment";
-  if (has("창업")) return "startup";
-  if (has("가족", "한부모")) return "family";
-  if (has("교통")) return "transport";
-  if (has("금융", "자산형성", "저축")) return "asset_building";
-  return "welfare";
+  const topics = new Set<BenefitTopic>();
+  if (has("주거")) topics.add("housing");
+  if (has("보육", "육아", "출산")) topics.add("childcare");
+  if (has("교육", "직업훈련", "학비", "장학")) topics.add("education");
+  if (has("일자리", "고용", "취업", "인턴")) topics.add("employment");
+  if (has("창업")) topics.add("startup");
+  if (has("가족", "한부모")) topics.add("family");
+  if (has("교통")) topics.add("transport");
+  if (hasAssetBuildingSignal(financeText)) topics.add("asset_building");
+  return finalizeTopics(topics);
+}
+
+function deriveYouthFinancialFacets(raw: YouthRawPolicy): BenefitFinancialFacet[] {
+  // Same lclsfNm exclusion as deriveYouthTopics — an instrument facet still
+  // shouldn't be inferred from the combined umbrella label.
+  const text = `${raw.mclsfNm ?? ""} ${raw.plcyKywdNm ?? ""} ${raw.plcyNm}`;
+  return deriveFinancialFacets(text);
 }
 
 function mapBenefitType(raw: YouthRawPolicy): BenefitType {
@@ -359,11 +399,14 @@ function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): B
 export function normalizeYouthPolicy(raw: YouthRawPolicy): Benefit {
   const organization = raw.sprvsnInstCdNm || raw.operInstCdNm || "온통청년";
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw);
+  const topics = deriveYouthTopics(raw);
   return {
     id: `youth-${raw.plcyNo}`,
     title: raw.plcyNm,
     shortDescription: raw.plcyExplnCn || raw.plcySprtCn || raw.plcyNm,
-    category: mapCategory(raw),
+    category: primaryCategory(topics),
+    topics,
+    financialFacets: deriveYouthFinancialFacets(raw),
     source: { type: "youth_policy", organization, providerId: raw.plcyNo },
     benefitType: mapBenefitType(raw),
     eligibility,

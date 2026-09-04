@@ -1,0 +1,106 @@
+{
+  "generatedAt": "2026-09-04T10:08:44.558Z",
+  "frozenInputs": [
+    {
+      "path": "/tmp/mois_serviceList_full.json",
+      "label": "MOIS service list",
+      "sha256": "82d7bab830c825aff81df1180f420a8fc92996f6e02cae25a7fd50bd6983f30a"
+    },
+    {
+      "path": "/tmp/youth_policy_full.json",
+      "label": "Youth Center policy list",
+      "sha256": "90ffc2050271abcc58908c60523eef64f23485bbacf97050ad669e74329ecb90"
+    }
+  ],
+  "catalogTotals": {
+    "mois": 10967,
+    "youth": 2745,
+    "total": 13712
+  },
+  "assetBuildingOldVsNew": {
+    "old": {
+      "mois": 26,
+      "youth": 396,
+      "total": 422
+    },
+    "new": {
+      "mois": 16,
+      "youth": 29,
+      "total": 45
+    }
+  },
+  "falsePositivesRemoved": {
+    "mois": 21,
+    "youth": 371,
+    "total": 392,
+    "bareGeumyungOnlyOld_mois": 17,
+    "bareGeumyungOnlyOld_youth": 355
+  },
+  "truePositivesRetained": {
+    "mois": 5,
+    "youth": 25
+  },
+  "newlyDiscovered": {
+    "mois": 11,
+    "youth": 4
+  },
+  "financialFacetCoverage": {
+    "deposit": 0,
+    "savings": 36,
+    "loan": 488,
+    "anyFacet": 524
+  },
+  "multiTopicCoverage": {
+    "count": 2933
+  },
+  "sampleTitlesRemoved": [
+    "농촌융복합산업 자금융자지원",
+    "재난지역 주민에 대한 우체국금융 수수료 면제",
+    "은평금융복지상담센터 운영",
+    "희망금융복지지원사업",
+    "경기도 서민금융복지지원센터 운영 지원",
+    "경기도 재도전론(채무조정 성실상환자 대상 소액금융지원)",
+    "경기청년 기회사다리 금융지원",
+    "정책서민금융 성실상환 이자지원",
+    "무료 소송대리 서비스(불법사금융피해자)",
+    "무료 소송대리 서비스(불법사금융피해자 파생사건)",
+    "[소진 마감]2026 동구 청년 웰컴 박스",
+    "2026 일상돌봄서비스 사업 이용자 모집",
+    "2026년 하반기(2026년도 1학기) 5개 자치구(광주권역) 대학(원)생 학자금 대출이자 지원",
+    "[전남]2026년 하반기 대학생 학자금 대출이자 지원사업",
+    "청년드림은행(청년재무상담소)",
+    "2026년 청년정책 종합상담 참여자 모집",
+    "2026 제4회 멘토러닝톡",
+    "2026년 고립 청년 일상회복 지원 사업",
+    "전남광주 청년 문화복지카드 ",
+    "2026년 하반기 임신부 가사지원서비스 지원사업",
+    "2026년 찬찬히 청년 사회생활(정서·심리)지원 캠퍼스 참여자 모집",
+    "청년 자금지원을 위한 햇살론유스 운영",
+    "군복무 인천청년 상해보험 지원",
+    "[2026 광주청년드림은행 생활경제특강①]",
+    "2026 마음건강상담소 2차 참여자 모집 (접수 마감)"
+  ],
+  "sampleTitlesRetained": [
+    "수급자 및 차상위계층 자산형성지원",
+    "중증장애인 자산형성 지원",
+    "중증장애인 자산형성지원(이룸통장)",
+    "(중장년) 중소기업 장기재직 재형저축 지원",
+    "농어가목돈마련 저축장려금",
+    "청년미래적금",
+    "청년내일저축계좌 지원",
+    "부산 청년내일저축계좌",
+    "청년내일저축계좌 지원",
+    "청년내일저축계좌",
+    "제주청년 희망사다리 재형저축 사업",
+    "청년내일저축계좌사업",
+    "청년내일저축계좌 지원사업",
+    "청년내일저축계좌",
+    "청년발달장애인 자산형성지원(행복씨앗통장)",
+    "청년내일저축계좌사업(차상위 이하, 초과 통합)",
+    "청년미래적금 운영",
+    "청년내일저축계좌",
+    "청년내일저축계좌 지원",
+    "청년내일저축계좌 지원"
+  ],
+  "conclusion": "OLD bare-keyword rule tagged 422 benefits (26 MOIS + 396 Youth) as asset_building; the NEW centralized domain/benefit/topics.ts rule (deposit/savings/loan/자산형성-specific words only, never scanning Youth Center's combined lclsfNm umbrella field) tags 45 (16 MOIS + 29 Youth), removing 392 false positives while retaining 30 genuine matches. financialFacets (deposit/savings/loan) now cover 524 benefits catalog-wide (0 before this checkpoint on real adapter data, per audit §6) — deposit/savings/loan interests are no longer structurally dead. 2933 benefits now carry 2+ topics, a shape the old single-value category could never represent."
+}

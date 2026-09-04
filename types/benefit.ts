@@ -259,7 +259,69 @@ export interface Benefit {
    * "incomplete", not merely "no data". See lib/eligibility/ruleEngine.ts.
    */
   hasUnresolvedEligibility?: boolean;
+  /**
+   * Multi-value purpose tags, derived centrally by
+   * domain/benefit/topics.ts's `finalizeTopics` — unlike the single legacy
+   * `category` field above, a benefit can carry more than one genuine
+   * purpose (e.g. "청년 창업 임대료 지원" is both `housing` and `startup`; real
+   * Youth Center records with comma-joined `lclsfNm`/`mclsfNm` like
+   * "일자리,교육" are genuinely both `employment` and `education`). `category`
+   * remains the single highest-priority topic (see `primaryCategory`) for
+   * backward compatibility — every existing single-category call site keeps
+   * working unchanged. Optional only for backward compatibility with
+   * benefits constructed before this field existed; every adapter-produced
+   * and mock benefit sets it going forward. See
+   * domain/benefit/topics.ts's `BenefitTopic` for the exact value space
+   * (excludes the financial-PRODUCT-type category values — see
+   * `financialFacets` below).
+   */
+  topics?: BenefitTopic[];
+  /**
+   * Specific financial-INSTRUMENT signals (deposit/savings/loan),
+   * deliberately independent from `topics`/`category` (purpose) — e.g. a
+   * jeonse deposit loan is `financialFacets: ["loan"]` + `topics: ["housing"]`,
+   * never `asset_building`, because its purpose is housing, not wealth
+   * accumulation. Fixes the dead `deposit`/`savings`/`loan` interest values
+   * documented in docs/beta-personalization-audit.md §6 — see
+   * domain/benefit/topics.ts's `matchesBenefitFacet`/`matchesUserInterest`,
+   * the single source of truth for matching a user's selected interest
+   * against a benefit.
+   */
+  financialFacets?: BenefitFinancialFacet[];
 }
+
+/**
+ * Purpose-level tag a benefit can carry. A single benefit can carry
+ * MULTIPLE topics (see `Benefit.topics`) — e.g. "청년 창업 임대료 지원" is
+ * genuinely both `housing` (임대료/rent) and `startup` (창업), and real
+ * Youth Center records with comma-joined `lclsfNm`/`mclsfNm` (e.g.
+ * "일자리,교육", confirmed live in `/tmp/youth_lclsf_mclsf_combos.json`,
+ * 50 records) are genuinely both `employment` and `education`. Reuses
+ * `BenefitCategory`'s value space minus the financial-PRODUCT-type values
+ * (see `BenefitFinancialFacet`) — no real MOIS/Youth Center government
+ * benefit IS itself literally "a deposit account"; those three values only
+ * ever apply to the bank/savings-bank financial-product data (MOIS/Youth
+ * benefits instead surface a deposit/savings/loan INSTRUMENT signal, if
+ * any, via `financialFacets`). `Benefit.category` remains the single
+ * highest-priority topic for backward compatibility — see
+ * domain/benefit/topics.ts's `primaryCategory`.
+ */
+export type BenefitTopic = Exclude<BenefitCategory, "deposit" | "savings" | "loan" | "other">;
+
+/**
+ * Specific financial-INSTRUMENT signals — deliberately independent from
+ * `topics`/`category` (purpose). A 전세자금대출 (jeonse deposit loan) is
+ * `financialFacets: ["loan"]` + `topics: ["housing"]`, never `asset_building`
+ * as a topic, because its PURPOSE is housing, not wealth accumulation —
+ * confirmed live: MOIS/Youth records containing "대출"/"융자" are
+ * overwhelmingly housing (전세자금/주택자금) or education (학자금) loans, not
+ * generic asset-building products (see
+ * docs/beta-personalization-audit.md §4/§6). Fixes the dead
+ * `deposit`/`savings`/`loan` interest values from §6 — no MOIS/Youth
+ * `category` ever produces them, so a user selecting one previously got
+ * zero interest-match benefit for the rest of their session.
+ */
+export type BenefitFinancialFacet = "deposit" | "savings" | "loan";
 
 export type EligibilityStatus = "likely_eligible" | "unknown" | "not_eligible";
 
