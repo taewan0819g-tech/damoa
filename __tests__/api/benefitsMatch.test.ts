@@ -137,6 +137,11 @@ vi.mock("@/providers", () => ({
     getBenefit: vi.fn(async () => null),
   },
   getCatalogWithCandidateIndex: mockGetCatalogWithCandidateIndex,
+  // Empty array = skip the route's "all providers unavailable" 503 check
+  // entirely (see providers/index.ts's vacuous-truth guard) -- preserves
+  // existing test behavior; specific health scenarios are covered by
+  // dedicated tests instead of overriding this shared mock.
+  getProviderHealth: vi.fn(() => []),
 }));
 
 describe("POST /api/benefits/match (non-paginated, bounded home-summary shape)", () => {

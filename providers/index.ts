@@ -3,8 +3,10 @@ import type { BenefitProvider } from "./BenefitProvider";
 import { MockBenefitProvider } from "./MockBenefitProvider";
 import { MOISBenefitProvider } from "./MOISBenefitProvider";
 import { YouthCenterBenefitProvider } from "./YouthCenterBenefitProvider";
+import { hasHealthStatus, type ProviderHealth } from "./health";
 import { buildCandidateIndex, type CandidateIndex } from "@/lib/eligibility/candidateIndex";
 import { classifyCatalog, type ClassifiedCatalog } from "@/lib/catalog/activeCatalog";
+import { logger } from "@/lib/log/logger";
 
 // This module is only ever imported by server-side code (Route Handlers) —
 // see app/api/benefits/route.ts and app/api/benefits/[id]/route.ts. Real
@@ -39,14 +41,50 @@ function sameInputs(a: Benefit[][], b: Benefit[][]): boolean {
   return a.length === b.length && a.every((arr, i) => arr === b[i]);
 }
 
+function providerLabel(provider: BenefitProvider): string {
+  return hasHealthStatus(provider) ? provider.getHealthStatus().provider : provider.constructor.name;
+}
+
+/**
+ * Provider isolation (Phase 5 §9): every concrete provider already catches
+ * its own upstream errors internally and resolves to `[]` rather than
+ * rejecting (see MOISBenefitProvider/YouthCenterBenefitProvider), so one
+ * provider failing never by itself throws here. `Promise.allSettled` is
+ * still used (rather than `Promise.all`) as defense-in-depth against any
+ * provider that doesn't follow that contract (e.g. a future provider, or
+ * MockBenefitProvider's synchronous validation throw) — a single rejected
+ * provider degrades to an empty contribution and is logged, while every
+ * other provider's results are merged normally.
+ */
 async function getMergedBenefits(): Promise<Benefit[]> {
-  const results = await Promise.all(providers.map((p) => p.getBenefits()));
+  const settled = await Promise.allSettled(providers.map((p) => p.getBenefits()));
+  const results = settled.map((outcome, i) => {
+    if (outcome.status === "fulfilled") return outcome.value;
+    logger.error("provider_unavailable", {
+      provider: providerLabel(providers[i]),
+      reason: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+    });
+    return [];
+  });
   if (mergedCache && sameInputs(mergedCache.inputs, results)) {
     return mergedCache.merged;
   }
   const merged = results.flat();
   mergedCache = { inputs: results, merged };
   return merged;
+}
+
+/**
+ * Per-provider health/diagnostics (Phase 5 §17/§18), never includes secret
+ * values. Used by `GET /api/health` and by the match route to decide
+ * whether the merged catalog is usable at all (see §11's vacuous-truth
+ * guard at the call site: an EMPTY array here must never be treated as "all
+ * providers are down").
+ */
+export function getProviderHealth(): ProviderHealth[] {
+  return providers
+    .filter((p): p is BenefitProvider & { getHealthStatus(): ProviderHealth } => hasHealthStatus(p))
+    .map((p) => p.getHealthStatus());
 }
 
 /** Aggregates every registered BenefitProvider into a single unified list. */

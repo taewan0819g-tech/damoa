@@ -1,7 +1,10 @@
 import type { Benefit } from "@/types/benefit";
 import type { EligibilityRuleGroup } from "@/types/benefit";
 import type { BenefitProvider } from "./BenefitProvider";
-import { memoizeAsync } from "@/lib/cache/memoizeAsync";
+import type { ProviderHealth } from "./health";
+import { createResilientCache } from "@/lib/cache/resilientCache";
+import { fetchJsonWithRetry } from "@/lib/http/httpClient";
+import { logger } from "@/lib/log/logger";
 import {
   normalizeMOISServiceListItem,
   normalizeMOISServiceDetail,
@@ -19,16 +22,32 @@ import {
  *   - GET /supportConditions?page=&perPage=       (eligibility condition codes, paginated)
  * Auth: header `Authorization: Infuser <MOIS_API_KEY>`. This file only runs
  * server-side (imported by Route Handlers) — MOIS_API_KEY is never bundled
- * to the client.
+ * to the client, and is never included in any log line below.
  *
  * Both `serviceList` and `supportConditions` are paginated to their real
  * end (up to MAX_PAGES * PER_PAGE records) rather than being capped at an
- * arbitrary first page, so records beyond the old 500-record cutoff are
- * discoverable. `supportConditions` has no per-ID filter usable for a bulk
- * lookup, so it's paginated once into a full `서비스ID -> EligibilityRuleGroup`
- * map and shared by both `getBenefits()` and `getBenefit()` — this avoids an
- * N+1 fetch per benefit. Both the catalog and the conditions map are cached
- * in-process for CACHE_MS via `memoizeAsync`.
+ * arbitrary first page. `supportConditions` has no per-ID filter usable for
+ * a bulk lookup, so it's paginated once into a full `서비스ID ->
+ * EligibilityRuleGroup` map and shared by both `getBenefits()` and
+ * `getBenefit()` — this avoids an N+1 fetch per benefit.
+ *
+ * Phase 5 (Production Stabilization) hardening:
+ *  - `fetchAllPages` is now ATOMIC: any page failing after retries throws
+ *    (never silently returns a partial catalog), and a received-count vs.
+ *    declared-`totalCount` consistency check runs before the result is
+ *    considered valid at all. A partial page fetch can therefore never leak
+ *    into the cache.
+ *  - Each page fetch goes through `fetchJsonWithRetry` (per-attempt timeout
+ *    + bounded retry on transient failures only).
+ *  - The catalog and conditions map are now cached via `resilientCache`
+ *    (stale-if-error / last-known-good) instead of plain `memoizeAsync`, so
+ *    a transient upstream failure serves the last good catalog instead of
+ *    an empty one.
+ *  - `getBenefit()` retains its live `serviceDetail` fetch (it carries
+ *    genuinely richer fields than the list endpoint — `requiredDocuments`,
+ *    `applicationUrl`, fuller `shortDescription`), but now falls back to the
+ *    cached catalog's list-item representation of the same id if the live
+ *    fetch fails, rather than returning `null` outright.
  */
 const BASE_URL = "https://api.odcloud.kr/api/gov24/v3";
 
@@ -55,26 +74,40 @@ function condEqUrl(path: string, field: string, value: string, extra = ""): stri
   return `${BASE_URL}${path}?page=1&perPage=1${extra}&cond%5B${bracket}%5D=${encodeURIComponent(value)}`;
 }
 
-/** Fully paginates an odcloud list endpoint, stopping at MAX_PAGES or when the API signals no more data. */
+/**
+ * Fully paginates an odcloud list endpoint, stopping at MAX_PAGES or when
+ * the API signals no more data. ATOMIC: throws (never returns a partial
+ * result) if any page ultimately fails after retries, or if the total
+ * number of records received doesn't match the upstream's declared
+ * `totalCount`.
+ */
 async function fetchAllPages<T>(path: string, key: string, label: string): Promise<T[]> {
   const results: T[] = [];
+  let declaredTotal: number | null = null;
+
   for (let page = 1; page <= MAX_PAGES; page++) {
-    try {
-      const res = await fetch(`${BASE_URL}${path}?page=${page}&perPage=${PER_PAGE}`, {
-        headers: authHeaders(key),
-      });
-      if (!res.ok) {
-        console.error(`[MOISBenefitProvider] ${label} HTTP ${res.status} on page ${page}`);
-        break;
-      }
-      const json = (await res.json()) as ODCloudListResponse<T>;
-      results.push(...json.data);
-      if (json.data.length < PER_PAGE || page * PER_PAGE >= json.totalCount) break;
-    } catch (err) {
-      console.error(`[MOISBenefitProvider] Failed to fetch ${label} page ${page}:`, err);
-      break;
-    }
+    const json = await fetchJsonWithRetry<ODCloudListResponse<T>>(
+      `${BASE_URL}${path}?page=${page}&perPage=${PER_PAGE}`,
+      { headers: authHeaders(key) },
+      { label: `MOIS ${label} page ${page}` }
+    );
+    results.push(...json.data);
+    declaredTotal = json.totalCount;
+    if (json.data.length < PER_PAGE || page * PER_PAGE >= json.totalCount) break;
   }
+
+  if (declaredTotal !== null && results.length !== declaredTotal) {
+    logger.error("provider_pagination_inconsistent", {
+      provider: "mois",
+      resource: label,
+      received: results.length,
+      declaredTotal,
+    });
+    throw new Error(
+      `MOIS ${label} pagination inconsistent: received ${results.length} records but upstream declared totalCount=${declaredTotal}`
+    );
+  }
+
   return results;
 }
 
@@ -96,17 +129,33 @@ async function buildCatalog(key: string): Promise<Benefit[]> {
   return rawList.map((raw) => normalizeMOISServiceListItem(raw, conditionsMap.get(raw.서비스ID)));
 }
 
-const getCachedCatalog = memoizeAsync(buildCatalog, CACHE_MS);
-const getCachedConditionsMap = memoizeAsync(buildConditionsMap, CACHE_MS);
+function getRequiredApiKey(): string {
+  const key = process.env.MOIS_API_KEY;
+  if (!key) throw new Error("MOIS_API_KEY not configured");
+  return key;
+}
+
+const catalogCache = createResilientCache(() => buildCatalog(getRequiredApiKey()), {
+  ttlMs: CACHE_MS,
+  label: "MOIS catalog",
+  count: (benefits) => benefits.length,
+});
+const conditionsCache = createResilientCache(() => buildConditionsMap(getRequiredApiKey()), {
+  ttlMs: CACHE_MS,
+  label: "MOIS conditionsMap",
+});
 
 export class MOISBenefitProvider implements BenefitProvider {
   async getBenefits(): Promise<Benefit[]> {
     const key = process.env.MOIS_API_KEY;
     if (!key) return [];
     try {
-      return await getCachedCatalog(key);
+      return await catalogCache.get();
     } catch (err) {
-      console.error("[MOISBenefitProvider] Failed to build catalog:", err);
+      logger.error("provider_unavailable", {
+        provider: "mois",
+        reason: err instanceof Error ? err.message : String(err),
+      });
       return [];
     }
   }
@@ -117,29 +166,79 @@ export class MOISBenefitProvider implements BenefitProvider {
     const serviceId = id.startsWith("mois-") ? id.slice("mois-".length) : id;
 
     try {
-      const detailRes = await fetch(condEqUrl("/serviceDetail", "서비스ID", serviceId), {
-        headers: authHeaders(key),
-      });
-      if (!detailRes.ok) {
-        console.error(`[MOISBenefitProvider] serviceDetail HTTP ${detailRes.status} for ${serviceId}`);
-        return null;
-      }
-      const detailJson = (await detailRes.json()) as ODCloudListResponse<MOISRawServiceDetail>;
+      const detailJson = await fetchJsonWithRetry<ODCloudListResponse<MOISRawServiceDetail>>(
+        condEqUrl("/serviceDetail", "서비스ID", serviceId),
+        { headers: authHeaders(key) },
+        { label: `MOIS serviceDetail ${serviceId}` }
+      );
       const raw = detailJson.data[0];
       if (!raw) return null;
 
       let eligibility: EligibilityRuleGroup | undefined;
       try {
-        const conditionsMap = await getCachedConditionsMap(key);
+        const conditionsMap = await conditionsCache.get();
         eligibility = conditionsMap.get(serviceId);
       } catch (err) {
-        console.error(`[MOISBenefitProvider] Failed to resolve eligibility for ${serviceId}:`, err);
+        logger.warn("provider_stale_fallback", {
+          provider: "mois",
+          detail: "conditionsMap unavailable while resolving serviceDetail eligibility",
+          serviceId,
+          reason: err instanceof Error ? err.message : String(err),
+        });
       }
 
       return normalizeMOISServiceDetail(raw, eligibility);
     } catch (err) {
-      console.error(`[MOISBenefitProvider] Failed to fetch serviceDetail for ${serviceId}:`, err);
+      logger.warn("provider_refresh_failure", {
+        provider: "mois",
+        detail: "serviceDetail live fetch failed, attempting cached-catalog fallback",
+        serviceId,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      // Fall back to the cached catalog's list-item representation of this
+      // id, if one is available -- better a slightly less-detailed benefit
+      // than none at all when the live detail endpoint is down.
+      try {
+        const catalog = await catalogCache.get();
+        const fallback = catalog.find((b) => b.id === id);
+        if (fallback) return fallback;
+      } catch {
+        // No cached catalog available either -- fall through to null.
+      }
       return null;
     }
+  }
+
+  getHealthStatus(): ProviderHealth {
+    const key = process.env.MOIS_API_KEY;
+    if (!key) {
+      return {
+        provider: "mois",
+        configured: false,
+        status: "unavailable",
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        lastError: null,
+        ageMs: null,
+        isStale: false,
+        refreshInFlight: false,
+        currentCatalogCount: null,
+      };
+    }
+    const diag = catalogCache.getDiagnostics();
+    return {
+      provider: "mois",
+      configured: true,
+      status: diag.status,
+      lastAttemptAt: diag.lastAttemptAt,
+      lastSuccessAt: diag.lastSuccessAt,
+      lastFailureAt: diag.lastFailureAt,
+      lastError: diag.lastError,
+      ageMs: diag.ageMs,
+      isStale: diag.status === "stale",
+      refreshInFlight: diag.refreshInFlight,
+      currentCatalogCount: diag.currentCount,
+    };
   }
 }

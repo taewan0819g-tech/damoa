@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCatalogWithCandidateIndex } from "@/providers";
+import { getCatalogWithCandidateIndex, getProviderHealth } from "@/providers";
 import { getCandidateBenefits } from "@/lib/eligibility/candidateIndex";
 import { matchBenefitsDetailed, isRelevantForFeed } from "@/domain/eligibility/matchBenefits";
 import { searchBenefits } from "@/domain/benefit/search";
@@ -9,6 +9,7 @@ import { getBenefitSummary, type BenefitSummary } from "@/domain/benefit/summary
 import { getRecommendedBenefits } from "@/domain/benefit/recommend";
 import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
 import { parseUserProfile } from "@/lib/validation/profileSchema";
+import { logger } from "@/lib/log/logger";
 import type { UserProfile } from "@/types/profile";
 import type { Benefit, BenefitCategory, EligibilityStatus } from "@/types/benefit";
 
@@ -17,6 +18,18 @@ const HOME_PREVIEW_LIMIT = 10;
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+
+/**
+ * Phase 5 (Production Stabilization) §18 defensive-validation caps. This
+ * endpoint is public and unauthenticated, so cheap, unconditionally-applied
+ * shape/size limits guard against absurd payloads without needing to know
+ * the eventual deployment topology (a real distributed rate limiter is a
+ * separate, later concern once the hosting platform is chosen — see the
+ * Phase 5 report).
+ */
+const MAX_SEARCH_LENGTH = 200;
+/** Generously covers a UserProfile + filters; rejects wildly oversized bodies before they're even parsed as JSON. */
+const MAX_BODY_BYTES = 100_000;
 
 interface MatchRequestBody {
   profile?: unknown;
@@ -124,11 +137,23 @@ function countByStatus(benefits: Benefit[], statusById: Map<string, EligibilityS
  *    usePaginatedBenefits.
  */
 export async function POST(request: Request) {
+  const startedAt = performance.now();
+
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) {
+    logger.warn("request_error", { route: "benefits/match", reason: "payload_too_large", contentLength });
+    return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+  }
+
   let body: MatchRequestBody;
   try {
     body = (await request.json()) as MatchRequestBody;
   } catch {
     body = {};
+  }
+
+  if (typeof body.search === "string" && body.search.length > MAX_SEARCH_LENGTH) {
+    return NextResponse.json({ error: `search must be at most ${MAX_SEARCH_LENGTH} characters` }, { status: 400 });
   }
 
   const parsed = parseUserProfile(body?.profile ?? body ?? {});
@@ -138,8 +163,43 @@ export async function POST(request: Request) {
   const profile = parsed.data as UserProfile;
 
   try {
+    // Cold-start fix: attempt the catalog load FIRST. This is what actually
+    // causes each provider's resilientCache to perform its first refresh if
+    // it hasn't run yet (see providers/*BenefitProvider.ts -> getBenefits()
+    // -> catalogCache.get()). Checking provider health BEFORE this point
+    // would read every never-yet-attempted provider as "unavailable" and
+    // return a false 503 on a fresh process's very first request, even when
+    // the provider is perfectly healthy and simply hasn't been asked yet --
+    // the first refresh would then never even be attempted. `status` now
+    // distinguishes "uninitialized" (never attempted) from "unavailable"
+    // (attempted and failed with nothing to fall back to) -- see
+    // lib/cache/resilientCache.ts -- but checking AFTER this await also
+    // guarantees every registered provider has been attempted by the time
+    // we look, so the ambiguity can't even arise here.
     const { benefits: personalizable, index, expiredBenefits, expiredIndex, counts: catalogCounts } =
       await getCatalogWithCandidateIndex();
+
+    // Fail fast with 503 only when EVERY registered provider is unavailable
+    // AFTER actually having attempted to load (no last-known-good data
+    // anywhere) -- an EMPTY health array must NOT be treated as "all down"
+    // (vacuous-truth guard; MockBenefitProvider is always registered as a
+    // fallback and reports "healthy", so this only trips when real
+    // providers are configured but genuinely have no usable data at all
+    // even after trying, e.g. a first-ever refresh failure with nothing
+    // cached). If one provider succeeded and another failed, this check
+    // passes and matching proceeds using whichever provider(s) have usable
+    // data -- the merged catalog already reflects that (see
+    // providers/index.ts's Promise.allSettled-based provider isolation).
+    const healths = getProviderHealth();
+    if (healths.length > 0 && healths.every((h) => h.status === "unavailable")) {
+      logger.error("request_error", {
+        route: "benefits/match",
+        reason: "all_providers_unavailable",
+        providerCount: healths.length,
+      });
+      return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
+    }
+
     const includeClosed = body.includeClosed === true;
 
     // Step 1: candidate retrieval. Conservative — only removes benefits
@@ -219,7 +279,11 @@ export async function POST(request: Request) {
       const needsReview = getUnknownBenefits(relevant, statusById, HOME_PREVIEW_LIMIT);
       const previewStatuses: Record<string, EligibilityStatus> = {};
       for (const b of [...recommended, ...needsReview]) previewStatuses[b.id] = statusById.get(b.id) ?? "unknown";
-      return NextResponse.json({ counts, summary, recommended, needsReview, statuses: previewStatuses });
+      const durationMs = performance.now() - startedAt;
+      logger.info("request_complete", { route: "benefits/match", shape: "summary", durationMs: Math.round(durationMs) });
+      const res = NextResponse.json({ counts, summary, recommended, needsReview, statuses: previewStatuses });
+      res.headers.set("Server-Timing", `total;dur=${durationMs.toFixed(1)}`);
+      return res;
     }
 
     let filtered = relevant;
@@ -244,9 +308,16 @@ export async function POST(request: Request) {
     const statuses: Record<string, EligibilityStatus> = {};
     for (const b of pageBenefits) statuses[b.id] = statusById.get(b.id) ?? "unknown";
 
-    return NextResponse.json({ benefits: pageBenefits, statuses, page, pageSize, total, totalPages, counts });
+    const durationMs = performance.now() - startedAt;
+    logger.info("request_complete", { route: "benefits/match", shape: "paginated", durationMs: Math.round(durationMs) });
+    const res = NextResponse.json({ benefits: pageBenefits, statuses, page, pageSize, total, totalPages, counts });
+    res.headers.set("Server-Timing", `total;dur=${durationMs.toFixed(1)}`);
+    return res;
   } catch (err) {
-    console.error("[POST /api/benefits/match] Failed to compute matches:", err);
+    logger.error("request_error", {
+      route: "benefits/match",
+      reason: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json({ error: "Failed to compute matches" }, { status: 500 });
   }
 }
