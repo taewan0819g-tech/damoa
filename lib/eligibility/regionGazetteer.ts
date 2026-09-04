@@ -48,6 +48,30 @@
  * drops of valid 시/군/구), which is out of scope for this change. This file
  * is NOT scraped or auto-generated; it stays hand-curated until that
  * follow-up is done and reviewed.
+ *
+ * 2026-09-04 FRESHNESS RE-AUDIT (see docs/audits/region-gazetteer-freshness.json
+ * for full sourcing): verified via multiple independent news sources that
+ * two real administrative changes took effect 2026-07-01 — (1) 광주광역시 and
+ * 전라남도 merged into "전남광주통합특별시" (「전남광주통합특별시 설치 및 지원에
+ * 관한 특별법」), and (2) 인천광역시 abolished 중구/동구, created
+ * 제물포구/영종구/검단구, and renamed 서구 -> 서해구 (「인천광역시 제물포구,
+ * 영종구 및 검단구 설치 등에 관한 법률」, enacted 2023, effective 2026-07-01).
+ * These are NOT applied to `CITY_GAZETTEER` below: this table is also the
+ * data eligibility-rule extraction (`koreanEligibilityParser.ts`) reads to
+ * resolve region mentions in raw MOIS/Youth benefit text, and empirically
+ * swapping in the post-2026-07-01 roster changes candidate-matching results
+ * against the frozen benefit catalog (confirmed: 21 candidate-membership
+ * diffs across 5 test profiles, including real records like
+ * mois-349000000105 "사회복지 증진 지원" and mois-350000000101
+ * "지역화폐(제물포구사랑상품권)", both already tagged 인천광역시 영종구/제물포구
+ * in their agency metadata even though the gazetteer doesn't yet recognize
+ * those district names). Applying this update is out of scope for a
+ * UI/input-quality checkpoint that must hold eligibility/candidate output
+ * frozen — see the audit artifact for the full blocker writeup and the
+ * recommended follow-up (a dedicated eligibility-rule-extraction checkpoint
+ * that re-derives region rules from re-ingested catalog text together with
+ * this roster update, verifying old-name/new-name bridging deliberately
+ * rather than incidentally).
  * ---------------------------------------------------------------------------
  */
 
@@ -192,6 +216,25 @@ export function isUnambiguousCity(city: string): boolean {
 /** Every province's full list of cities/counties/districts, for structural self-checks and other reuse. */
 export function getGazetteer(): Readonly<Record<string, readonly string[]>> {
   return CITY_GAZETTEER;
+}
+
+/**
+ * Deterministic city/county/district options for a UI selector (onboarding,
+ * profile page), given an exact canonical province name (one of
+ * `lib/constants/regions.ts`'s `PROVINCES` values, e.g. "경기도").
+ *
+ * - Exact-match only: never resolves aliases ("경기" does NOT work here —
+ *   pass the canonical string the province Select already produces) and
+ *   never fuzzy-matches. An unrecognized province returns `[]`.
+ * - Always returns a fresh array copy so callers can never mutate the
+ *   underlying gazetteer.
+ * - This is the single shared source for both onboarding and the profile
+ *   page's city selector — do not hand-copy per-province city lists into UI
+ *   components.
+ */
+export function getCitiesForProvince(province: string): string[] {
+  const cities = CITY_GAZETTEER[province];
+  return cities ? [...cities] : [];
 }
 
 /** Lazily-built cache for `getShortDistrictNames`. */

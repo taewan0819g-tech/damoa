@@ -44,3 +44,29 @@ describe("matchRegion", () => {
     expect(matchRegion({ province: "서울" }, [{ province: "서울특별시" }])).toBe("pass");
   });
 });
+
+/**
+ * Checkpoint: Canonical Province/City Input + Gazetteer Freshness Hardening.
+ *
+ * matchRegion() itself is explicitly frozen this checkpoint — only the UI
+ * layer changed, to guarantee it always feeds matchRegion() canonical
+ * strings. These three cases are the checkpoint's required frozen-behavior
+ * proof for a 경기도/이천시 resident: PASS against a province-wide policy,
+ * PASS against an 이천시-specific policy, FAIL against a different city's
+ * policy in the same province.
+ */
+describe("matchRegion — Icheon resident frozen-behavior regression (Checkpoint: canonical region input)", () => {
+  const icheonResident = { province: "경기도", city: "이천시" };
+
+  it("9. 경기도/이천시 resident vs a 경기도-wide policy => pass", () => {
+    expect(matchRegion(icheonResident, [{ province: "경기도" }])).toBe("pass");
+  });
+
+  it("10. 경기도/이천시 resident vs a 경기도/이천시-specific policy => pass", () => {
+    expect(matchRegion(icheonResident, [{ province: "경기도", city: "이천시" }])).toBe("pass");
+  });
+
+  it("11. 경기도/이천시 resident vs a 경기도/수원시-specific policy => fail", () => {
+    expect(matchRegion(icheonResident, [{ province: "경기도", city: "수원시" }])).toBe("fail");
+  });
+});

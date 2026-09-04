@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GAZETTEER_METADATA,
+  getCitiesForProvince,
   getGazetteer,
   getShortDistrictNames,
   isUnambiguousCity,
@@ -106,5 +107,42 @@ describe("getShortDistrictNames", () => {
       }
     }
     expect(new Set(getShortDistrictNames())).toEqual(expected);
+  });
+});
+
+/**
+ * Checkpoint: Canonical Province/City Input + Gazetteer Freshness Hardening.
+ *
+ * getCitiesForProvince is the single shared source onboarding + the profile
+ * page both read from to build their province-dependent city <Select>s. It
+ * must be exact-match-only (no alias resolution — the UI always passes the
+ * canonical string the province Select itself produced), deterministic, and
+ * side-effect-free.
+ */
+describe("getCitiesForProvince", () => {
+  it("1. includes '이천시' and '수원시' for '경기도'", () => {
+    const cities = getCitiesForProvince("경기도");
+    expect(cities).toContain("이천시");
+    expect(cities).toContain("수원시");
+  });
+
+  it("2. returns an empty array for an unrecognized/invalid province instead of guessing", () => {
+    expect(getCitiesForProvince("없는도")).toEqual([]);
+    expect(getCitiesForProvince("")).toEqual([]);
+  });
+
+  it("never resolves aliases — only the exact canonical province key works (no fuzzy input path)", () => {
+    // "경기" is a recognized alias in region.ts's PROVINCE_ALIASES, but
+    // getCitiesForProvince must NOT normalize it: passing anything other
+    // than the literal canonical gazetteer key returns [].
+    expect(getCitiesForProvince("경기")).toEqual([]);
+    expect(getCitiesForProvince("서울")).toEqual([]);
+  });
+
+  it("returns a fresh array copy each call, so callers can never mutate the shared gazetteer", () => {
+    const a = getCitiesForProvince("경기도");
+    a.push("가짜시");
+    const b = getCitiesForProvince("경기도");
+    expect(b).not.toContain("가짜시");
   });
 });

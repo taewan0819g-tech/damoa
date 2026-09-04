@@ -1,0 +1,90 @@
+{
+  "generatedAt": "2026-09-04T00:00:00.000Z",
+  "checkpoint": "Canonical Province/City Input + Gazetteer Freshness Hardening",
+  "target": "lib/eligibility/regionGazetteer.ts (CITY_GAZETTEER, GAZETTEER_METADATA)",
+  "currentGazetteerMetadata": {
+    "version": "2023-07-gunwi-transfer.1",
+    "effectiveAsOf": "2023-07-01",
+    "sourceType": "manual",
+    "authoritative": false,
+    "note": "Reflects the standard 시/군/구 roster as of the 2023 군위군 (경상북도 -> 대구광역시) transfer. Not sourced from a live API."
+  },
+  "verificationDate": "2026-09-04",
+  "sourcesUsed": [
+    {
+      "type": "web_search",
+      "description": "Multiple independent Korean news sources reporting on 전남광주통합특별시 (Gwangju + Jeollanam-do merger) enactment and effective date.",
+      "claim": "「전남광주통합특별시 설치 및 지원에 관한 특별법」 passed 국회 2026-06-24; 광주광역시와 전라남도가 단일 광역자치단체 '전남광주통합특별시'로 통합, 시행일 2026-07-01. Korea's first 광역단위 (metropolitan-tier) merger."
+    },
+    {
+      "type": "web_search",
+      "description": "Multiple independent Korean news sources reporting on 인천광역시 구제 개편 enactment and effective date.",
+      "claim": "「인천광역시 제물포구, 영종구 및 검단구 설치 등에 관한 법률」 enacted 2023, effective 2026-07-01: 중구+동구 폐지 -> 제물포구 신설; 서구 분구 -> 검단구 신설, 잔여 서구 -> 서해구로 개명; 영종구 신설(기존 중구 영종·영종하늘도시 등 편입)."
+    },
+    {
+      "type": "web_search",
+      "description": "Cross-check that other rumored mega-mergers have NOT taken effect as of the stated current date.",
+      "claim": "대구경북통합 and 부산울산경남통합 remain stalled/failed as of 2026-09 per multiple news sources; neither should be reflected in the gazetteer."
+    },
+    {
+      "type": "recommended_but_not_used_this_checkpoint",
+      "description": "행정안전부 행정표준코드관리시스템 (code.go.kr) / data.go.kr 법정동코드 OpenAPI",
+      "urls": [
+        "https://www.data.go.kr/data/15077871/openapi.do",
+        "https://www.data.go.kr/data/15092039/fileData.do"
+      ],
+      "note": "The authoritative machine-readable source for a full deterministic regeneration of CITY_GAZETTEER. Requires an API key/registration and a full verification pass; out of scope to integrate in this checkpoint (see blocker below). Already referenced as a follow-up in the regionGazetteer.ts file header."
+    }
+  ],
+  "provincesChecked": [
+    "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시",
+    "울산광역시", "세종특별자치시", "경기도", "강원특별자치도", "충청북도", "충청남도",
+    "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도"
+  ],
+  "findings": {
+    "obsoleteOrMissingEntries": [
+      {
+        "type": "province_merger",
+        "description": "광주광역시 + 전라남도 merged into 전남광주통합특별시, effective 2026-07-01. CITY_GAZETTEER still lists 광주광역시 and 전라남도 as two separate top-level provinces with their pre-merger city rosters.",
+        "requiredChangeIfApplied": "Collapse both province keys into a single '전남광주통합특별시' key holding the union of both cities' entries (needs de-duplication/renaming review for any name collisions introduced by the merge)."
+      },
+      {
+        "type": "district_reorg",
+        "description": "인천광역시 구제 개편, effective 2026-07-01: 중구/동구 폐지, 제물포구/영종구/검단구 신설, 서구 -> 서해구 개명. CITY_GAZETTEER's 인천광역시 entry still lists 중구, 동구, 서구 and does not list 제물포구, 영종구, 검단구, 서해구.",
+        "requiredChangeIfApplied": "Remove 중구/동구/서구 from 인천광역시's city list; add 제물포구/영종구/검단구/서해구."
+      }
+    ],
+    "renamedEntries": [
+      { "from": "인천광역시 서구", "to": "인천광역시 서해구", "effectiveAsOf": "2026-07-01" }
+    ],
+    "transferredEntries": [],
+    "confirmedNotStale": [
+      "군위군 (경상북도 -> 대구광역시, 2023-07-01 transfer already reflected)",
+      "강원특별자치도 / 전북특별자치도 / 세종특별자치시 renames already reflected in lib/constants/regions.ts's PROVINCES list",
+      "대구경북통합 (not enacted, correctly absent)",
+      "부산울산경남통합 (not enacted, correctly absent)"
+    ]
+  },
+  "empiricalConflictEvidence": {
+    "method": "Patched a working copy of regionGazetteer.ts with the two verified 2026-07-01 changes applied, ran `npx tsx scripts/frozenMatchingSemanticEquivalence.ts` against the frozen MOIS+Youth catalog before and after, diffed the resulting candidateIds sets per scenario, then reverted the patch (no net change to the committed file's data).",
+    "baselineSnapshot": "/tmp/frozen_eq_checkpoint5.json (HEAD at commit b5a3a0d)",
+    "experimentalSnapshot": "/tmp/frozen_eq_experiment_gazetteer_update.json (regionGazetteer.ts patched with 2026-07-01 changes, reverted after)",
+    "candidateIdDiffCount": 21,
+    "sampleAffectedBenefitIds": [
+      "mois-349000000105",
+      "mois-350000000101"
+    ],
+    "sampleAffectedBenefitNotes": "mois-349000000105 (\"사회복지 증진 지원\") and mois-350000000101 (\"지역화폐(제물포구사랑상품권)\") are both already tagged with 인천광역시 영종구/제물포구 in their raw MOIS agency metadata, but the current (unpatched) gazetteer/parser cannot resolve those district names to a province, so eligibility-rule extraction for their region clauses currently falls back to unresolved/no-region-rule handling. Patching the gazetteer to recognize the new districts changed candidate-set membership for profiles filtering on 인천 residence.",
+    "conclusion": "Because CITY_GAZETTEER and PROVINCE_ALIASES (region.ts) are dual-use — read both by the UI-facing matchRegion()/getCitiesForProvince() path AND by koreanEligibilityParser.ts's region-clause extraction (via normalizeProvince, PROVINCE_ALIAS_KEYS, resolveCityProvinces, getShortDistrictNames) — updating them is NOT a UI-only change. It changes which region eligibility rules get extracted from frozen benefit text, and therefore changes candidate sets and eligibility statuses for the existing frozen catalog."
+  },
+  "decision": {
+    "outcome": "BLOCKED_FOR_THIS_CHECKPOINT",
+    "rationale": "This checkpoint's hard invariant is eligibility/candidate output frozen-equivalence (mismatchCount=0) for identical canonical UserProfile inputs — it is explicitly scoped as a UI/input-quality change, not an eligibility-rule-extraction change. Applying the verified 2026-07-01 administrative updates to CITY_GAZETTEER/GAZETTEER_METADATA would violate that invariant (empirically: 21 candidate-membership diffs). Per this checkpoint's own instructions (\"If official data can't be obtained reliably ... STOP ... and report the blocker\"), the correct action given a *reliability-vs-invariant* conflict (data IS reliable, but applying it breaks a protected invariant) is the same: stop, do not silently apply, and document transparently rather than pretend staleness is fine.",
+    "actionsTakenInstead": [
+      "CITY_GAZETTEER data and GAZETTEER_METADATA left unchanged (still version 2023-07-gunwi-transfer.1 / effectiveAsOf 2023-07-01 / authoritative: false).",
+      "Added a durable code-comment freshness note directly above CITY_GAZETTEER in regionGazetteer.ts pointing to this artifact.",
+      "Added a purely additive getCitiesForProvince(province) helper built on the EXISTING (unmodified) CITY_GAZETTEER, so the new UI selectors are guaranteed to only offer city values that the unmodified matchRegion()/parser can already handle correctly — avoiding a worse regression than the stale-freshness issue itself."
+    ],
+    "recommendedFollowUp": "A dedicated future checkpoint, scoped explicitly to region eligibility-rule extraction (not UI input), should: (1) integrate the 행정안전부/data.go.kr 법정동코드 OpenAPI as the authoritative regeneration source referenced in regionGazetteer.ts's file header, (2) apply the 전남광주통합특별시 merger and 인천 구제 개편 (and any further changes found at that time), and (3) explicitly re-run and review the frozen-equivalence diff as an intentional, reviewed change to extracted eligibility rules — not something that should happen silently as a side effect of a UI change."
+  }
+}

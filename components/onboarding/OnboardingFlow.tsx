@@ -11,6 +11,7 @@ import { Chip } from "@/components/ui/chip";
 import { useProfileStore } from "@/stores/profileStore";
 import { birthDateSchema } from "@/lib/validation/profileSchema";
 import { PROVINCES } from "@/lib/constants/regions";
+import { getCitiesForProvince } from "@/lib/eligibility/regionGazetteer";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import {
@@ -97,6 +98,11 @@ export function OnboardingFlow() {
 
   const patch = (next: Partial<Draft>) => setDraft((d) => ({ ...d, ...next }));
 
+  // Derived, not stored: recomputed from the current province on every
+  // render so it always reflects draft.province exactly (cheap array copy,
+  // no memoization needed).
+  const cityOptions = getCitiesForProvince(draft.province);
+
   const birthDateValid = useMemo(() => draft.birthDate !== "" && birthDateSchema.safeParse(draft.birthDate).success, [draft.birthDate]);
 
   const goNext = () => {
@@ -158,7 +164,18 @@ export function OnboardingFlow() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="province">시/도</Label>
-            <Select id="province" value={draft.province} onChange={(e) => patch({ province: e.target.value })}>
+            <Select
+              id="province"
+              value={draft.province}
+              onChange={(e) => {
+                const province = e.target.value;
+                // City is province-scoped: switching province must not carry
+                // over a city that no longer belongs to it (never fuzzy-map,
+                // just clear when it's no longer a valid option).
+                const cities = getCitiesForProvince(province);
+                patch({ province, city: draft.city && cities.includes(draft.city) ? draft.city : "" });
+              }}
+            >
               <option value="">선택해 주세요</option>
               {PROVINCES.map((p) => (
                 <option key={p} value={p}>
@@ -168,8 +185,15 @@ export function OnboardingFlow() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="city">시/군/구</Label>
-            <Input id="city" placeholder="예: 이천시" value={draft.city} onChange={(e) => patch({ city: e.target.value })} />
+            <Label htmlFor="city">시/군/구 (선택 입력)</Label>
+            <Select id="city" value={draft.city} onChange={(e) => patch({ city: e.target.value })}>
+              <option value="">선택 안 함</option>
+              {cityOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
       </StepShell>

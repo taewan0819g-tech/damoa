@@ -14,6 +14,7 @@ import { useProfileStore } from "@/stores/profileStore";
 import { calculateProfileCompletion } from "@/domain/profile/completion";
 import { calculateAge } from "@/domain/profile/age";
 import { PROVINCES } from "@/lib/constants/regions";
+import { getCitiesForProvince } from "@/lib/eligibility/regionGazetteer";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
 import {
@@ -64,6 +65,16 @@ export default function ProfilePage() {
   const age = calculateAge(profile.birthDate);
   const interests = profile.interests ?? [];
 
+  // Canonical city list for the currently-selected province. If a
+  // previously-persisted city value isn't in this list (renamed county, typo,
+  // pre-canonical free-text entry, etc.), we must NOT silently drop or
+  // "correct" it just because this page rendered — we only ever touch
+  // residence.city in response to an explicit user action on these fields
+  // (see the two onChange handlers below).
+  const cityOptions = getCitiesForProvince(profile.residence?.province ?? "");
+  const currentCity = profile.residence?.city;
+  const isUnrecognizedCity = !!currentCity && !cityOptions.includes(currentCity);
+
   const handleReset = () => {
     if (typeof window !== "undefined" && !window.confirm("입력한 정보를 모두 초기화하고 온보딩을 다시 시작할까요?")) {
       return;
@@ -102,9 +113,20 @@ export default function ProfilePage() {
           <Select
             id="province"
             value={profile.residence?.province ?? ""}
-            onChange={(e) =>
-              updateProfile({ residence: { ...profile.residence, province: e.target.value || undefined } })
-            }
+            onChange={(e) => {
+              const province = e.target.value;
+              // City is province-scoped: when the user explicitly changes
+              // province, carry the city over only if it's still valid for
+              // the new province — never fuzzy-map it, just clear it.
+              const nextCities = getCitiesForProvince(province);
+              updateProfile({
+                residence: {
+                  ...profile.residence,
+                  province: province || undefined,
+                  city: currentCity && nextCities.includes(currentCity) ? currentCity : undefined,
+                },
+              });
+            }}
           >
             <option value="">선택해 주세요</option>
             {PROVINCES.map((p) => (
@@ -114,13 +136,29 @@ export default function ProfilePage() {
             ))}
           </Select>
         </Field>
-        <Field label="시/군/구" htmlFor="city">
-          <Input
+        <Field label="시/군/구 (선택 입력)" htmlFor="city">
+          <Select
             id="city"
-            placeholder="예: 이천시"
-            value={profile.residence?.city ?? ""}
-            onChange={(e) => updateProfile({ residence: { ...profile.residence, city: e.target.value || undefined } })}
-          />
+            value={currentCity ?? ""}
+            onChange={(e) =>
+              updateProfile({ residence: { ...profile.residence, city: e.target.value || undefined } })
+            }
+          >
+            <option value="">선택 안 함</option>
+            {isUnrecognizedCity && (
+              <option value={currentCity}>{`${currentCity} (확인 필요)`}</option>
+            )}
+            {cityOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+          {isUnrecognizedCity && (
+            <p className="text-xs text-danger">
+              기존 입력: {currentCity} (확인 필요) — 목록에서 정확한 지역을 다시 선택하거나 선택 해제할 수 있어요.
+            </p>
+          )}
         </Field>
       </Section>
 
