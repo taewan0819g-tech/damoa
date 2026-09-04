@@ -60,6 +60,17 @@ export const PROVINCE_ALIASES: Record<string, string> = {
   "제주": "제주특별자치도",
   "제주도": "제주특별자치도",
   "제주특별자치도": "제주특별자치도",
+  // 광주광역시 + 전라남도 merged into a single 광역자치단체 effective 2026-07-01
+  // (「전남광주통합특별시 설치를 위한 특별법」, 법률 제21446호). Deliberately NOT
+  // aliased to/from "광주"/"광주광역시"/"전남"/"전라남도" above — this is a new,
+  // separate canonical province name, not a surface-form alias of either
+  // predecessor. See regionGazetteer.ts's file header and
+  // docs/audits/region-gazetteer-freshness.json for why old<->new province
+  // identity is deliberately never asserted as equivalent for matching
+  // purposes (a lossless geographic merger doesn't guarantee an old
+  // province-specific program's eligibility legally extends to the whole new
+  // entity, or vice versa).
+  "전남광주통합특별시": "전남광주통합특별시",
 };
 
 /**

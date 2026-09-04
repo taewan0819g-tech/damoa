@@ -75,6 +75,14 @@ export default function ProfilePage() {
   const currentCity = profile.residence?.city;
   const isUnrecognizedCity = !!currentCity && !cityOptions.includes(currentCity);
 
+  // Same "never silently drop or correct" guarantee, one level up: a
+  // persisted province the current roster no longer offers (e.g. a
+  // pre-2026-07-01 "광주광역시"/"전라남도" resident, now superseded by
+  // "전남광주통합특별시" — see lib/constants/regions.ts) must stay visible and
+  // untouched until the user explicitly changes the province field itself.
+  const currentProvince = profile.residence?.province;
+  const isUnrecognizedProvince = !!currentProvince && !(PROVINCES as readonly string[]).includes(currentProvince);
+
   const handleReset = () => {
     if (typeof window !== "undefined" && !window.confirm("입력한 정보를 모두 초기화하고 온보딩을 다시 시작할까요?")) {
       return;
@@ -129,12 +137,20 @@ export default function ProfilePage() {
             }}
           >
             <option value="">선택해 주세요</option>
+            {isUnrecognizedProvince && (
+              <option value={currentProvince}>{`${currentProvince} (확인 필요)`}</option>
+            )}
             {PROVINCES.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
           </Select>
+          {isUnrecognizedProvince && (
+            <p className="text-xs text-danger">
+              기존 입력: {currentProvince} (확인 필요) — 목록에서 정확한 지역을 다시 선택할 수 있어요.
+            </p>
+          )}
         </Field>
         <Field label="시/군/구 (선택 입력)" htmlFor="city">
           <Select

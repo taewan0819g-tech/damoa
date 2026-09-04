@@ -70,3 +70,37 @@ describe("matchRegion — Icheon resident frozen-behavior regression (Checkpoint
     expect(matchRegion(icheonResident, [{ province: "경기도", city: "수원시" }])).toBe("fail");
   });
 });
+
+/**
+ * Checkpoint: Corrective Region Architecture.
+ *
+ * 전남광주통합특별시 (the 2026-07-01 광주광역시+전라남도 merger) is a genuine
+ * new canonical province name, recognized on its own — but deliberately NOT
+ * aliased to/from either predecessor name. A resident who selects the new
+ * name must match policies expressed in the new name, and a resident whose
+ * profile still has an old predecessor name must match policies still
+ * expressed in that same old name — but the two must never cross-match,
+ * since this codebase cannot determine from geography alone whether an old
+ * province-specific program's eligibility legally extends to the new entity.
+ */
+describe("matchRegion — 전남광주통합특별시 merger (deliberately not aliased to predecessors)", () => {
+  it("normalizes 전남광주통합특별시 to itself", () => {
+    expect(normalizeProvince("전남광주통합특별시")).toBe("전남광주통합특별시");
+  });
+
+  it("a 전남광주통합특별시 resident passes a 전남광주통합특별시-wide policy", () => {
+    expect(matchRegion({ province: "전남광주통합특별시" }, [{ province: "전남광주통합특별시" }])).toBe("pass");
+  });
+
+  it("a 광주광역시 resident does NOT match a 전남광주통합특별시 policy (no implicit old->new bridge)", () => {
+    expect(matchRegion({ province: "광주광역시" }, [{ province: "전남광주통합특별시" }])).toBe("fail");
+  });
+
+  it("a 전남광주통합특별시 resident does NOT match a still-old-named 전라남도 policy (no implicit new->old bridge)", () => {
+    expect(matchRegion({ province: "전남광주통합특별시" }, [{ province: "전라남도" }])).toBe("fail");
+  });
+
+  it("a 광주광역시 resident still matches an unchanged 광주광역시-specific policy", () => {
+    expect(matchRegion({ province: "광주광역시" }, [{ province: "광주광역시" }])).toBe("pass");
+  });
+});
