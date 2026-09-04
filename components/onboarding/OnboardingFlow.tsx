@@ -13,12 +13,17 @@ import { birthDateSchema } from "@/lib/validation/profileSchema";
 import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
-import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
-import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, type CurrentStatusOption } from "@/domain/profile/currentStatus";
+import {
+  CATEGORY_LABELS,
+  EDUCATION_STATUS_LABELS,
+  EMPLOYMENT_STATUS_LABELS,
+  HOUSING_TYPE_LABELS,
+  MARITAL_STATUS_LABELS,
+} from "@/lib/labels";
 import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, type TriStateChoice } from "@/lib/constants/triState";
 import { todayPolicyDateString } from "@/lib/dates/policyDate";
 import type { BenefitCategory } from "@/types/benefit";
-import type { HousingType, IncomeBand, MaritalStatus, UserProfile } from "@/types/profile";
+import type { EducationStatus, EmploymentStatus, HousingType, IncomeBand, MaritalStatus, UserProfile } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
   ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
@@ -28,11 +33,23 @@ const MARITAL_OPTIONS: { value: MaritalStatus; label: string }[] = (
   ["single", "married", "divorced", "widowed"] as MaritalStatus[]
 ).map((value) => ({ value, label: MARITAL_STATUS_LABELS[value] }));
 
+// employmentStatus and educationStatus are independent UserProfile fields —
+// selecting one must never overwrite or infer the other (e.g. "student"
+// employment does not imply "university" education, and vice versa).
+const EMPLOYMENT_OPTIONS: { value: EmploymentStatus; label: string }[] = (
+  ["employed", "unemployed", "self_employed", "freelancer", "student", "other"] as EmploymentStatus[]
+).map((value) => ({ value, label: EMPLOYMENT_STATUS_LABELS[value] }));
+
+const EDUCATION_OPTIONS: { value: EducationStatus; label: string }[] = (
+  ["high_school", "university", "graduate_school", "graduated", "not_applicable"] as EducationStatus[]
+).map((value) => ({ value, label: EDUCATION_STATUS_LABELS[value] }));
+
 interface Draft {
   birthDate: string;
   province: string;
   city: string;
-  currentStatus?: CurrentStatusOption;
+  employmentStatus?: EmploymentStatus;
+  educationStatus?: EducationStatus;
   individualIncomeBand?: IncomeBand;
   householdSize: string;
   householdIncomeBand?: IncomeBand;
@@ -91,12 +108,11 @@ export function OnboardingFlow() {
   };
 
   const finish = () => {
-    const status = draft.currentStatus ? CURRENT_STATUS_TO_PROFILE[draft.currentStatus] : undefined;
     const profile: UserProfile = {
       birthDate: draft.birthDate || undefined,
       residence: { province: draft.province || undefined, city: draft.city || undefined },
-      employmentStatus: status?.employmentStatus,
-      educationStatus: status?.educationStatus,
+      employmentStatus: draft.employmentStatus,
+      educationStatus: draft.educationStatus,
       individualIncomeBand: draft.individualIncomeBand,
       householdSize: draft.householdSize ? Number(draft.householdSize) : undefined,
       householdIncomeBand: draft.householdIncomeBand,
@@ -166,17 +182,31 @@ export function OnboardingFlow() {
         step={1}
         totalSteps={TOTAL_STEPS}
         title="현재 상태를 알려주세요"
-        description="가장 가까운 상태를 선택해 주세요."
+        description="일과 학업을 병행하고 있다면 각각 선택할 수 있어요."
         onBack={goBack}
         onNext={goNext}
-        nextDisabled={!draft.currentStatus}
+        nextDisabled={!draft.employmentStatus}
       >
-        <OptionList
-          name="currentStatus"
-          options={CURRENT_STATUS_OPTIONS}
-          value={draft.currentStatus}
-          onChange={(v) => patch({ currentStatus: v })}
-        />
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="employmentStatus">일/고용 상태</Label>
+            <OptionList
+              name="employmentStatus"
+              options={EMPLOYMENT_OPTIONS}
+              value={draft.employmentStatus}
+              onChange={(v) => patch({ employmentStatus: v })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="educationStatus">학업 상태 (선택 입력)</Label>
+            <OptionList
+              name="educationStatus"
+              options={EDUCATION_OPTIONS}
+              value={draft.educationStatus}
+              onChange={(v) => patch({ educationStatus: v })}
+            />
+          </div>
+        </div>
       </StepShell>
     );
   }

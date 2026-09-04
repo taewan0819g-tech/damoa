@@ -63,9 +63,14 @@ export const MARITAL_STATUS_LABELS: Record<MaritalStatus, string> = {
   widowed: "사별",
 };
 
+// Employment and education are independent profile dimensions (see
+// domain/profile — employmentStatus/educationStatus are stored and edited
+// separately). Label wording deliberately avoids implying one status forces
+// the other — e.g. "학생"/"대학교 재학" describe each axis on its own terms,
+// so a user can be employed AND enrolled in university at the same time.
 export const EMPLOYMENT_STATUS_LABELS: Record<EmploymentStatus, string> = {
-  employed: "직장인",
-  unemployed: "취업준비/미취업",
+  employed: "직장인 / 재직 중",
+  unemployed: "미취업 / 구직 중",
   self_employed: "자영업",
   freelancer: "프리랜서",
   student: "학생",
@@ -73,11 +78,11 @@ export const EMPLOYMENT_STATUS_LABELS: Record<EmploymentStatus, string> = {
 };
 
 export const EDUCATION_STATUS_LABELS: Record<EducationStatus, string> = {
-  high_school: "고등학생",
-  university: "대학생",
-  graduate_school: "대학원생",
+  high_school: "고등학교 재학",
+  university: "대학교 재학",
+  graduate_school: "대학원 재학",
   graduated: "졸업",
-  not_applicable: "해당없음",
+  not_applicable: "해당 없음",
 };
 
 export const HOUSING_TYPE_LABELS: Record<HousingType, string> = {

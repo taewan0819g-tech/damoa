@@ -13,14 +13,19 @@ import { OptionList } from "@/components/onboarding/OptionList";
 import { useProfileStore } from "@/stores/profileStore";
 import { calculateProfileCompletion } from "@/domain/profile/completion";
 import { calculateAge } from "@/domain/profile/age";
-import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, deriveCurrentStatus } from "@/domain/profile/currentStatus";
 import { PROVINCES } from "@/lib/constants/regions";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
-import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
+import {
+  CATEGORY_LABELS,
+  EDUCATION_STATUS_LABELS,
+  EMPLOYMENT_STATUS_LABELS,
+  HOUSING_TYPE_LABELS,
+  MARITAL_STATUS_LABELS,
+} from "@/lib/labels";
 import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, triStateFromBoolean } from "@/lib/constants/triState";
 import { todayPolicyDateString } from "@/lib/dates/policyDate";
-import type { HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
+import type { EducationStatus, EmploymentStatus, HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
   ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
@@ -29,6 +34,17 @@ const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
 const MARITAL_OPTIONS: { value: MaritalStatus; label: string }[] = (
   ["single", "married", "divorced", "widowed"] as MaritalStatus[]
 ).map((value) => ({ value, label: MARITAL_STATUS_LABELS[value] }));
+
+// employmentStatus and educationStatus are independent UserProfile fields —
+// editing one must preserve the other (see the two separate OptionList
+// onChange handlers below).
+const EMPLOYMENT_OPTIONS: { value: EmploymentStatus; label: string }[] = (
+  ["employed", "unemployed", "self_employed", "freelancer", "student", "other"] as EmploymentStatus[]
+).map((value) => ({ value, label: EMPLOYMENT_STATUS_LABELS[value] }));
+
+const EDUCATION_OPTIONS: { value: EducationStatus; label: string }[] = (
+  ["high_school", "university", "graduate_school", "graduated", "not_applicable"] as EducationStatus[]
+).map((value) => ({ value, label: EDUCATION_STATUS_LABELS[value] }));
 
 function toManwon(amount?: number): string {
   return amount !== undefined ? String(amount / 10000) : "";
@@ -46,7 +62,6 @@ export default function ProfilePage() {
 
   const completion = calculateProfileCompletion(profile);
   const age = calculateAge(profile.birthDate);
-  const currentStatus = deriveCurrentStatus(profile.employmentStatus, profile.educationStatus);
   const interests = profile.interests ?? [];
 
   const handleReset = () => {
@@ -110,15 +125,25 @@ export default function ProfilePage() {
       </Section>
 
       <Section title="현재 상태">
-        <OptionList
-          name="currentStatus"
-          options={CURRENT_STATUS_OPTIONS}
-          value={currentStatus}
-          onChange={(value) => {
-            const mapped = CURRENT_STATUS_TO_PROFILE[value];
-            updateProfile({ employmentStatus: mapped.employmentStatus, educationStatus: mapped.educationStatus });
-          }}
-        />
+        <p className="text-xs text-foreground-muted">일과 학업을 병행하고 있다면 각각 선택할 수 있어요.</p>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="employmentStatus">일/고용 상태</Label>
+          <OptionList
+            name="employmentStatus"
+            options={EMPLOYMENT_OPTIONS}
+            value={profile.employmentStatus}
+            onChange={(value) => updateProfile({ employmentStatus: value })}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="educationStatus">학업 상태 (선택 입력)</Label>
+          <OptionList
+            name="educationStatus"
+            options={EDUCATION_OPTIONS}
+            value={profile.educationStatus}
+            onChange={(value) => updateProfile({ educationStatus: value })}
+          />
+        </div>
       </Section>
 
       <Section title="가구·소득">
