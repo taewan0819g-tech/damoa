@@ -699,16 +699,41 @@ function isNearAnyIndex(tokenIndex: number, tokenLength: number, signalIndices: 
  * inherit an earlier clause's residence signal just because both happen to
  * share one long, multi-topic 지원대상 field.
  */
-const CLAUSE_DELIMITER = "○";
+/**
+ * Circled-digit sub-item markers (①②③...) are the second-most-common real
+ * MOIS top-level clause delimiter after "○" — confirmed present in 186/10,967
+ * frozen-catalog records' 지원대상/선정기준 text, 87 of which use ONLY circled
+ * digits with no "○" bullet anywhere in the field at all. Without treating
+ * them as clause boundaries too, `clauseBoundsAt`'s "no bullet structure
+ * present" fallback collapses the ENTIRE multi-clause field into one giant
+ * clause, wrongly binding an unrelated later clause's incidental place
+ * mention to an earlier, structurally separate clause's residence signal.
+ * Real MOIS 391000000152 (청년 전월세보증금 대출이자 지원): clause ②'s "실제
+ * 평택시에 거주하는" is the genuine city-level residence restriction, but a
+ * later, unrelated clause ③'s footnote — "*한국부동산원 전월세전환율 지역별 평균
+ * 적용(경기도, 2024)", merely citing which region's published rate the
+ * interest-conversion cap uses — was being treated as bound to clause ②'s
+ * residence signal purely because neither clause used "○", collapsing the
+ * whole field into a single clause and silently discarding the more specific
+ * 평택시 restriction in favor of a province-only "경기도" spec.
+ */
+const CLAUSE_DELIMITER_RE = /[○①②③④⑤⑥⑦⑧⑨⑩]/g;
 
-/** The [start, end) span of the ○-delimited clause containing `index` (falls back to the whole text when no bullet structure is present at all). */
+/** The [start, end) span of the bullet-delimited (see `CLAUSE_DELIMITER_RE`) clause containing `index` (falls back to the whole text when no bullet structure is present at all). */
 function clauseBoundsAt(text: string, index: number): { start: number; end: number } {
-  const priorDelimiter = text.lastIndexOf(CLAUSE_DELIMITER, index);
-  const nextDelimiter = text.indexOf(CLAUSE_DELIMITER, index + 1);
-  return {
-    start: priorDelimiter === -1 ? 0 : priorDelimiter,
-    end: nextDelimiter === -1 ? text.length : nextDelimiter,
-  };
+  let start = 0;
+  let end = text.length;
+  CLAUSE_DELIMITER_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CLAUSE_DELIMITER_RE.exec(text)) !== null) {
+    if (match.index <= index) {
+      start = match.index;
+    } else {
+      end = match.index;
+      break;
+    }
+  }
+  return { start, end };
 }
 
 /**
@@ -1435,14 +1460,22 @@ function coreListLabel(label: string): string {
   return label.replace(NAMED_LIST_STAGE_PREFIX_RE, "").trim();
 }
 
+// Pattern B is deliberately scoped to literal "○" bullets only (unlike the
+// general `clauseBoundsAt`/`CLAUSE_DELIMITER_RE` used for residence-signal
+// binding) — a labeled, parenthetical region-list clause is a narrower, more
+// specific shape that has only ever been observed introduced by "○" in the
+// frozen catalog; widening it to circled-digit markers is unverified and not
+// needed to fix the province/city collapsing bug this checkpoint targets.
+const NAMED_LIST_CLAUSE_DELIMITER = "○";
+
 function findNamedRegionListGroups(text: string): Map<string, { specs: RegionSpec[]; end: number }> {
   const groups = new Map<string, { specs: RegionSpec[]; end: number }>();
   let searchFrom = 0;
   while (searchFrom < text.length) {
-    const delimIdx = text.indexOf(CLAUSE_DELIMITER, searchFrom);
+    const delimIdx = text.indexOf(NAMED_LIST_CLAUSE_DELIMITER, searchFrom);
     if (delimIdx === -1) break;
     const bodyStart = delimIdx + 1;
-    const nextDelim = text.indexOf(CLAUSE_DELIMITER, bodyStart);
+    const nextDelim = text.indexOf(NAMED_LIST_CLAUSE_DELIMITER, bodyStart);
     const bodyEnd = nextDelim === -1 ? text.length : nextDelim;
     const clauseBody = text.slice(bodyStart, bodyEnd);
     const labelMatch = clauseBody.match(NAMED_LIST_LABEL_RE);

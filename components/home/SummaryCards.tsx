@@ -3,8 +3,8 @@ import type { BenefitSummary } from "@/domain/benefit/summary";
 
 export function SummaryCards({ summary }: { summary: BenefitSummary }) {
   const items = [
-    { label: "받을 가능성이 있는 혜택", value: summary.likelyEligibleCount },
-    { label: "정부·청년 혜택", value: summary.governmentYouthCount },
+    { label: "우선 확인할 혜택", value: summary.priorityCount },
+    { label: "확인 가능한 정부·청년 혜택", value: summary.governmentYouthCount },
     { label: "금융상품", value: summary.financialCount },
     { label: "곧 마감", value: summary.closingSoonCount },
   ];
