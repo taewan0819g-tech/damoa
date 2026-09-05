@@ -30,7 +30,7 @@ import { normalizeYouthPolicy, type YouthRawPolicy } from "../adapters/youthCent
 import { matchBenefitsDetailed, isRelevantForFeed } from "../domain/eligibility/matchBenefits";
 import { getRecommendedBenefits } from "../domain/benefit/recommend";
 import { getUnknownBenefits } from "../domain/benefit/unknownBenefits";
-import { matchesUserInterest } from "../domain/benefit/topics";
+import { matchesUserInterest, countUserInterestOverlap } from "../domain/benefit/topics";
 import type { PersonalizationEvidence } from "../domain/benefit/personalization";
 import type { Benefit, EligibilityStatus } from "../types/benefit";
 import type { UserProfile } from "../types/profile";
@@ -219,12 +219,15 @@ async function main() {
     const recommendedUnknownCount = recommended.filter((b) => statusById.get(b.id) === "unknown").length;
 
     // Top-10 = the actual Home "recommended" bucket a beta user sees.
+    const selectedInterests = profile.interests ?? [];
     const top10Detail = recommended.map((b) => {
       const ev = evidenceById.get(b.id)!;
       return {
         id: b.id, title: b.title, source: b.source.type, status: statusById.get(b.id),
         strength: ev.strength, dimensions: ev.dimensions, regionSpecificity: ev.regionSpecificity,
-        interestMatch: matchesUserInterest(b, new Set(profile.interests ?? [])),
+        interestMatch: matchesUserInterest(b, new Set(selectedInterests)),
+        interestOverlapCount: countUserInterestOverlap(b, selectedInterests),
+        matchedInterests: selectedInterests.filter((i) => countUserInterestOverlap(b, [i]) === 1),
       };
     });
     const top10StrengthFreq = sortedFreq(freq(top10Detail.map((b) => b.strength)));
