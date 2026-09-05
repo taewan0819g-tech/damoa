@@ -8,6 +8,7 @@ import {
   REGION_SPECIFICITY_RANK,
   type PersonalizationEvidence,
 } from "./personalization";
+import { hasUnresolvedLocalScopeConflict } from "./localScope";
 
 const STATUS_RANK: Record<EligibilityStatus, number> = { likely_eligible: 0, unknown: 1, not_eligible: 2 };
 
@@ -22,15 +23,23 @@ export interface GetRecommendedBenefitsOptions {
   /**
    * When true, drops UNKNOWN-status benefits whose personalization evidence
    * is WEAK (age-only, targetScope-only, or no specific matched dimension)
-   * instead of merely ranking them last. `likely_eligible` benefits are
-   * NEVER dropped by this flag — deterministic rule-engine status already
-   * proves eligibility, independent of personalization "strength".
+   * instead of merely ranking them last. Also drops UNKNOWN-status benefits
+   * with an unresolved local-scope conflict (see
+   * `hasUnresolvedLocalScopeConflict` in ./localScope — e.g. a benefit
+   * published by another province/city's local government with no verified
+   * region rule tying it to the profile's own residence). `likely_eligible`
+   * benefits are NEVER dropped by this flag for either reason —
+   * deterministic rule-engine status already proves eligibility,
+   * independent of personalization "strength" or unresolved local scope.
    *
    * Use this ONLY for a bounded preview (e.g. the home "다모아 추천" list) so
-   * it never pads out to `limit` with weak filler. Full-catalog/listing
-   * views (see domain/benefit/sort.ts) must keep full discovery recall and
-   * so must leave this false (the default) — weak candidates still appear,
-   * just ranked below stronger ones.
+   * it never pads out to `limit` with weak or geographically-unverified
+   * filler. Full-catalog/listing views (see domain/benefit/sort.ts) must
+   * keep full discovery recall and so must leave this false (the default) —
+   * weak/unresolved-local-scope candidates still appear, just ranked below
+   * stronger ones. A benefit dropped here is never marked not_eligible and
+   * never removed from full browse — it still surfaces via
+   * `getUnknownBenefits` (Home "확인이 필요해요" / needsReview).
    */
   excludeWeakUnknown?: boolean;
 }
@@ -72,7 +81,13 @@ export function getRecommendedBenefits(
       status: statusById.get(benefit.id) ?? "unknown",
       evidence: resolvePersonalizationEvidence(benefit, profile, evidenceById),
     }))
-    .filter((c) => !excludeWeakUnknown || c.status === "likely_eligible" || c.evidence.strength !== "weak");
+    .filter((c) => !excludeWeakUnknown || c.status === "likely_eligible" || c.evidence.strength !== "weak")
+    .filter(
+      (c) =>
+        !excludeWeakUnknown ||
+        c.status === "likely_eligible" ||
+        !hasUnresolvedLocalScopeConflict(c.benefit, profile, c.evidence.regionSpecificity)
+    );
 
   return candidates
     .sort((a, b) => {
@@ -104,4 +119,35 @@ export function getRecommendedBenefits(
     })
     .slice(0, limit)
     .map((c) => c.benefit);
+}
+
+/**
+ * Count of benefits that would qualify for the Home high-precision
+ * `recommended` bucket (same admission rule as `getRecommendedBenefits`
+ * called with `excludeWeakUnknown: true`), over the FULL relevant set rather
+ * than a bounded preview. Exists so the Home summary card can show a
+ * truthful "우선 확인할 혜택" total without sorting/slicing thousands of
+ * records just to report a count (see `getBenefitSummary`'s caller in the
+ * match route).
+ */
+export function countRecommendableBenefits(
+  benefits: Benefit[],
+  statusById: Map<string, EligibilityStatus>,
+  profile: UserProfile,
+  evidenceById?: Map<string, PersonalizationEvidence>
+): number {
+  let count = 0;
+  for (const benefit of benefits) {
+    const status = statusById.get(benefit.id) ?? "unknown";
+    if (status === "not_eligible") continue;
+    if (status === "likely_eligible") {
+      count += 1;
+      continue;
+    }
+    const evidence = resolvePersonalizationEvidence(benefit, profile, evidenceById);
+    if (evidence.strength === "weak") continue;
+    if (hasUnresolvedLocalScopeConflict(benefit, profile, evidence.regionSpecificity)) continue;
+    count += 1;
+  }
+  return count;
 }

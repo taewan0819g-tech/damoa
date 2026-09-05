@@ -178,9 +178,23 @@ function mapBenefitType(지원유형?: string): BenefitType {
   return "other";
 }
 
+/**
+ * Live MOIS 소관기관유형 values are "중앙행정기관" (central government),
+ * "광역시도" (province/metropolitan-city government), and "시군구"
+ * (city/county/district government) — NOT "지자체"/"지방", which this
+ * function used to check for and which never actually appear in the live
+ * API, silently classifying every real local-government record as
+ * "government". The Home local-scope-conflict gate (see
+ * domain/benefit/localScope.ts) requires `institution.type ===
+ * "local_government"` as one of two independent signals before ever
+ * demoting a benefit, so this needs to be accurate for that gate to fire on
+ * real MOIS local-government records at all.
+ */
 function mapInstitutionType(소관기관유형?: string): InstitutionType {
   if (!소관기관유형) return "government";
-  if (소관기관유형.includes("지자체") || 소관기관유형.includes("지방")) return "local_government";
+  if (소관기관유형.includes("광역시도") || 소관기관유형.includes("시군구") || 소관기관유형.includes("지자체") || 소관기관유형.includes("지방")) {
+    return "local_government";
+  }
   return "government";
 }
 
