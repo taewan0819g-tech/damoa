@@ -7,7 +7,7 @@ import { searchBenefits } from "@/domain/benefit/search";
 import { sortBenefits, type BenefitSort } from "@/domain/benefit/sort";
 import { getSourceGroup, type BenefitSourceGroup } from "@/domain/benefit/sourceGroup";
 import { getBenefitSummary, type BenefitSummary } from "@/domain/benefit/summary";
-import { getRecommendedBenefits } from "@/domain/benefit/recommend";
+import { getRecommendedBenefits, countRecommendableBenefits } from "@/domain/benefit/recommend";
 import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
 import { matchesBenefitFacet } from "@/domain/benefit/topics";
 import { parseUserProfile } from "@/lib/validation/profileSchema";
@@ -281,7 +281,8 @@ export async function POST(request: Request) {
       // relevant set (which can be in the thousands). `summary` is
       // aggregated server-side over the full `relevant` array so the client
       // still gets accurate totals without receiving the array itself.
-      const summary: BenefitSummary = getBenefitSummary(relevant, statusById);
+      const priorityCount = countRecommendableBenefits(relevant, statusById, profile, evidenceById);
+      const summary: BenefitSummary = getBenefitSummary(relevant, statusById, priorityCount);
       const recommended = getRecommendedBenefits(relevant, statusById, profile, HOME_PREVIEW_LIMIT, {
         evidenceById,
         excludeWeakUnknown: true,

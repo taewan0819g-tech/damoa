@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { usePaginatedBenefits } from "@/hooks/usePaginatedBenefits";
@@ -18,6 +18,10 @@ import { type BenefitListState, buildListSearchParams, buildListUrl, parseListSt
 import type { BenefitCategory } from "@/types/benefit";
 
 const PAGE_SIZE = 20;
+
+// Non-IME typing is committed to the URL after this many idle ms, so a burst
+// of keystrokes produces one `router.replace` instead of one per keystroke.
+const SEARCH_DEBOUNCE_MS = 350;
 
 const ALL_GROUP_FILTERS: { value: BenefitSourceGroup | "all"; label: string }[] = [
   { value: "all", label: "전체" },
@@ -89,11 +93,73 @@ export function BenefitsPageClient() {
     [state, router]
   );
 
-  // Any change to search/filter/sort invalidates the current page — go back
-  // to page 1 rather than showing a now out-of-range page of stale results.
-  function updateQuery(value: string) {
-    replaceState({ query: value, page: 1 });
+  // The search input keeps its own local "draft" value, separate from the
+  // URL-derived `query`. This is what makes Korean/Japanese/Chinese IME
+  // composition work: while composing, only this local draft updates — the
+  // URL (and therefore the component's re-render from `useSearchParams`)
+  // isn't touched, so the browser's native composition session is never
+  // interrupted mid-keystroke.
+  const [draftQuery, setDraftQuery] = useState(query);
+  const isComposingRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPendingDebounce = useCallback(() => {
+    if (debounceRef.current !== null) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
+  // Any committed change to search invalidates the current page — go back to
+  // page 1 rather than showing a now out-of-range page of stale results.
+  const commitQuery = useCallback(
+    (value: string) => {
+      clearPendingDebounce();
+      replaceState({ query: value, page: 1 });
+    },
+    [clearPendingDebounce, replaceState]
+  );
+
+  // Keep the draft in sync with the URL when it changes from outside this
+  // input (back/forward navigation, a deep link, another control resetting
+  // `q`, etc.) — but never while the user is mid-composition, or we'd wipe
+  // out an in-progress Korean/Japanese/Chinese syllable.
+  useEffect(() => {
+    if (!isComposingRef.current) {
+      setDraftQuery(query);
+    }
+  }, [query]);
+
+  // Cancel any in-flight debounce timer on unmount so it can't fire (and
+  // navigate) after the component is gone.
+  useEffect(() => clearPendingDebounce, [clearPendingDebounce]);
+
+  function handleQueryChange(value: string) {
+    setDraftQuery(value);
+    if (isComposingRef.current) {
+      // Mid-composition: local draft only, no router.replace.
+      return;
+    }
+    clearPendingDebounce();
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      commitQuery(value);
+    }, SEARCH_DEBOUNCE_MS);
   }
+
+  function handleCompositionStart() {
+    isComposingRef.current = true;
+    // A composition starting mid-debounce should not let a stale, partial
+    // value slip through once the timer fires.
+    clearPendingDebounce();
+  }
+
+  function handleCompositionEnd(value: string) {
+    isComposingRef.current = false;
+    setDraftQuery(value);
+    commitQuery(value);
+  }
+
   function updateGroup(value: BenefitSourceGroup | "all") {
     replaceState({ group: value, page: 1 });
   }
@@ -130,8 +196,10 @@ export function BenefitsPageClient() {
           aria-hidden="true"
         />
         <Input
-          value={query}
-          onChange={(e) => updateQuery(e.target.value)}
+          value={draftQuery}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={(e) => handleCompositionEnd(e.currentTarget.value)}
           placeholder="혜택, 기관명으로 검색"
           aria-label="혜택 검색"
           className="pl-11"
