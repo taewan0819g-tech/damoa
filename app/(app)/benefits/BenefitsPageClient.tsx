@@ -19,14 +19,41 @@ import type { BenefitCategory } from "@/types/benefit";
 
 const PAGE_SIZE = 20;
 
-const GROUP_FILTERS: { value: BenefitSourceGroup | "all"; label: string }[] = [
+const ALL_GROUP_FILTERS: { value: BenefitSourceGroup | "all"; label: string }[] = [
   { value: "all", label: "전체" },
   { value: "government", label: SOURCE_GROUP_LABELS.government },
   { value: "youth", label: SOURCE_GROUP_LABELS.youth },
   { value: "financial", label: SOURCE_GROUP_LABELS.financial },
 ];
 
+/**
+ * Pre-beta cleanup: the "금융상품" tab is hidden from the CURRENT selectable
+ * group filters because no FSS financial provider is registered in
+ * production (`providers/index.ts` only wires MOIS + Youth Center), so that
+ * group always has 0 real records today. `BenefitSourceGroup = "financial"`,
+ * `SOURCE_GROUP_LABELS.financial`, and `getSourceGroup()`'s financial bucket
+ * are all deliberately kept (not removed) so this tab can come back the
+ * moment FSS becomes a real provider — only the user-visible chip is hidden.
+ * A direct `?group=financial` URL still parses and filters correctly
+ * (`lib/benefits/listState.ts`'s `VALID_GROUPS` is unchanged); it's just not
+ * offered as a clickable control.
+ */
+const GROUP_FILTERS = ALL_GROUP_FILTERS.filter((f) => f.value !== "financial");
+
 const ALL_CATEGORIES = Object.keys(CATEGORY_LABELS) as BenefitCategory[];
+
+/**
+ * Pre-beta cleanup: "예금" is hidden from the CURRENT selectable category
+ * chips because real frozen MOIS + Youth Center coverage is 0/13,712 (see
+ * `lib/constants/interests.ts`'s `INTEREST_CATEGORIES`, which already
+ * excludes it for onboarding for the same reason). `BenefitCategory =
+ * "deposit"` and `CATEGORY_LABELS.deposit` are deliberately kept (not
+ * removed) for future FSS integration — only the user-visible chip is
+ * hidden. A direct `?category=deposit` URL still parses and filters
+ * correctly (`lib/benefits/listState.ts`'s `VALID_CATEGORIES` is unchanged);
+ * it's just not offered as a clickable control.
+ */
+const VISIBLE_CATEGORIES = ALL_CATEGORIES.filter((c) => c !== "deposit");
 
 const SORT_OPTIONS: { value: BenefitSort; label: string }[] = [
   { value: "recommended", label: "추천순" },
@@ -123,7 +150,7 @@ export function BenefitsPageClient() {
         <Chip selected={category === "all"} onClick={() => updateCategory("all")}>
           전체 카테고리
         </Chip>
-        {ALL_CATEGORIES.map((c) => (
+        {VISIBLE_CATEGORIES.map((c) => (
           <Chip key={c} selected={category === c} onClick={() => updateCategory(c)}>
             {CATEGORY_LABELS[c]}
           </Chip>

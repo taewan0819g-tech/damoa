@@ -198,3 +198,71 @@ describe("BenefitsPageClient — URL is the source of truth", () => {
     });
   });
 });
+
+/**
+ * Pre-beta cleanup: hide the dead "예금" category chip and the always-empty
+ * "금융상품" group tab from the CURRENT selectable filters (0/13,712 real
+ * coverage for deposit; no FSS provider registered in production for
+ * financial). Domain types/labels/URL parsing for both are deliberately
+ * kept unchanged — only the user-visible controls are hidden.
+ */
+describe("BenefitsPageClient — pre-beta hidden filter cleanup", () => {
+  it("1. visible category chips do not include 예금 (deposit)", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.queryByRole("button", { name: CATEGORY_LABELS.deposit })).toBeNull();
+  });
+
+  it("2. savings (적금) remains a visible category chip", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: CATEGORY_LABELS.savings })).toBeTruthy();
+  });
+
+  it("3. loan (대출) remains a visible category chip", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: CATEGORY_LABELS.loan })).toBeTruthy();
+  });
+
+  it("4. visible source-group tabs do not include 금융상품 (financial)", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.queryByRole("button", { name: SOURCE_GROUP_LABELS.financial })).toBeNull();
+  });
+
+  it("5. government (정부·지자체) remains a visible group tab", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: SOURCE_GROUP_LABELS.government })).toBeTruthy();
+  });
+
+  it("6. youth (청년정책) remains a visible group tab", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    expect(screen.getByRole("button", { name: SOURCE_GROUP_LABELS.youth })).toBeTruthy();
+  });
+
+  it("9. a direct ?category=deposit&group=financial URL still parses and filters safely, even with no visible chip for either", async () => {
+    currentSearch = new URLSearchParams("category=deposit&group=financial");
+    render(createElement(BenefitsPageClient));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(lastRequestBody()).toMatchObject({ category: "deposit", group: "financial" });
+    // No visible chip renders as selected for either value, since neither is offered as a control.
+    expect(screen.queryByRole("button", { name: CATEGORY_LABELS.deposit })).toBeNull();
+    expect(screen.queryByRole("button", { name: SOURCE_GROUP_LABELS.financial })).toBeNull();
+  });
+});

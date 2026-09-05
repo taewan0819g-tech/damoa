@@ -198,13 +198,15 @@ No GitHub Actions run is claimed or referenced — none was checked/exists for t
 
 ## 11. Verdict and issues
 
+> **STALE — superseded by Addendum 4 below.** This section (§11) reflects the ORIGINAL Checkpoint D audit only. P1-1 (dead 예금 chip) and P1-2 (empty 금융상품 tab) listed here as open have since been **CLOSED** by the Pre-Beta Tiny Cleanup checkpoint (Addendum 4), and P1-5 (added later by Addendum 2) has been **CLOSED** by Addendum 3. See Addendum 4 for the current, authoritative P1/P2 state — the numbered list immediately below is kept only as a historical record of what the original audit found.
+
 ### Verdict: `READY_AFTER_SMALL_FIXES`
 
 No P0s. Two of the four P1s below are trivial, zero-risk UI-list fixes; the other two are pre-existing, already-flagged, deliberately-deferred product decisions that this very beta is well suited to inform — none of the four blocks running the 5-person smoke test itself, but the two cheap ones should land first since they cost nothing and remove confusing dead surfaces.
 
 **P0 (blocks beta): none found.**
 
-**P1 (should fix before testers):**
+**P1 (should fix before testers) — AS ORIGINALLY FOUND, see Addendum 4 for current status:**
 1. **Dead "예금" category filter chip** (§6). Evidence: `BenefitsPageClient.tsx:29`, `financialFacetCoverage.deposit: 0`. Smallest next checkpoint: exclude `deposit` from the list page's `ALL_CATEGORIES` the same way `INTEREST_CATEGORIES` already excludes it (one-line change, no logic risk).
 2. **Always-empty "금융상품" group tab** (§6). Evidence: `domain/benefit/sourceGroup.ts`, `providers/index.ts` (FSS never registered). Smallest next checkpoint: hide the `financial` tab from `GROUP_FILTERS` until FSS is a real provider, or add a "곧 추가돼요" empty-state variant for that specific tab.
 3. **`likely_eligible` structurally unreachable** (§1/§5, pre-existing). Not touched here per scope. Smallest next checkpoint: explicit product sign-off on loosening the MOIS/Youth "incomplete" downgrade for specific well-verified dimension combinations, OR a copy-only change strengthening the "다모아 추천" section's disclaimer — this beta's comprehension question (§12) is designed to inform that decision.
@@ -234,3 +236,21 @@ Per tester, record:
 10. **Loading/error complaints** — any spontaneous mention of slowness, blank screens, or broken-feeling states
 
 Suggested moderation: watch each session live or via screen-share where possible (especially for items 3/5/9, which need a follow-up question, not just click data) rather than relying solely on self-reported logs.
+
+---
+
+## Addendum 4 — Pre-Beta Tiny Cleanup (real fix; closes P1-1, P1-2; fixes a documentation contradiction)
+
+Started from SHA `abca2e29ee9a28fbb6d3f1e82f956e341cbf16b4` (MOIS region parser checkpoint already CLOSED, per Addendum 3). Scope was deliberately tiny — no eligibility parsing, ruleEngine, candidate retrieval, region logic, ranking, topics/facets semantics, profile/onboarding, navigation, Youth zipCd, `likely_eligible` semantics, or provider architecture changes.
+
+**1. Hid the dead "예금" category filter chip.** `app/(app)/benefits/BenefitsPageClient.tsx` now renders `VISIBLE_CATEGORIES = ALL_CATEGORIES.filter((c) => c !== "deposit")` instead of the full category list. `BenefitCategory = "deposit"`, `CATEGORY_LABELS.deposit`, and financial-facet support are all kept unchanged for future FSS integration — only the user-visible chip is hidden. A direct `?category=deposit` URL still parses and filters correctly (`lib/benefits/listState.ts` untouched).
+
+**2. Hid the always-empty "금융상품" group tab.** Same file's `GROUP_FILTERS = ALL_GROUP_FILTERS.filter((f) => f.value !== "financial")`. `BenefitSourceGroup = "financial"`, `SOURCE_GROUP_LABELS.financial`, and `getSourceGroup()`'s financial bucket are kept unchanged. A direct `?group=financial` URL still parses and filters correctly.
+
+**3. Fixed a documentation contradiction in `docs/audits/beta-readiness.json`.** The `moisRegionLeakage` block (added by the intermediate precision-fix checkpoint, before Addendum 3's final closeout) still listed `mois-401000000112` and `mois-569000000375` as current residual Home Top-10 mismatches, even though Addendum 3 had already confirmed both fixed and removed. That block is now renamed `moisRegionLeakage_HISTORICAL_supersededByFinalCloseout` (kept as historical evidence, clearly labeled) and a new `moisRegionLeakageCurrent` block is the single authoritative current-state source: **0 parser-caused obvious wrong-region items remain in Home Top-10.** The two source-data-limitation cases `mois-569000000402` and `mois-631000000709` are documented as ambiguous/source-data limitations, not confirmed parser bugs (they were never claimed otherwise by the manual review) — the Top-20 title/org metadata heuristic's `clearly_wrong_region` label for them is a known heuristic imprecision, not the authoritative classification. `mois-648000001072` remains a separate, unrelated, documented brand-name data limitation (unchanged before/after any parser fix).
+
+**4. Tests**: added a new `describe("BenefitsPageClient — pre-beta hidden filter cleanup", ...)` block to `__tests__/components/benefitsPageClient.test.ts` (9 assertions) proving: 예금 chip absent, 적금/대출 chips present, 금융상품 tab absent, 정부·지자체/청년정책 tabs present, and a direct `?category=deposit&group=financial` URL still parses into the API request body correctly even though neither has a visible control. Full suite: all tests passing, no eligibility/ranking snapshot changed.
+
+**Verdict unchanged: `READY_AFTER_SMALL_FIXES`.** Final P1 state: **P1-1 (dead 예금 chip) CLOSED, P1-2 (empty 금융상품 tab) CLOSED, P1-5 (MOIS region parser residuals) CLOSED** (by Addendum 3; this checkpoint only fixed the stale documentation describing it). **Remaining open, deliberately not fixed:** P1-3 (`likely_eligible` structurally unreachable), P1-4 (Youth Center region leakage in full-catalog browse), P2-3 ("확인이 필요해요" comprehension — to be tested in beta), and source-data limitations where frozen MOIS text lacks a provable region (`mois-648000001072`, `mois-569000000402`, `mois-631000000709`) — none of these are parser bugs and none are addressed here, per this checkpoint's explicit scope. See `docs/audits/beta-readiness.json` → `preBetaTinyCleanupCheckpoint` for the machine-readable version.
+
+Historical audit artifacts (`docs/audits/mois-region-binding-precision.json`, `docs/audits/mois-region-binding-manual-review.json`, `docs/audits/mois-region-parser-closeout.json`) are unchanged and remain as evidence.
