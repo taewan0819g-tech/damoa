@@ -26,6 +26,14 @@ See `docs/audits/beta-readiness.json` → `supersededByCheckpoint` / `moisRegion
 
 ---
 
+## Addendum 2 — MOIS Region Binding manual 28-record review (audit only, no production change)
+
+The automated A/B/C classification in `docs/audits/mois-region-binding-precision.json` (0/7/54, with `sampleC` capped at 15 of 54) is **not** a manual review and is superseded as the authoritative account of the 28 affected records. `docs/audits/mois-region-binding-manual-review.json` — produced by manually reading full source text for all 28 records (no automated keyword classifier used for the final label) — is now the **authoritative** artifact for this question. Summary: 19 `A_confirmed_precision_fix`, 7 `B_confirmed_valid_region_lost`, 0 `C_mixed`, 2 `D_ambiguous`. All 16 newly-empty region fields were also manually classified there (5 `correct_to_be_unrestricted`, 7 `should_still_have_region_rule`, 4 `ambiguous`), along with a manual (non-metadata) review of the 6 named Home Top-20 wrong-region candidates and a proposed (not implemented) next-parser design.
+
+**The MOIS region-parser checkpoint remains OPEN.** The precision fix landed at `4eb0620` closed the confirmed 미추홀구 false positive, but this manual review found real, uncorrected residence-restriction losses (7 records) and confirmed additional Top-20 wrong-region leakage via different root causes (illustrative-example text, institution/brand-name tokens, university-location text, and a missed anaphoric "도내" province reference) — none implemented this checkpoint per its audit-only scope. A follow-up production checkpoint is required before this issue can be considered closed.
+
+---
+
 ## 1. WIP delta summary (main vs branch, 70 files, +14445/-592)
 
 13 commits since `main`, in order: personalization-baseline audit → wire personalization ranker into API + dedupe home preview → show unknown-status label on home + harden OR-branch evidence → collapse ANY-group evidence → derive category/topic centrally + fix Youth `asset_building` over-tagging → cross-topic precision fix (보육/임대 homonyms) → split employment/education profile inputs → canonical province/city `<Select>` input → region gazetteer freshness correction → region-transition containment matching → region OR-union hardening → benefits list URL state + validated `returnTo` navigation.
@@ -156,7 +164,7 @@ No safety issues found.
 |---|---|
 | `npm run typecheck` | ✅ pass |
 | `npm run lint` | ✅ 0 errors (1 pre-existing warning, unrelated file: `scripts/auditPersonalizationBaseline.ts:421`, unused var) |
-| `npm test` | ✅ 937/937 tests, 57/57 files |
+| `npm test` | ✅ 942/942 tests, 57/57 files (see Addendum — count was corrected from a stale 937/937 reference) |
 | `npm run build` | ✅ success; route shapes unchanged (`/benefits` ○ static, `/benefits/[id]` ƒ dynamic) |
 | `git diff --check` | ✅ clean (no whitespace errors) |
 | Branch relation | `main` is a strict ancestor of `wip/beta-personalization-pass` (linear, no conflicts) |
