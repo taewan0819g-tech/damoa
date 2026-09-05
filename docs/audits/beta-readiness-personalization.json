@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T10:23:25.152Z",
+  "generatedAt": "2026-09-05T11:29:12.124Z",
   "frozenInputs": [
     {
       "label": "MOIS service list",
@@ -51,65 +51,39 @@
             10
           ],
           [
-            "targetScope",
-            10
+            "employment",
+            8
           ],
           [
-            "region",
-            7
+            "targetScope",
+            2
           ],
           [
             "income",
-            4
-          ],
-          [
-            "employment",
-            2
+            1
           ],
           [
             "housing",
-            2
+            1
+          ],
+          [
+            "region",
+            1
           ]
         ],
         "sourceFreq": [
           [
+            "youth_policy",
+            8
+          ],
+          [
             "government",
-            10
+            2
           ]
         ],
-        "regionEvidenceCount": 7,
-        "interestOverlapCount": 1,
+        "regionEvidenceCount": 1,
+        "interestOverlapCount": 10,
         "detail": [
-          {
-            "id": "mois-641000000151",
-            "title": "경기도 노동자 휴가비 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "income",
-              "region"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-641000000739",
-            "title": "미래기술학교 운영 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "employment"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": false
-          },
           {
             "id": "mois-161300000076",
             "title": "버팀목전세자금대출",
@@ -123,118 +97,237 @@
               "housing"
             ],
             "regionSpecificity": "none",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
           },
           {
-            "id": "mois-B55140800003",
-            "title": "내집마련 디딤돌 대출",
+            "id": "mois-641000000852",
+            "title": "경기도 취약계층 주택화재 안심보험 지원",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "housing",
-              "income"
+              "region"
             ],
-            "regionSpecificity": "none",
-            "interestMatch": false
+            "regionSpecificity": "province",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
           },
           {
-            "id": "mois-B55370100009",
-            "title": "햇살론유스",
-            "source": "government",
+            "id": "youth-20260504005400213061",
+            "title": "공공근로 일자리(청년 우선 선발)",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "income",
               "employment"
             ],
             "regionSpecificity": "none",
-            "interestMatch": false
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
           },
           {
-            "id": "mois-407000000113",
-            "title": "여성 창업 초기물품 지원",
-            "source": "government",
+            "id": "youth-20260430005400212981",
+            "title": "청년구직자 면접비 지원사업",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
           },
           {
-            "id": "mois-407000000118",
-            "title": "출산축하금 지원",
-            "source": "government",
+            "id": "youth-20260413005400212724",
+            "title": "청년도전지원사업",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
           },
           {
-            "id": "mois-407000000516",
-            "title": "휠체어 등 수리비 지원",
-            "source": "government",
+            "id": "youth-20260430005400212974",
+            "title": "고립·은둔 청년 지원사업",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
           },
           {
-            "id": "mois-407000000517",
-            "title": "이천시 입영지원금",
-            "source": "government",
+            "id": "youth-20260430005400212997",
+            "title": "청년창업농 임대형 스마트팜 운영",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
           },
           {
-            "id": "mois-407000000520",
-            "title": "이천시 난임부부 시술비 지원(추가 10% 지원)",
-            "source": "government",
+            "id": "youth-20260430005400213007",
+            "title": "청년도전지원사업",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
+          },
+          {
+            "id": "youth-20260430005400213010",
+            "title": "청년성장프로젝트",
+            "source": "youth_policy",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "employment"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
+          },
+          {
+            "id": "youth-20260504005400213014",
+            "title": "아산시 AI-디스플레이 인력양성사업",
+            "source": "youth_policy",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "employment"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "employment"
+            ]
           }
         ]
       },
       "youthLeakage": {
         "relevantYouthCount": 831,
-        "top10YouthCount": 0,
-        "top20YouthCount": 0,
+        "top10YouthCount": 8,
+        "top20YouthCount": 13,
         "relevantSuspiciousLocalCount": 545,
-        "top10SuspiciousLocalCount": 0,
-        "top20SuspiciousLocalCount": 0,
-        "top20SuspiciousSamples": []
+        "top10SuspiciousLocalCount": 1,
+        "top20SuspiciousLocalCount": 10,
+        "top20SuspiciousSamples": [
+          {
+            "id": "youth-20260513005400213197",
+            "title": "부산 청년 자산형성 지원(부산청년 기쁨두배통장)",
+            "org": "부산광역시 청년산학국 청년정책과",
+            "matchedToken": "부산"
+          },
+          {
+            "id": "youth-20260406005400212416",
+            "title": "(미추홀구) 청년 자격증 응시료 지원",
+            "org": "인천광역시 청년정책담당관",
+            "matchedToken": "인천"
+          },
+          {
+            "id": "youth-20260406005400212421",
+            "title": "부산 미취업 청년 사회진입 활동비 지원(청년디딤돌플러스+ 카드)",
+            "org": "부산광역시 청년산학국 청년정책과",
+            "matchedToken": "부산"
+          },
+          {
+            "id": "youth-20260406005400212441",
+            "title": "(연수구) 청년 자격증 응시료 지원",
+            "org": "인천광역시 청년정책담당관",
+            "matchedToken": "인천"
+          },
+          {
+            "id": "youth-20260406005400212443",
+            "title": "(부평구) 청년 자격증 응시료 지원",
+            "org": "인천광역시 청년정책담당관",
+            "matchedToken": "인천"
+          },
+          {
+            "id": "youth-20260406005400212444",
+            "title": "(남동구) 청년 자격증 응시료 지원",
+            "org": "인천광역시 청년정책담당관",
+            "matchedToken": "인천"
+          },
+          {
+            "id": "youth-20260406005400212445",
+            "title": "청년 자격증 응시료 지원",
+            "org": "인천광역시 청년정책담당관",
+            "matchedToken": "인천"
+          },
+          {
+            "id": "youth-20260406005400212454",
+            "title": "(중구) 청년 자격증 응시료 지원",
+            "org": "인천광역시 청년정책담당관",
+            "matchedToken": "인천"
+          },
+          {
+            "id": "youth-20260413005400212718",
+            "title": "서귀포시 취업준비 청년 자격증 등 응시료 지원사업",
+            "org": "제주특별자치도 서귀포시 자치행정국 기획예산과",
+            "matchedToken": "제주"
+          },
+          {
+            "id": "youth-20260413005400212721",
+            "title": "청년 취업 설계 프로그램 운영",
+            "org": "제주특별자치도 서귀포시 농수축산경제국 경제일자리과",
+            "matchedToken": "제주"
+          }
+        ]
       }
     },
     {
@@ -265,30 +358,30 @@
             10
           ],
           [
-            "targetScope",
-            10
+            "education",
+            9
           ],
           [
-            "region",
+            "targetScope",
             8
           ],
           [
-            "education",
-            4
-          ],
-          [
-            "income",
+            "region",
             2
           ]
         ],
         "sourceFreq": [
           [
             "government",
-            10
+            8
+          ],
+          [
+            "youth_policy",
+            2
           ]
         ],
-        "regionEvidenceCount": 8,
-        "interestOverlapCount": 2,
+        "regionEvidenceCount": 2,
+        "interestOverlapCount": 10,
         "detail": [
           {
             "id": "mois-O00101000003",
@@ -303,108 +396,11 @@
               "education"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-611000019619",
-            "title": "희망두배 청년통장",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
               "education"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-161300000076",
-            "title": "버팀목전세자금대출",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "income",
-              "education"
-            ],
-            "regionSpecificity": "none",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-B55370100009",
-            "title": "햇살론유스",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "income",
-              "education"
-            ],
-            "regionSpecificity": "none",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-320000000124",
-            "title": "관악 청년 1인 가구 안심 건강검진",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-320000000128",
-            "title": "관악구 구민안전보험",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-320000000298",
-            "title": "관악 미취업청년 어학자격시험 응시료 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-320000000314",
-            "title": "장애인 이동기기 수리비 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            ]
           },
           {
             "id": "mois-O00081600006",
@@ -418,21 +414,153 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
           },
           {
-            "id": "mois-148000000035",
-            "title": "한강수계 주민지원(일반지원사업)",
+            "id": "mois-O00096800006",
+            "title": "고교 진학 후 성적우수 학생 장학금",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "region"
+              "education"
             ],
-            "regionSpecificity": "province",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "youth-20260430005400212963",
+            "title": "대학생 학자금 대출이자 지원",
+            "source": "youth_policy",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "mois-O00096800001",
+            "title": "우리지역 성적우수 대학생 장학금",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "youth-20260504005400213033",
+            "title": "홍성 대학 4-H회 과제 교육",
+            "source": "youth_policy",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "mois-134200000008",
+            "title": "글로벌 현장학습 프로그램 운영",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "mois-134200000011",
+            "title": "인문100년장학금",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "mois-134200000046",
+            "title": "중소기업 취업연계 장학금 (희망사다리Ⅰ유형)",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
+          },
+          {
+            "id": "mois-134200005002",
+            "title": "국가장학금 Ⅱ유형 (대학자체노력연계형)",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "education"
+            ]
           }
         ]
       },
@@ -457,177 +585,214 @@
         "strengthFreq": [
           [
             "strong",
-            10
+            6
+          ],
+          [
+            "moderate",
+            4
           ]
         ],
         "dimensionFreq": [
           [
+            "employment",
+            9
+          ],
+          [
             "age",
-            10
+            6
           ],
           [
             "targetScope",
-            10
+            5
           ],
           [
             "region",
-            10
-          ],
-          [
-            "employment",
-            2
+            1
           ]
         ],
         "sourceFreq": [
           [
             "government",
-            10
+            5
+          ],
+          [
+            "youth_policy",
+            5
           ]
         ],
-        "regionEvidenceCount": 10,
-        "interestOverlapCount": 0,
+        "regionEvidenceCount": 1,
+        "interestOverlapCount": 10,
         "detail": [
           {
-            "id": "mois-641000000686",
-            "title": "청년 복지포인트",
+            "id": "mois-641000000737",
+            "title": "경기청년 기회사다리 금융지원",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "region",
-              "employment"
+              "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": false
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-641000000687",
-            "title": "중소기업 청년 노동자 지원사업",
-            "source": "government",
+            "id": "youth-20260421005400212785",
+            "title": "제주청년 희망사다리 재형저축 사업",
+            "source": "youth_policy",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
-              "targetScope",
-              "region",
               "employment"
             ],
-            "regionSpecificity": "province",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "asset_building"
+            ]
           },
           {
-            "id": "mois-374000000130",
-            "title": "장애인가정 출산 지원",
+            "id": "mois-149200000030",
+            "title": "체불청산 지원 융자(사업주 및 근로자)",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-374000000136",
-            "title": "수원시 출생·입양 지원금 지급",
+            "id": "mois-154300000172",
+            "title": "농가사료직거래활성화지원",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-374000000560",
-            "title": "수원시 시민안전보험",
+            "id": "mois-B49000100203",
+            "title": "임금등 체불 근로자 생계비 융자",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-374000000565",
-            "title": "(수원시 장안구) 유축기 대여 지원 서비스",
+            "id": "mois-B55263500004",
+            "title": "사립학교 교직원 생활자금 대여",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
             "dimensions": [
               "age",
               "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-374000000566",
-            "title": "(수원시 권선구) 유축기 대여 지원 서비스",
-            "source": "government",
+            "id": "youth-20260421005400112773",
+            "title": "미소금융 청년 미래이음 대출",
+            "source": "youth_policy",
             "status": "unknown",
-            "strength": "strong",
+            "strength": "moderate",
             "dimensions": [
-              "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-374000000567",
-            "title": "(수원시 팔달구) 유축기 대여 지원 서비스",
-            "source": "government",
+            "id": "youth-20250904005400211630",
+            "title": "청년미래적금 운영",
+            "source": "youth_policy",
             "status": "unknown",
-            "strength": "strong",
+            "strength": "moderate",
             "dimensions": [
-              "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "asset_building"
+            ]
           },
           {
-            "id": "mois-374000000583",
-            "title": "(수원시) 둘째자녀 이상 출산여성 산후조리 한약할인 안내",
-            "source": "government",
+            "id": "youth-20250903005400211613",
+            "title": "청년 주택임차보증금 이자 지원",
+            "source": "youth_policy",
             "status": "unknown",
-            "strength": "strong",
+            "strength": "moderate",
             "dimensions": [
-              "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "loan"
+            ]
           },
           {
-            "id": "mois-374000000594",
-            "title": "(수원시) 청나래",
-            "source": "government",
+            "id": "youth-20250715005400211274",
+            "title": "청년내일저축계좌 지원",
+            "source": "youth_policy",
             "status": "unknown",
-            "strength": "strong",
+            "strength": "moderate",
             "dimensions": [
-              "age",
-              "targetScope",
-              "region"
+              "employment"
             ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "asset_building"
+            ]
           }
         ]
       },
@@ -662,21 +827,29 @@
           ],
           [
             "targetScope",
-            10
+            8
           ],
           [
             "region",
-            10
+            5
+          ],
+          [
+            "family",
+            5
           ]
         ],
         "sourceFreq": [
           [
             "government",
-            10
+            8
+          ],
+          [
+            "youth_policy",
+            2
           ]
         ],
-        "regionEvidenceCount": 10,
-        "interestOverlapCount": 5,
+        "regionEvidenceCount": 5,
+        "interestOverlapCount": 10,
         "detail": [
           {
             "id": "mois-407000000118",
@@ -690,7 +863,11 @@
               "region"
             ],
             "regionSpecificity": "exact_city",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "childcare"
+            ]
           },
           {
             "id": "mois-407000000522",
@@ -704,77 +881,11 @@
               "region"
             ],
             "regionSpecificity": "exact_city",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-407000000113",
-            "title": "여성 창업 초기물품 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-407000000516",
-            "title": "휠체어 등 수리비 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-407000000517",
-            "title": "이천시 입영지원금",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-407000000520",
-            "title": "이천시 난임부부 시술비 지원(추가 10% 지원)",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
-          },
-          {
-            "id": "mois-O00010400003",
-            "title": "이천 농업테마공원 숙박시설 이용감면 제공",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region"
-            ],
-            "regionSpecificity": "exact_city",
-            "interestMatch": false
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "childcare"
+            ]
           },
           {
             "id": "mois-641000000175",
@@ -788,7 +899,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "childcare"
+            ]
           },
           {
             "id": "mois-641000000671",
@@ -802,7 +917,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "childcare"
+            ]
           },
           {
             "id": "mois-641000000852",
@@ -816,14 +935,106 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
+          },
+          {
+            "id": "youth-20260504005400213020",
+            "title": "서산시 청년 신혼부부 주택 전세자금 대출이자 지원사업",
+            "source": "youth_policy",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "family"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
+          },
+          {
+            "id": "mois-999000000022",
+            "title": "기존주택 전세임대주택 지원사업",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "family"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
+          },
+          {
+            "id": "mois-999000000026",
+            "title": "행복주택 공급",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "family"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
+          },
+          {
+            "id": "mois-O00027400003",
+            "title": "전남개발공사 시지역(무안,광양) 만원주택 공급",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "family"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
+          },
+          {
+            "id": "youth-20260504005400213039",
+            "title": "홍성 신혼부부 주거자금 대출이자 지원",
+            "source": "youth_policy",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "family"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "housing"
+            ]
           }
         ]
       },
       "youthLeakage": {
         "relevantYouthCount": 604,
-        "top10YouthCount": 0,
-        "top20YouthCount": 0,
+        "top10YouthCount": 2,
+        "top20YouthCount": 1,
         "relevantSuspiciousLocalCount": 476,
         "top10SuspiciousLocalCount": 0,
         "top20SuspiciousLocalCount": 0,
@@ -892,7 +1103,11 @@
               "family"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "childcare"
+            ]
           },
           {
             "id": "mois-361000000114",
@@ -906,7 +1121,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "childcare"
+            ]
           },
           {
             "id": "mois-480000000105",
@@ -920,7 +1139,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-481000000364",
@@ -934,7 +1157,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-481000000368",
@@ -948,7 +1175,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-481000000376",
@@ -962,7 +1193,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-481000000378",
@@ -976,7 +1211,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-481000000379",
@@ -990,7 +1229,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-481000000382",
@@ -1004,7 +1247,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           },
           {
             "id": "mois-482000000140",
@@ -1018,7 +1265,11 @@
               "region"
             ],
             "regionSpecificity": "province",
-            "interestMatch": true
+            "interestMatch": true,
+            "interestOverlapCount": 1,
+            "matchedInterests": [
+              "welfare"
+            ]
           }
         ]
       },

@@ -1,7 +1,7 @@
 import type { Benefit, EligibilityStatus } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 import { getDDayInfo } from "@/lib/dates/dday";
-import { matchesUserInterest } from "./topics";
+import { countUserInterestOverlap } from "./topics";
 import {
   resolvePersonalizationEvidence,
   STRENGTH_RANK,
@@ -49,17 +49,20 @@ export interface GetRecommendedBenefitsOptions {
  * and no numeric score is ever surfaced to the user. Order:
  *   1. EligibilityStatus (likely_eligible before unknown; not_eligible is
  *      already filtered out before this ever runs)
- *   2. personalization strength (strong > moderate > weak)
- *   3. distinct specific matched-dimension count (more > fewer)
- *   4. region specificity (exact city > province-wide > no verified region
+ *   2. selected-interest overlap count, via `countUserInterestOverlap` (see
+ *      domain/benefit/topics.ts) — more distinct matched selected interests
+ *      ranks first. Applied AFTER eligibility/safety admission (the
+ *      not_eligible filter and, for `excludeWeakUnknown`, the weak-evidence
+ *      and unresolved-local-scope filters above) — it can reorder among
+ *      admitted candidates but can never resurrect a filtered-out benefit.
+ *      When `profile.interests` is empty every candidate scores 0, so this
+ *      key always ties and falls through to the same ordering as before
+ *      interest-intersection ranking existed.
+ *   3. personalization strength (strong > moderate > weak)
+ *   4. distinct specific matched-dimension count (more > fewer)
+ *   5. region specificity (exact city > province-wide > no verified region
  *      match) — ranking/tie-breaking only, never changes matchRegion()'s
  *      own pass/fail/unknown result
- *   5. user-interest overlap, via `matchesUserInterest` (see
- *      domain/benefit/topics.ts) — LOW-PRIORITY tie-breaker only, even though
- *      the historical over-tagging bugs it used to inherit from raw
- *      `category` equality (see docs/beta-personalization-audit.md §4/§6)
- *      are now fixed at the source. It must still never outrank verified
- *      eligibility/personalization evidence.
  *   6. application deadline proximity (sooner first)
  *   7. benefit id — stable final tie-breaker so ordering is deterministic
  *      even when every prior key ties.
@@ -72,7 +75,7 @@ export function getRecommendedBenefits(
   options: GetRecommendedBenefitsOptions = {}
 ): Benefit[] {
   const { evidenceById, excludeWeakUnknown = false } = options;
-  const interests = new Set(profile.interests ?? []);
+  const interests = profile.interests ?? [];
 
   const candidates = benefits
     .filter((b) => statusById.get(b.id) !== "not_eligible")
@@ -80,6 +83,7 @@ export function getRecommendedBenefits(
       benefit,
       status: statusById.get(benefit.id) ?? "unknown",
       evidence: resolvePersonalizationEvidence(benefit, profile, evidenceById),
+      interestOverlapCount: countUserInterestOverlap(benefit, interests),
     }))
     .filter((c) => !excludeWeakUnknown || c.status === "likely_eligible" || c.evidence.strength !== "weak")
     .filter(
@@ -94,6 +98,9 @@ export function getRecommendedBenefits(
       const statusDiff = STATUS_RANK[a.status] - STATUS_RANK[b.status];
       if (statusDiff !== 0) return statusDiff;
 
+      const interestDiff = b.interestOverlapCount - a.interestOverlapCount;
+      if (interestDiff !== 0) return interestDiff;
+
       const strengthDiff = STRENGTH_RANK[a.evidence.strength] - STRENGTH_RANK[b.evidence.strength];
       if (strengthDiff !== 0) return strengthDiff;
 
@@ -103,10 +110,6 @@ export function getRecommendedBenefits(
       const regionDiff =
         REGION_SPECIFICITY_RANK[a.evidence.regionSpecificity] - REGION_SPECIFICITY_RANK[b.evidence.regionSpecificity];
       if (regionDiff !== 0) return regionDiff;
-
-      const interestDiff =
-        Number(matchesUserInterest(b.benefit, interests)) - Number(matchesUserInterest(a.benefit, interests));
-      if (interestDiff !== 0) return interestDiff;
 
       const aDday = getDDayInfo(a.benefit.application?.endDate);
       const bDday = getDDayInfo(b.benefit.application?.endDate);

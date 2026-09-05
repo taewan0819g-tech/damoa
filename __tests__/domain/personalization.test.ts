@@ -265,9 +265,15 @@ describe("full discovery vs home-preview admission filtering", () => {
   });
 });
 
-/** §7 interest overlap is a low-priority tie-breaker, never able to outrank verified strength. */
-describe("interest overlap is a low-priority tie-breaker only", () => {
-  it("does not let interest overlap promote a weaker match above a stronger one", () => {
+/**
+ * §7 (interest-intersection ranking): selected-interest overlap count now
+ * ranks immediately after EligibilityStatus — ahead of personalization
+ * strength/dimension count/region specificity — so a benefit matching more
+ * of the user's selected interests outranks a "stronger" evidence match with
+ * no interest overlap. See domain/benefit/recommend.ts's comparator docs.
+ */
+describe("interest overlap now outranks personalization strength", () => {
+  it("lets a higher interest-overlap match outrank a stronger no-interest-overlap match", () => {
     // Distinct from the shared module-level `profile`: needs a resolvable
     // individualIncomeBand so the income rule below actually PASSES (an
     // unresolvable field would leave it out of passedLeaves entirely,
@@ -318,7 +324,9 @@ describe("interest overlap is a low-priority tie-breaker only", () => {
       incomeProfile,
       2
     );
-    expect(result.map((b) => b.id)).toEqual(["strong-no-interest", "weak-interest-match"]);
+    // weak-interest-match matches a selected interest (employment) while
+    // strong-no-interest-match matches none — interest overlap now wins.
+    expect(result.map((b) => b.id)).toEqual(["weak-interest-match", "strong-no-interest"]);
   });
 
   it("breaks a tie between otherwise-equal candidates using interest overlap", () => {
