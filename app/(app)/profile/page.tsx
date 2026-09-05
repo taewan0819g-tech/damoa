@@ -13,14 +13,20 @@ import { OptionList } from "@/components/onboarding/OptionList";
 import { useProfileStore } from "@/stores/profileStore";
 import { calculateProfileCompletion } from "@/domain/profile/completion";
 import { calculateAge } from "@/domain/profile/age";
-import { CURRENT_STATUS_OPTIONS, CURRENT_STATUS_TO_PROFILE, deriveCurrentStatus } from "@/domain/profile/currentStatus";
 import { PROVINCES } from "@/lib/constants/regions";
+import { getCitiesForProvince } from "@/lib/eligibility/regionGazetteer";
 import { INTEREST_CATEGORIES } from "@/lib/constants/interests";
 import { INCOME_BAND_OPTIONS } from "@/lib/constants/incomeBands";
-import { CATEGORY_LABELS, HOUSING_TYPE_LABELS, MARITAL_STATUS_LABELS } from "@/lib/labels";
+import {
+  CATEGORY_LABELS,
+  EDUCATION_STATUS_LABELS,
+  EMPLOYMENT_STATUS_LABELS,
+  HOUSING_TYPE_LABELS,
+  MARITAL_STATUS_LABELS,
+} from "@/lib/labels";
 import { TRI_STATE_OPTIONS, HOMEOWNER_TRI_STATE_OPTIONS, booleanFromTriState, triStateFromBoolean } from "@/lib/constants/triState";
 import { todayPolicyDateString } from "@/lib/dates/policyDate";
-import type { HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
+import type { EducationStatus, EmploymentStatus, HousingType, IncomeBand, MaritalStatus } from "@/types/profile";
 
 const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
   ["own", "jeonse", "monthly_rent", "living_with_family", "other"] as HousingType[]
@@ -29,6 +35,17 @@ const HOUSING_OPTIONS: { value: HousingType; label: string }[] = (
 const MARITAL_OPTIONS: { value: MaritalStatus; label: string }[] = (
   ["single", "married", "divorced", "widowed"] as MaritalStatus[]
 ).map((value) => ({ value, label: MARITAL_STATUS_LABELS[value] }));
+
+// employmentStatus and educationStatus are independent UserProfile fields —
+// editing one must preserve the other (see the two separate OptionList
+// onChange handlers below).
+const EMPLOYMENT_OPTIONS: { value: EmploymentStatus; label: string }[] = (
+  ["employed", "unemployed", "self_employed", "freelancer", "student", "other"] as EmploymentStatus[]
+).map((value) => ({ value, label: EMPLOYMENT_STATUS_LABELS[value] }));
+
+const EDUCATION_OPTIONS: { value: EducationStatus; label: string }[] = (
+  ["high_school", "university", "graduate_school", "graduated", "not_applicable"] as EducationStatus[]
+).map((value) => ({ value, label: EDUCATION_STATUS_LABELS[value] }));
 
 function toManwon(amount?: number): string {
   return amount !== undefined ? String(amount / 10000) : "";
@@ -46,8 +63,25 @@ export default function ProfilePage() {
 
   const completion = calculateProfileCompletion(profile);
   const age = calculateAge(profile.birthDate);
-  const currentStatus = deriveCurrentStatus(profile.employmentStatus, profile.educationStatus);
   const interests = profile.interests ?? [];
+
+  // Canonical city list for the currently-selected province. If a
+  // previously-persisted city value isn't in this list (renamed county, typo,
+  // pre-canonical free-text entry, etc.), we must NOT silently drop or
+  // "correct" it just because this page rendered — we only ever touch
+  // residence.city in response to an explicit user action on these fields
+  // (see the two onChange handlers below).
+  const cityOptions = getCitiesForProvince(profile.residence?.province ?? "");
+  const currentCity = profile.residence?.city;
+  const isUnrecognizedCity = !!currentCity && !cityOptions.includes(currentCity);
+
+  // Same "never silently drop or correct" guarantee, one level up: a
+  // persisted province the current roster no longer offers (e.g. a
+  // pre-2026-07-01 "광주광역시"/"전라남도" resident, now superseded by
+  // "전남광주통합특별시" — see lib/constants/regions.ts) must stay visible and
+  // untouched until the user explicitly changes the province field itself.
+  const currentProvince = profile.residence?.province;
+  const isUnrecognizedProvince = !!currentProvince && !(PROVINCES as readonly string[]).includes(currentProvince);
 
   const handleReset = () => {
     if (typeof window !== "undefined" && !window.confirm("입력한 정보를 모두 초기화하고 온보딩을 다시 시작할까요?")) {
@@ -87,38 +121,83 @@ export default function ProfilePage() {
           <Select
             id="province"
             value={profile.residence?.province ?? ""}
-            onChange={(e) =>
-              updateProfile({ residence: { ...profile.residence, province: e.target.value || undefined } })
-            }
+            onChange={(e) => {
+              const province = e.target.value;
+              // City is province-scoped: when the user explicitly changes
+              // province, carry the city over only if it's still valid for
+              // the new province — never fuzzy-map it, just clear it.
+              const nextCities = getCitiesForProvince(province);
+              updateProfile({
+                residence: {
+                  ...profile.residence,
+                  province: province || undefined,
+                  city: currentCity && nextCities.includes(currentCity) ? currentCity : undefined,
+                },
+              });
+            }}
           >
             <option value="">선택해 주세요</option>
+            {isUnrecognizedProvince && (
+              <option value={currentProvince}>{`${currentProvince} (확인 필요)`}</option>
+            )}
             {PROVINCES.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
           </Select>
+          {isUnrecognizedProvince && (
+            <p className="text-xs text-danger">
+              기존 입력: {currentProvince} (확인 필요) — 목록에서 정확한 지역을 다시 선택할 수 있어요.
+            </p>
+          )}
         </Field>
-        <Field label="시/군/구" htmlFor="city">
-          <Input
+        <Field label="시/군/구 (선택 입력)" htmlFor="city">
+          <Select
             id="city"
-            placeholder="예: 이천시"
-            value={profile.residence?.city ?? ""}
-            onChange={(e) => updateProfile({ residence: { ...profile.residence, city: e.target.value || undefined } })}
-          />
+            value={currentCity ?? ""}
+            onChange={(e) =>
+              updateProfile({ residence: { ...profile.residence, city: e.target.value || undefined } })
+            }
+          >
+            <option value="">선택 안 함</option>
+            {isUnrecognizedCity && (
+              <option value={currentCity}>{`${currentCity} (확인 필요)`}</option>
+            )}
+            {cityOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+          {isUnrecognizedCity && (
+            <p className="text-xs text-danger">
+              기존 입력: {currentCity} (확인 필요) — 목록에서 정확한 지역을 다시 선택하거나 선택 해제할 수 있어요.
+            </p>
+          )}
         </Field>
       </Section>
 
       <Section title="현재 상태">
-        <OptionList
-          name="currentStatus"
-          options={CURRENT_STATUS_OPTIONS}
-          value={currentStatus}
-          onChange={(value) => {
-            const mapped = CURRENT_STATUS_TO_PROFILE[value];
-            updateProfile({ employmentStatus: mapped.employmentStatus, educationStatus: mapped.educationStatus });
-          }}
-        />
+        <p className="text-xs text-foreground-muted">일과 학업을 병행하고 있다면 각각 선택할 수 있어요.</p>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="employmentStatus">일/고용 상태</Label>
+          <OptionList
+            name="employmentStatus"
+            options={EMPLOYMENT_OPTIONS}
+            value={profile.employmentStatus}
+            onChange={(value) => updateProfile({ employmentStatus: value })}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="educationStatus">학업 상태 (선택 입력)</Label>
+          <OptionList
+            name="educationStatus"
+            options={EDUCATION_OPTIONS}
+            value={profile.educationStatus}
+            onChange={(value) => updateProfile({ educationStatus: value })}
+          />
+        </div>
       </Section>
 
       <Section title="가구·소득">

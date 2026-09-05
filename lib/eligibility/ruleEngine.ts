@@ -150,34 +150,108 @@ export function evaluateRule(rule: EligibilityRule, profile: UserProfile): NodeR
 }
 
 /**
+ * A single evaluated rule leaf (never a group's aggregate), paired with the
+ * originating rule so callers can inspect which field/operator/value
+ * produced a PASS — used by `derivePersonalizationEvidence` (see
+ * domain/benefit/personalization.ts) to classify ranking-only
+ * personalization evidence. Never used to alter the tri-state
+ * pass/fail/unknown status logic below.
+ */
+export interface LeafRecord {
+  rule: EligibilityRule;
+  result: NodeResult;
+}
+
+/**
+ * Result of evaluating one tree node for BOTH status (`result`, mirrors the
+ * pre-existing tri-state logic exactly, unchanged) and personalization
+ * evidence (`evidenceLeaves`, branch-aware — see `evaluateGroup`'s "any"
+ * handling below). Computed together in one traversal so evidence
+ * collection never costs a second walk of the tree.
+ */
+interface NodeEval {
+  result: NodeResult;
+  /**
+   * PASS leaves eligible to count as personalization evidence FROM THIS
+   * SUBTREE ONLY. Deliberately narrower than "every leaf under this node
+   * that happened to pass" — see the "any" branch-aware filtering below,
+   * which is the whole reason this is tracked separately from the flat
+   * `leaves` accumulator (which still records every leaf unconditionally,
+   * for `passedRules`/`failedRules`/`hasEvidence`/`hasPositiveEvidence`,
+   * completely unchanged from before).
+   */
+  evidenceLeaves: EligibilityRule[];
+}
+
+/**
  * `leaves` accumulates every individual rule's result (never a group's
  * aggregate), across the whole tree, in evaluation order — used by
- * `evaluateEligibilityDetailed` to compute evidence diagnostics without a
- * second traversal.
+ * `evaluateEligibilityDetailed` to compute status-adjacent diagnostics
+ * (`passedRules`/`failedRules`/`hasEvidence`/`hasPositiveEvidence`) without
+ * a second traversal. Untouched by the branch-aware evidence filtering
+ * below — those counts intentionally still count every leaf regardless of
+ * which "any" branch it lived in (see their docs on `EligibilityDiagnostics`
+ * — a leaf that only ever failed inside an unresolved "any" branch is still
+ * "evidence" in the `hasEvidence` sense).
  */
-function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile, leaves: NodeResult[]): NodeResult {
+function evaluateNode(node: EligibilityRule | EligibilityRuleGroup, profile: UserProfile, leaves: LeafRecord[]): NodeEval {
   if (isGroup(node)) {
     return evaluateGroup(node, profile, leaves);
   }
   const result = evaluateRule(node, profile);
-  leaves.push(result);
-  return result;
+  leaves.push({ rule: node, result });
+  return { result, evidenceLeaves: result === "pass" ? [node] : [] };
 }
 
-function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile, leaves: NodeResult[]): NodeResult {
-  const results = group.rules.map((child) => evaluateNode(child, profile, leaves)).filter((r) => r !== "skip");
+function evaluateGroup(group: EligibilityRuleGroup, profile: UserProfile, leaves: LeafRecord[]): NodeEval {
+  const childEvals = group.rules.map((child) => evaluateNode(child, profile, leaves));
+  const results = childEvals.map((c) => c.result).filter((r) => r !== "skip");
 
   if (group.type === "all") {
-    if (results.includes("fail")) return "fail";
-    if (results.includes("unknown")) return "unknown";
-    return "pass";
+    let result: NodeResult;
+    if (results.includes("fail")) result = "fail";
+    else if (results.includes("unknown")) result = "unknown";
+    else result = "pass";
+    // "all": every child is SIMULTANEOUSLY required, never an alternative —
+    // no branch ambiguity, so a child's own verified PASS is real evidence
+    // about the user regardless of whether sibling requirements are
+    // provable. Union every child's own evidence leaves unconditionally
+    // (same as the pre-existing flat-leaves behavior for "all").
+    return { result, evidenceLeaves: childEvals.flatMap((c) => c.evidenceLeaves) };
   }
 
   // "any" group
-  if (results.includes("pass")) return "pass";
-  if (results.includes("unknown")) return "unknown";
-  if (results.length === 0) return "unknown";
-  return "fail";
+  let result: NodeResult;
+  if (results.includes("pass")) result = "pass";
+  else if (results.includes("unknown")) result = "unknown";
+  else if (results.length === 0) result = "unknown";
+  else result = "fail";
+
+  // "any" children are MUTUALLY ALTERNATIVE eligibility paths — the benefit
+  // only requires ONE of them, not all. Unioning PASS leaves across
+  // DIFFERENT alternative branches (e.g. "age PASS + income UNKNOWN" OR
+  // "region PASS + employment UNKNOWN") would fabricate combined dimension
+  // coverage that no single verified path actually proves — measured and
+  // documented in docs/audits/or-branch-personalization-audit.json. So only
+  // a branch that ITSELF fully resolved to "pass" may contribute evidence;
+  // branches that stayed unknown/fail contribute nothing, even if one of
+  // their own leaves individually passed.
+  //
+  // Remaining edge case: if MULTIPLE alternative branches all independently
+  // PASS for this user (e.g. "(age PASS) OR (region PASS)" where both
+  // happen to hold), evidence must still come from exactly ONE of them —
+  // otherwise unioning "age" + "region" from two independent alternative
+  // paths would fabricate the same kind of combined-dimension strength this
+  // whole guard exists to prevent, just via multiple-pass instead of
+  // partial-pass branches. A benefit only actually required ONE alternative
+  // path to hold, so only one path's evidence is real. We deterministically
+  // take the FIRST passing branch (in rule-declaration order) — arbitrary
+  // but stable, and simplest to reason about; there is currently no
+  // production case to prefer one passing branch over another (the frozen
+  // catalog has zero `any` groups — see the audit referenced above).
+  const firstPassingBranch = childEvals.find((c) => c.result === "pass");
+  const evidenceLeaves = firstPassingBranch ? firstPassingBranch.evidenceLeaves : [];
+  return { result, evidenceLeaves };
 }
 
 const NODE_RESULT_TO_STATUS: Record<Exclude<NodeResult, "skip">, EligibilityStatus> = {
@@ -242,6 +316,15 @@ export interface EligibilityDiagnostics {
    * true`) — a full pass on partial information is not full evidence.
    */
   downgradedFromPass: boolean;
+  /**
+   * Every leaf that resolved to a concrete "pass" against real profile
+   * data, with its originating field/operator/value — ranking-only raw
+   * material for `derivePersonalizationEvidence` (see
+   * domain/benefit/personalization.ts). NEVER used to compute `status`
+   * above, and never returned as-is from a user-facing API (see that
+   * module's docs for why raw rule details must stay server-internal).
+   */
+  passedLeaves: { field: string; operator: EligibilityRule["operator"]; value: unknown }[];
 }
 
 /**
@@ -287,19 +370,25 @@ export function evaluateEligibilityDetailed(
       hasEvidence: false,
       hasPositiveEvidence: false,
       downgradedFromPass: false,
+      passedLeaves: [],
     };
   }
 
-  const leaves: NodeResult[] = [];
-  const result = evaluateGroup(benefit.eligibility, profile, leaves);
+  const leaves: LeafRecord[] = [];
+  const { result, evidenceLeaves } = evaluateGroup(benefit.eligibility, profile, leaves);
   const normalized = result === "skip" ? "unknown" : result;
 
-  const passedRules = leaves.filter((r) => r === "pass").length;
-  const failedRules = leaves.filter((r) => r === "fail").length;
+  const passedRules = leaves.filter((l) => l.result === "pass").length;
+  const failedRules = leaves.filter((l) => l.result === "fail").length;
   const resolvedRules = passedRules + failedRules;
   const isIncomplete = benefit.eligibilityDataStatus === "incomplete" || benefit.hasUnresolvedEligibility === true;
   const downgradedFromPass = isIncomplete && normalized === "pass";
   const status = isIncomplete ? (normalized === "fail" ? "not_eligible" : "unknown") : NODE_RESULT_TO_STATUS[normalized];
+  // Branch-aware (see NodeEval/evaluateGroup docs) — NOT the same as
+  // `leaves.filter(pass)` above. `passedRules`/`hasPositiveEvidence` above
+  // intentionally still count every flat PASS leaf regardless of "any"
+  // branch; only this ranking-only field excludes cross-branch OR unions.
+  const passedLeaves = evidenceLeaves.map((rule) => ({ field: rule.field, operator: rule.operator, value: rule.value }));
 
   return {
     status,
@@ -309,6 +398,7 @@ export function evaluateEligibilityDetailed(
     failedRules,
     hasEvidence: resolvedRules > 0,
     hasPositiveEvidence: passedRules > 0,
+    passedLeaves,
     downgradedFromPass,
   };
 }

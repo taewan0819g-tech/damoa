@@ -2,6 +2,7 @@ import type { Benefit, EligibilityStatus } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 import { getDDayInfo } from "@/lib/dates/dday";
 import { getRecommendedBenefits } from "./recommend";
+import type { PersonalizationEvidence } from "./personalization";
 
 export type BenefitSort = "recommended" | "deadline" | "latest" | "rate";
 
@@ -9,14 +10,19 @@ export function sortBenefits(
   benefits: Benefit[],
   statusById: Map<string, EligibilityStatus>,
   profile: UserProfile,
-  sort: BenefitSort
+  sort: BenefitSort,
+  evidenceById?: Map<string, PersonalizationEvidence>
 ): Benefit[] {
   switch (sort) {
     case "recommended": {
       // The server-side /api/benefits/match endpoint never returns
       // not_eligible benefits, so `benefits` here is already just
       // likely_eligible + unknown — no separate not_eligible bucket needed.
-      return getRecommendedBenefits(benefits, statusById, profile, benefits.length);
+      // Uses the SAME comparator as the home preview (see recommend.ts) —
+      // full discovery recall (excludeWeakUnknown stays false/default) so
+      // weak-evidence candidates are still discoverable here, just ranked
+      // below stronger ones.
+      return getRecommendedBenefits(benefits, statusById, profile, benefits.length, { evidenceById });
     }
     case "deadline":
       return [...benefits].sort((a, b) => {

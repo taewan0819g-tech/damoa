@@ -1,0 +1,72 @@
+{
+  "generatedAt": "2026-09-04T23:20:00.000Z",
+  "checkpoint": "Corrective Region Architecture — apply 2026-07-01 gazetteer freshness update via CURRENT_RESIDENCE_GAZETTEER/POLICY_REGION_GAZETTEER split",
+  "purpose": "docs/audits/region-gazetteer-freshness.json (previous checkpoint) found that applying the verified 2026-07-01 전남광주통합특별시 merger + 인천 구제 개편 to the single CITY_GAZETTEER shifted frozen-catalog candidate-set membership by 21 diffs, and BLOCKED the update rather than silently changing eligibility-rule extraction as a side effect of a UI-only change. This checkpoint resolves the blocker by splitting the gazetteer into CURRENT_RESIDENCE_GAZETTEER (job A — UI selectors, always current) and POLICY_REGION_GAZETTEER (job B — text parsing, superset of historical + current names), applying the update to both, and reviewing the resulting candidate-set diff explicitly here rather than leaving it unexamined.",
+  "method": {
+    "script": "scripts/frozenMatchingSemanticEquivalence.ts",
+    "frozenInputs": [
+      "/tmp/mois_serviceList_full.json",
+      "/tmp/mois_supportConditions_full.json",
+      "/tmp/youth_policy_full.json"
+    ],
+    "procedure": "Ran the script against the working tree with the gazetteer split applied (lib/eligibility/region.ts + lib/eligibility/regionGazetteer.ts) to produce /tmp/frozen_new.json, then git-checked-out the pre-checkpoint committed versions of those two files (commit bc279a0) and re-ran the identical script to produce /tmp/frozen_old.json, then restored the working-tree files. Diffed candidateIds and {status, hasPositiveEvidence} per representative profile between the two snapshots.",
+    "representativeProfiles": ["empty", "singleUnemployedUniv", "marriedEmployedHighIncome", "singleParentLowIncome", "studentNoIncome", "homeownerFreelancer"],
+    "note": "None of the 6 representative profiles reside in 인천광역시, 광주광역시, 전라남도, or 전남광주통합특별시 — this reproduces the exact same 21-diff figure the prior audit found (its empiricalConflictEvidence.candidateIdDiffCount), confirming the diff is fully attributable to the two verified administrative changes and not to any unrelated drift."
+  },
+  "results": {
+    "candidateIdDiffCount": 21,
+    "statusDiffCount": 0,
+    "allDiffsAreRemovals": true,
+    "unexpectedNonRegionMismatchCount": 0,
+    "perProfile": {
+      "empty": { "added": [], "removed": [] },
+      "singleUnemployedUniv": { "added": [], "removed": ["mois-349000000105", "mois-349000000126", "mois-350000000101", "mois-350000000105", "mois-O00091000006"] },
+      "marriedEmployedHighIncome": { "added": [], "removed": ["mois-349000000105", "mois-349000000126", "mois-350000000101", "mois-350000000105"] },
+      "singleParentLowIncome": { "added": [], "removed": ["mois-349000000105", "mois-349000000126", "mois-350000000101", "mois-350000000105"] },
+      "studentNoIncome": { "added": [], "removed": ["mois-349000000105", "mois-349000000126", "mois-350000000101", "mois-350000000105", "mois-O00091000006"] },
+      "homeownerFreelancer": { "added": [], "removed": ["mois-349000000126", "mois-350000000101", "mois-350000000105"] }
+    }
+  },
+  "manualClassification": [
+    {
+      "benefitId": "mois-349000000105",
+      "title": "사회복지 증진 지원",
+      "eligibilityTextExcerpt": "영종구에서 연속하여 2년 이상 거주한 자",
+      "classification": "region-intended",
+      "explanation": "Before this checkpoint, the parser's gazetteer had no entry for 영종구 (it did not exist as a recognized district under any province — it was only created 2026-07-01), so region-clause extraction could not resolve it to a province and fell back to producing NO region rule at all. A benefit with no extracted region rule is treated as unrestricted and matches every profile, including residents of 서울/경기/부산/제주/세종 with nothing to do with Incheon — a false positive. With 영종구 now recognized under 인천광역시 in POLICY_REGION_GAZETTEER, extraction correctly produces a {province: 인천광역시, city: 영종구} rule, and this benefit correctly stops being a candidate for non-Incheon residents. This is the intended, correct effect of the fix, not a regression."
+    },
+    {
+      "benefitId": "mois-349000000126",
+      "title": "아빠 육아휴직 장려금",
+      "eligibilityTextExcerpt": "육아휴직자가 신청일 기준 1년 이상 계속하여 영종구에 주민등록을 둔 자",
+      "classification": "region-intended",
+      "explanation": "Same root cause and same fix as mois-349000000105 — 영종구 residency requirement, previously unresolvable and thus unrestricted, now correctly resolved and scoped to 인천광역시/영종구 residents only."
+    },
+    {
+      "benefitId": "mois-350000000101",
+      "title": "지역화폐(제물포구사랑상품권)",
+      "eligibilityTextExcerpt": "제물포구 소재 시장 및 소상공인, 제물포구 및 인근주민",
+      "classification": "region-intended",
+      "explanation": "제물포구 is a brand-new 2026-07-01 Incheon district (merger of former 중구+동구), previously absent from every gazetteer. Same fix, same direction: now correctly resolved to 인천광역시/제물포구 and no longer a false-positive candidate for unrelated residents."
+    },
+    {
+      "benefitId": "mois-350000000105",
+      "title": "출산 장려 활성화 서비스",
+      "eligibilityTextExcerpt": "출생 신고일 현재 제물포구에 출생아와 함께 주민등록이 되어 있고 실제 거주하는 가정",
+      "classification": "region-intended",
+      "explanation": "Same root cause and fix as mois-350000000101 — 제물포구 residency requirement now correctly resolved and scoped."
+    },
+    {
+      "benefitId": "mois-O00091000006",
+      "title": "인천대교 희망장학금",
+      "eligibilityTextExcerpt": "거주지 : 영종구, 미추홀구, 연수구에 거주하고 있는 관내 고등학생, 관내외 대학교 정규학기 재학생",
+      "classification": "region-intended",
+      "explanation": "This clause mixes a previously-unresolvable district (영종구, new 2026-07-01) with two already-resolvable, unaffected Incheon districts (미추홀구, 연수구) in one OR list. Previously, because 영종구 could not be resolved, extraction's behavior for the whole clause degraded (no reliable region rule), making the benefit an unrestricted candidate. With 영종구 now resolvable, the full three-district OR list extracts correctly and the benefit correctly stops matching residents outside those three 인천광역시 districts."
+    }
+  ],
+  "conclusion": {
+    "outcome": "REVIEWED_AND_APPLIED",
+    "summary": "All 21 candidate-set diffs across the 6 representative profiles trace to exactly 5 benefits, all genuine 2026-07-01 Incheon new-district (영종구/제물포구) residency requirements that the pre-update parser could not resolve at all (silently producing an unrestricted/no-region-rule fallback — itself a latent false-positive bug for every non-Incheon profile). Every diff is a removal that corrects that false positive; zero diffs are additions, status flips for co-present candidates, or otherwise unexplained. No 전남광주통합특별시 (Gwangju+Jeonnam merger) diffs appear in this sample because none of the 6 representative profiles reside in 광주/전남/전남광주통합특별시 — POLICY_REGION_GAZETTEER's historical 광주광역시/전라남도 entries are unchanged (see regionGazetteer.ts file header), so existing 광주/전남 policy-text extraction is unaffected either way.",
+    "invariantStatus": "This checkpoint's frozen-equivalence invariant is redefined from 'zero candidate diffs' (the prior checkpoint's blocking condition) to 'zero UNEXPLAINED candidate diffs' — every diff here is individually traced to a specific, correct extraction improvement enabled by recognizing real, already-effective administrative units. mismatchCount (unexpected/non-region diffs) = 0."
+  }
+}

@@ -1,5 +1,6 @@
 import type { Benefit, BenefitMatchResult, EligibilityStatus, UserProfile } from "@/types";
 import { evaluateEligibility, evaluateEligibilityDetailed } from "@/lib/eligibility/ruleEngine";
+import { derivePersonalizationEvidence, type PersonalizationEvidence } from "@/domain/benefit/personalization";
 
 export function matchBenefits(benefits: Benefit[], profile: UserProfile): BenefitMatchResult[] {
   return benefits.map((benefit) => ({
@@ -27,6 +28,14 @@ export interface BenefitMatchDetailedResult extends BenefitMatchResult {
    * `isRelevantForFeed`.
    */
   hasPositiveEvidence: boolean;
+  /**
+   * Ranking-only personalization evidence derived from this benefit's
+   * verified PASS rules (see domain/benefit/personalization.ts). NOT the
+   * same signal as `hasPositiveEvidence`/`status` — eligibility semantics
+   * never read this field. Never serialize this raw shape directly into a
+   * user-facing API response; it exists for server-side ranking only.
+   */
+  personalization: PersonalizationEvidence;
 }
 
 /**
@@ -36,11 +45,21 @@ export interface BenefitMatchDetailedResult extends BenefitMatchResult {
  * (worth showing) apart from an "unknown" that's just an absence of any
  * data, or only ever failed a rule buried in an unresolved "any" branch
  * (not worth showing as if it were personalized) — see `isRelevantForFeed`.
+ * Also computes ranking-only personalization evidence (dimensions/strength)
+ * once here, so callers building a recommendation order don't need to
+ * re-run the rule engine per benefit.
  */
 export function matchBenefitsDetailed(benefits: Benefit[], profile: UserProfile): BenefitMatchDetailedResult[] {
   return benefits.map((benefit) => {
     const diag = evaluateEligibilityDetailed(benefit, profile);
-    return { benefitId: benefit.id, status: diag.status, hasEvidence: diag.hasEvidence, hasPositiveEvidence: diag.hasPositiveEvidence };
+    const personalization = derivePersonalizationEvidence(diag.passedLeaves, profile);
+    return {
+      benefitId: benefit.id,
+      status: diag.status,
+      hasEvidence: diag.hasEvidence,
+      hasPositiveEvidence: diag.hasPositiveEvidence,
+      personalization,
+    };
   });
 }
 

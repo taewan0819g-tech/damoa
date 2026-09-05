@@ -44,7 +44,12 @@ export default function SavedPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {savedBenefits.map((benefit) => (
-            <BenefitCard key={benefit.id} benefit={benefit} status={statusById.get(benefit.id) ?? "unknown"} />
+            <BenefitCard
+              key={benefit.id}
+              benefit={benefit}
+              status={statusById.get(benefit.id) ?? "unknown"}
+              returnTo="/saved"
+            />
           ))}
         </div>
       )}

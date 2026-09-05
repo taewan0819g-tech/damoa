@@ -106,6 +106,7 @@ describe("evaluateEligibilityDetailed", () => {
       hasEvidence: false,
       hasPositiveEvidence: false,
       downgradedFromPass: false,
+      passedLeaves: [],
     });
   });
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useProfileStore } from "@/stores/profileStore";
-import type { Benefit } from "@/types/benefit";
+import type { Benefit, EligibilityStatus } from "@/types/benefit";
 import type { BenefitSummary } from "@/domain/benefit/summary";
 
 export interface MatchCounts {
@@ -27,6 +27,14 @@ interface UseMatchedBenefitsResult {
   /** Aggregate card counts, computed server-side over the FULL relevant set even though the arrays above are capped. */
   summary: BenefitSummary | null;
   counts: MatchCounts | null;
+  /**
+   * Per-benefit EligibilityStatus for every id in `recommended`/`needsReview`
+   * (see the match route's `previewStatuses`). The `recommended` bucket can
+   * legitimately contain STRONG/MODERATE-evidence UNKNOWN benefits — this
+   * lets the UI mark those as "확인이 필요해요" instead of visually implying
+   * confirmed eligibility. Never used to change ranking, only display.
+   */
+  statuses: Record<string, EligibilityStatus>;
   loading: boolean;
   error: boolean;
 }
@@ -36,6 +44,7 @@ interface HomeSummaryResponse {
   summary: BenefitSummary;
   recommended: Benefit[];
   needsReview: Benefit[];
+  statuses: Record<string, EligibilityStatus>;
 }
 
 interface MatchState {
@@ -44,12 +53,19 @@ interface MatchState {
   needsReview: Benefit[];
   summary: BenefitSummary | null;
   counts: MatchCounts | null;
+  statuses: Record<string, EligibilityStatus>;
   loading: boolean;
   error: boolean;
 }
 
 const DEBOUNCE_MS = 400;
-const INITIAL_STATE_BASE = { recommended: [] as Benefit[], needsReview: [] as Benefit[], summary: null, counts: null };
+const INITIAL_STATE_BASE = {
+  recommended: [] as Benefit[],
+  needsReview: [] as Benefit[],
+  summary: null,
+  counts: null,
+  statuses: {} as Record<string, EligibilityStatus>,
+};
 
 /**
  * Loads the bounded home-summary payload from POST /api/benefits/match (see
@@ -113,6 +129,7 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
                   needsReview: data.needsReview,
                   summary: data.summary,
                   counts: data.counts,
+                  statuses: data.statuses ?? {},
                   loading: false,
                   error: false,
                 }
@@ -137,6 +154,7 @@ export function useMatchedBenefits(): UseMatchedBenefitsResult {
     needsReview: state.needsReview,
     summary: state.summary,
     counts: state.counts,
+    statuses: state.statuses,
     loading: state.loading,
     error: state.error,
   };

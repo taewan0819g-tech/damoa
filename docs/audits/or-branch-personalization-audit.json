@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-09-04T09:28:56.114Z",
+  "frozenInputs": [
+    {
+      "label": "MOIS service list",
+      "path": "/tmp/mois_serviceList_full.json",
+      "sha256": "82d7bab830c825aff81df1180f420a8fc92996f6e02cae25a7fd50bd6983f30a"
+    },
+    {
+      "label": "MOIS support conditions",
+      "path": "/tmp/mois_supportConditions_full.json",
+      "sha256": "9d73e6b89d7a5eb3c1a3b6c7e37e681b1e09c714929760e603b7d37e29239714"
+    },
+    {
+      "label": "Youth Center policy list",
+      "path": "/tmp/youth_policy_full.json",
+      "sha256": "90ffc2050271abcc58908c60523eef64f23485bbacf97050ad669e74329ecb90"
+    }
+  ],
+  "catalogTotals": {
+    "mois": 10967,
+    "youth": 2745,
+    "total": 13712
+  },
+  "benefitsContainingAnyGroups": 0,
+  "crossAlternativePassEvidenceCases": 0,
+  "top20StrengthInflationCases": 0,
+  "sampleIds": [],
+  "conclusion": "The real, committed frozen MOIS + Youth Center catalog currently contains ZERO benefits with an `any` eligibility group anywhere in their tree — every adapter only ever constructs `type: \"all\"` groups, and the Korean free-text parser's OR-detection safety net (koreanEligibilityParser.ts's hasLocalCrossDimensionOr) bails out to unresolvedClauses instead of building a nested `any` group. Cross-branch/cross-alternative personalization evidence inflation is therefore not reachable in production today. lib/eligibility/ruleEngine.ts's branch-aware evidenceLeaves collection (single-passing-branch selection for `any` groups) is kept as defense-in-depth for if/when an `any` group is ever introduced."
+}

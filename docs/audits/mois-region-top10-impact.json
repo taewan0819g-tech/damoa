@@ -1,0 +1,287 @@
+{
+  "generatedAt": "2026-09-05T06:01:04.118Z",
+  "checkpoint": "MOIS region-clause precision correction — Top-10 before/after impact (Section 5)",
+  "snapshot": {
+    "moisCount": 10967,
+    "youthCount": 2745
+  },
+  "profiles": [
+    {
+      "key": "A_icheon_unemployed_youth",
+      "label": "이천시 청년 무직",
+      "top10Before": [
+        "mois-391000000152",
+        "mois-641000000151",
+        "mois-641000000739",
+        "mois-161300000076",
+        "mois-569000000402",
+        "mois-631000000709",
+        "mois-648000001072",
+        "mois-B55140800003",
+        "mois-B55370100009",
+        "mois-407000000113"
+      ],
+      "top10After": [
+        "mois-391000000152",
+        "mois-641000000151",
+        "mois-641000000739",
+        "mois-161300000076",
+        "mois-569000000402",
+        "mois-631000000709",
+        "mois-648000001072",
+        "mois-B55140800003",
+        "mois-B55370100009",
+        "mois-407000000113"
+      ],
+      "removedFromTop10": [],
+      "addedToTop10": [],
+      "icheonBugItemStillPresent": false,
+      "moisTop20MetadataAudit": {
+        "clearlyCompatible": 10,
+        "clearlyWrongRegion": 2,
+        "ambiguous": 8,
+        "wrongRegionSamples": [
+          {
+            "id": "mois-569000000402",
+            "title": "세종형 쉐어하우스 청년임대주택 보급",
+            "source": "government",
+            "organization": "세종특별자치시",
+            "classification": "clearly_wrong_region"
+          },
+          {
+            "id": "mois-631000000709",
+            "title": "전세보증금반환보증 보증료 지원",
+            "source": "government",
+            "organization": "울산광역시",
+            "classification": "clearly_wrong_region"
+          }
+        ]
+      }
+    },
+    {
+      "key": "B_seoul_university_student",
+      "label": "서울 대학생",
+      "top10Before": [
+        "mois-O00101000019",
+        "mois-401000000112",
+        "mois-511000000137",
+        "mois-O00087700003",
+        "mois-O00101000003",
+        "mois-O00101000018",
+        "mois-569000000375",
+        "mois-611000019619",
+        "mois-161300000076",
+        "mois-648000001072"
+      ],
+      "top10After": [
+        "mois-511000000137",
+        "mois-O00101000003",
+        "mois-611000019619",
+        "mois-161300000076",
+        "mois-648000001072",
+        "mois-B55370100009",
+        "mois-320000000124",
+        "mois-320000000128",
+        "mois-320000000298",
+        "mois-320000000314"
+      ],
+      "removedFromTop10": [
+        {
+          "id": "mois-O00101000019",
+          "title": "전북특별자치도서울장학숙 입사생 수시 모집",
+          "source": "government",
+          "organization": "재단법인전북특별자치도평생교육장학진흥원"
+        },
+        {
+          "id": "mois-401000000112",
+          "title": "대안교육기관 등 신입생 교복비 지원",
+          "source": "government",
+          "organization": "경기도 시흥시"
+        },
+        {
+          "id": "mois-O00087700003",
+          "title": "지역사회기여 장학금",
+          "source": "government",
+          "organization": "재단법인은평구민장학재단"
+        },
+        {
+          "id": "mois-O00101000018",
+          "title": "전북특별자치도서울장학숙 신규입사생 모집",
+          "source": "government",
+          "organization": "재단법인전북특별자치도평생교육장학진흥원"
+        },
+        {
+          "id": "mois-569000000375",
+          "title": "세종 전세보증금반환보증 보증료 지원",
+          "source": "government",
+          "organization": "세종특별자치시"
+        }
+      ],
+      "addedToTop10": [
+        {
+          "id": "mois-B55370100009",
+          "title": "햇살론유스",
+          "source": "government",
+          "organization": "서민금융진흥원"
+        },
+        {
+          "id": "mois-320000000124",
+          "title": "관악 청년 1인 가구 안심 건강검진",
+          "source": "government",
+          "organization": "서울특별시 관악구"
+        },
+        {
+          "id": "mois-320000000128",
+          "title": "관악구 구민안전보험",
+          "source": "government",
+          "organization": "서울특별시 관악구"
+        },
+        {
+          "id": "mois-320000000298",
+          "title": "관악 미취업청년 어학자격시험 응시료 지원",
+          "source": "government",
+          "organization": "서울특별시 관악구"
+        },
+        {
+          "id": "mois-320000000314",
+          "title": "장애인 이동기기 수리비 지원",
+          "source": "government",
+          "organization": "서울특별시 관악구"
+        }
+      ],
+      "icheonBugItemStillPresent": false,
+      "moisTop20MetadataAudit": {
+        "clearlyCompatible": 14,
+        "clearlyWrongRegion": 0,
+        "ambiguous": 6,
+        "wrongRegionSamples": []
+      }
+    },
+    {
+      "key": "C_suwon_high_income_employed",
+      "label": "수원시 직장인 고소득",
+      "top10Before": [
+        "mois-641000000686",
+        "mois-641000000687",
+        "mois-374000000130",
+        "mois-374000000136",
+        "mois-374000000560",
+        "mois-374000000565",
+        "mois-374000000566",
+        "mois-374000000567",
+        "mois-374000000583",
+        "mois-374000000594"
+      ],
+      "top10After": [
+        "mois-641000000686",
+        "mois-641000000687",
+        "mois-374000000130",
+        "mois-374000000136",
+        "mois-374000000560",
+        "mois-374000000565",
+        "mois-374000000566",
+        "mois-374000000567",
+        "mois-374000000583",
+        "mois-374000000594"
+      ],
+      "removedFromTop10": [],
+      "addedToTop10": [],
+      "icheonBugItemStillPresent": false,
+      "moisTop20MetadataAudit": {
+        "clearlyCompatible": 16,
+        "clearlyWrongRegion": 0,
+        "ambiguous": 4,
+        "wrongRegionSamples": []
+      }
+    },
+    {
+      "key": "D_icheon_newlywed",
+      "label": "이천시 신혼부부",
+      "top10Before": [
+        "mois-407000000118",
+        "mois-407000000522",
+        "mois-407000000113",
+        "mois-407000000516",
+        "mois-407000000517",
+        "mois-407000000520",
+        "mois-O00010400003",
+        "mois-383000000194",
+        "mois-398000000298",
+        "mois-641000000175"
+      ],
+      "top10After": [
+        "mois-407000000118",
+        "mois-407000000522",
+        "mois-407000000113",
+        "mois-407000000516",
+        "mois-407000000517",
+        "mois-407000000520",
+        "mois-O00010400003",
+        "mois-383000000194",
+        "mois-398000000298",
+        "mois-641000000175"
+      ],
+      "removedFromTop10": [],
+      "addedToTop10": [],
+      "icheonBugItemStillPresent": false,
+      "moisTop20MetadataAudit": {
+        "clearlyCompatible": 15,
+        "clearlyWrongRegion": 0,
+        "ambiguous": 5,
+        "wrongRegionSamples": []
+      }
+    },
+    {
+      "key": "E_jeonnam_single_parent",
+      "label": "전남 한부모가족",
+      "top10Before": [
+        "mois-629000000143",
+        "mois-361000000114",
+        "mois-480000000105",
+        "mois-481000000364",
+        "mois-481000000368",
+        "mois-481000000376",
+        "mois-481000000378",
+        "mois-481000000379",
+        "mois-481000000382",
+        "mois-482000000140"
+      ],
+      "top10After": [
+        "mois-629000000143",
+        "mois-361000000114",
+        "mois-480000000105",
+        "mois-481000000364",
+        "mois-481000000368",
+        "mois-481000000376",
+        "mois-481000000378",
+        "mois-481000000379",
+        "mois-481000000382",
+        "mois-482000000140"
+      ],
+      "removedFromTop10": [],
+      "addedToTop10": [],
+      "icheonBugItemStillPresent": false,
+      "moisTop20MetadataAudit": {
+        "clearlyCompatible": 8,
+        "clearlyWrongRegion": 0,
+        "ambiguous": 12,
+        "wrongRegionSamples": []
+      }
+    },
+    {
+      "key": "F_minimal_just_onboarded",
+      "label": "온보딩 직후 최소 입력",
+      "top10Before": [],
+      "top10After": [],
+      "removedFromTop10": [],
+      "addedToTop10": [],
+      "icheonBugItemStillPresent": false,
+      "moisTop20MetadataAudit": {
+        "clearlyCompatible": 0,
+        "clearlyWrongRegion": 0,
+        "ambiguous": 20,
+        "wrongRegionSamples": []
+      }
+    }
+  ]
+}

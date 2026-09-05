@@ -1,6 +1,5 @@
 import type {
   Benefit,
-  BenefitCategory,
   BenefitType,
   EligibilityRule,
   EligibilityRuleGroup,
@@ -9,6 +8,18 @@ import type {
 import { parseMOISUserScope } from "@/lib/eligibility/targetScope";
 import { extractEligibilityFromText } from "@/lib/eligibility/extraction/koreanEligibilityParser";
 import { parseMoisDeadline } from "@/lib/eligibility/extraction/moisDeadlineParser";
+import {
+  deriveFinancialFacets,
+  finalizeTopics,
+  hasAssetBuildingSignal,
+  hasChildcareSignal,
+  hasHousingSignal,
+  primaryCategory,
+  STARTUP_WORDS,
+  TRANSPORT_WORDS,
+  type BenefitFinancialFacet,
+  type BenefitTopic,
+} from "@/domain/benefit/topics";
 
 /**
  * Raw record shapes confirmed live against the 행정안전부 "대한민국 공공서비스
@@ -85,20 +96,77 @@ export interface MOISRawSupportCondition {
   [key: string]: unknown;
 }
 
-function mapCategory(raw: MOISRawServiceListItem | MOISRawServiceDetail): BenefitCategory {
-  const field = "서비스분야" in raw ? raw.서비스분야 : undefined;
+/**
+ * `서비스분야` values confirmed LIVE (frozen catalog, 13,712-item snapshot,
+ * cross-topic-precision audit, checkpoint 4) to be a combined bucket joining
+ * two genuinely unrelated concepts with "·" — exactly the same
+ * umbrella-pollution shape as Youth Center's `lclsfNm` "금융·복지·문화" (see
+ * docs/beta-personalization-audit.md §4), just not previously caught because
+ * this checkpoint's audit was the first to check topics other than
+ * asset_building:
+ *   - "주거·자립" (housing + self-reliance/independence-for-vulnerable-groups):
+ *     352/580 (60.7%) of its records have NO housing word anywhere in the
+ *     title (자산형성지원사업/희망저축, 북한이탈주민 정착금, 노숙인 복지지원,
+ *     가정폭력피해자 자립지원금, 청소년 자립지원 — none of them housing).
+ *   - "보육·교육" (early-childhood care + ALL-AGES education, including adult
+ *     university scholarships): 1508/1516 (99.5%) of titles don't
+ *     independently support BOTH — e.g. "대학원 학과 기반 교육연구단 연구장학금",
+ *     "국가장학금 Ⅱ유형", "인문100년장학금" are pure adult-education scholarship
+ *     programs with zero childcare relevance, yet the field alone would force
+ *     a `childcare` tag.
+ *   - "고용·창업" (employment + startup): 758/843 (89.9%) of titles contain no
+ *     "창업" word (선원복지고용센터 운영, 전역예정군인 재취업지원, 두루누리 사회보험료
+ *     지원 — pure employment, not startup).
+ * Every OTHER `서비스분야` value was checked the same way and found safe —
+ * notably "임신·출산" (914 records) also has a majority (580/914) of titles
+ * without its own literal childcare wordlist match, but every one of those
+ * sampled ("임산부", "영유아", "산모", "난임", "출생") IS still genuinely
+ * pregnancy/childbirth-adjacent, just phrased with a synonym — a real
+ * semantic match, not a forced umbrella tag, so it's kept as-is.
+ *
+ * These three values are therefore excluded from the topic-classification
+ * text (title alone still applies normally) — the exact same "exclude the
+ * unsafe umbrella field, keep the specific-word signal" fix already applied
+ * to Youth Center's `lclsfNm` for `asset_building`.
+ */
+const UNSAFE_COMBINED_SEOBISBUNYA = new Set(["주거·자립", "보육·교육", "고용·창업"]);
+
+/**
+ * Multi-topic purpose classification (see domain/benefit/topics.ts). Every
+ * bucket below is checked independently (not first-match-wins) so a record
+ * can genuinely carry more than one topic. `서비스분야` is mostly a proper
+ * single-purpose MOIS categorical field, safe to include in the scan — EXCEPT
+ * the three confirmed-combined buckets in `UNSAFE_COMBINED_SEOBISBUNYA`
+ * above, which are excluded the same way Youth Center's `lclsfNm` umbrella is
+ * excluded from the `asset_building` finance scan (see
+ * docs/beta-personalization-audit.md §4).
+ */
+function deriveMoisTopics(raw: MOISRawServiceListItem | MOISRawServiceDetail): BenefitTopic[] {
+  const rawField = "서비스분야" in raw && typeof raw.서비스분야 === "string" ? raw.서비스분야 : undefined;
+  const field = rawField && !UNSAFE_COMBINED_SEOBISBUNYA.has(rawField) ? rawField : undefined;
   const text = `${field ?? ""} ${raw.서비스명 ?? ""}`;
   const has = (...needles: string[]) => needles.some((n) => text.includes(n));
 
-  if (has("보육", "육아", "아동", "출산")) return "childcare";
-  if (has("주거", "주택", "전세", "임대")) return "housing";
-  if (has("교육", "학비", "장학")) return "education";
-  if (has("고용", "취업", "일자리", "직업훈련")) return "employment";
-  if (has("창업")) return "startup";
-  if (has("가족", "한부모", "다문화")) return "family";
-  if (has("교통")) return "transport";
-  if (has("금융", "저축", "자산형성")) return "asset_building";
-  return "welfare";
+  const topics = new Set<BenefitTopic>();
+  // "보육" excludes business-incubator false positives — see hasChildcareSignal's docs.
+  if (hasChildcareSignal(text, ["보육", "육아", "아동", "출산"])) topics.add("childcare");
+  // "임대" excludes non-residential (farmland/equipment/commercial) lease false positives — see hasHousingSignal's docs.
+  if (hasHousingSignal(text, ["주거", "주택", "전세", "임대"])) topics.add("housing");
+  if (has("교육", "학비", "장학")) topics.add("education");
+  if (has("고용", "취업", "일자리", "직업훈련")) topics.add("employment");
+  if (has(...STARTUP_WORDS)) topics.add("startup");
+  if (has("가족", "한부모", "다문화")) topics.add("family");
+  if (has(...TRANSPORT_WORDS)) topics.add("transport");
+  // Bare "금융" deliberately excluded — see hasAssetBuildingSignal's docs.
+  if (hasAssetBuildingSignal(text)) topics.add("asset_building");
+  return finalizeTopics(topics);
+}
+
+function deriveMoisFinancialFacets(raw: MOISRawServiceListItem | MOISRawServiceDetail): BenefitFinancialFacet[] {
+  const rawField = "서비스분야" in raw && typeof raw.서비스분야 === "string" ? raw.서비스분야 : undefined;
+  const field = rawField && !UNSAFE_COMBINED_SEOBISBUNYA.has(rawField) ? rawField : undefined;
+  const text = `${field ?? ""} ${raw.서비스명 ?? ""} ${raw.지원유형 ?? ""}`;
+  return deriveFinancialFacets(text);
 }
 
 function mapBenefitType(지원유형?: string): BenefitType {
@@ -209,11 +277,14 @@ function buildEligibility(
 export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEligibility?: EligibilityRuleGroup): Benefit {
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
   const deadline = parseMoisDeadline(raw.신청기한);
+  const topics = deriveMoisTopics(raw);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
     shortDescription: raw.서비스목적요약 || raw.지원내용 || raw.서비스명,
-    category: mapCategory(raw),
+    category: primaryCategory(topics),
+    topics,
+    financialFacets: deriveMoisFinancialFacets(raw),
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,
@@ -236,11 +307,14 @@ export function normalizeMOISServiceListItem(raw: MOISRawServiceListItem, ageEli
 export function normalizeMOISServiceDetail(raw: MOISRawServiceDetail, ageEligibility?: EligibilityRuleGroup): Benefit {
   const { eligibility, hasUnresolvedEligibility } = buildEligibility(raw, ageEligibility);
   const deadline = parseMoisDeadline(raw.신청기한);
+  const topics = deriveMoisTopics(raw);
   return {
     id: `mois-${raw.서비스ID}`,
     title: raw.서비스명,
     shortDescription: raw.서비스목적 || raw.지원내용 || raw.서비스명,
-    category: mapCategory(raw),
+    category: primaryCategory(topics),
+    topics,
+    financialFacets: deriveMoisFinancialFacets(raw),
     source: { type: "government", organization: raw.소관기관명, providerId: raw.서비스ID },
     benefitType: mapBenefitType(raw.지원유형),
     eligibility,

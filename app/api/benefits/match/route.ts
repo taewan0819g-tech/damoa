@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { getCatalogWithCandidateIndex, getProviderHealth } from "@/providers";
 import { getCandidateBenefits } from "@/lib/eligibility/candidateIndex";
 import { matchBenefitsDetailed, isRelevantForFeed } from "@/domain/eligibility/matchBenefits";
+import type { PersonalizationEvidence } from "@/domain/benefit/personalization";
 import { searchBenefits } from "@/domain/benefit/search";
 import { sortBenefits, type BenefitSort } from "@/domain/benefit/sort";
 import { getSourceGroup, type BenefitSourceGroup } from "@/domain/benefit/sourceGroup";
 import { getBenefitSummary, type BenefitSummary } from "@/domain/benefit/summary";
 import { getRecommendedBenefits } from "@/domain/benefit/recommend";
 import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
+import { matchesBenefitFacet } from "@/domain/benefit/topics";
 import { parseUserProfile } from "@/lib/validation/profileSchema";
 import { logger } from "@/lib/log/logger";
 import type { UserProfile } from "@/types/profile";
@@ -225,9 +227,14 @@ export async function POST(request: Request) {
     const detailed = matchBenefitsDetailed(workingCandidates, profile);
     const statusById = new Map<string, EligibilityStatus>();
     const positiveEvidenceById = new Map<string, boolean>();
+    // Precomputed once here so the home preview (recommended/needsReview)
+    // and the paginated `sort=recommended` path never re-run the rule
+    // engine per benefit just to derive ranking evidence.
+    const evidenceById = new Map<string, PersonalizationEvidence>();
     for (const m of detailed) {
       statusById.set(m.benefitId, m.status);
       positiveEvidenceById.set(m.benefitId, m.hasPositiveEvidence);
+      evidenceById.set(m.benefitId, m.personalization);
     }
 
     // Step 3: personalized relevance filtering. UPCOMING benefits are
@@ -275,8 +282,15 @@ export async function POST(request: Request) {
       // aggregated server-side over the full `relevant` array so the client
       // still gets accurate totals without receiving the array itself.
       const summary: BenefitSummary = getBenefitSummary(relevant, statusById);
-      const recommended = getRecommendedBenefits(relevant, statusById, profile, HOME_PREVIEW_LIMIT);
-      const needsReview = getUnknownBenefits(relevant, statusById, HOME_PREVIEW_LIMIT);
+      const recommended = getRecommendedBenefits(relevant, statusById, profile, HOME_PREVIEW_LIMIT, {
+        evidenceById,
+        excludeWeakUnknown: true,
+      });
+      const excludeIds = new Set(recommended.map((b) => b.id));
+      const needsReview = getUnknownBenefits(relevant, statusById, profile, HOME_PREVIEW_LIMIT, {
+        excludeIds,
+        evidenceById,
+      });
       const previewStatuses: Record<string, EligibilityStatus> = {};
       for (const b of [...recommended, ...needsReview]) previewStatuses[b.id] = statusById.get(b.id) ?? "unknown";
       const durationMs = performance.now() - startedAt;
@@ -294,9 +308,10 @@ export async function POST(request: Request) {
       filtered = filtered.filter((b) => getSourceGroup(b) === body.group);
     }
     if (body.category && body.category !== "all") {
-      filtered = filtered.filter((b) => b.category === body.category);
+      const category = body.category;
+      filtered = filtered.filter((b) => matchesBenefitFacet(b, category));
     }
-    filtered = sortBenefits(filtered, statusById, profile, body.sort ?? "recommended");
+    filtered = sortBenefits(filtered, statusById, profile, body.sort ?? "recommended", evidenceById);
 
     const pageSize = Math.min(Math.max(Math.trunc(Number(body.pageSize)) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const page = Math.max(Math.trunc(Number(body.page)) || 1, 1);

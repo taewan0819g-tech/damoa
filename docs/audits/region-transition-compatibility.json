@@ -1,0 +1,825 @@
+{
+  "generatedAt": "2026-09-04T15:21:26.783Z",
+  "checkpoint": "Final Region Transition Compatibility",
+  "purpose": "Measures the real frozen-catalog impact of replacing matchRegion()'s pure exact-match algorithm with the new domain/region/adminTransition.ts set-containment model, expanding on the prior checkpoint's 6-profile audit (docs/audits/region-transition-candidate-diff.json) which had zero residents in 인천/광주/전남/전남광주통합특별시 and therefore could not exercise this checkpoint's transitions at all.",
+  "method": {
+    "frozenInputs": [
+      "/tmp/mois_serviceList_full.json",
+      "/tmp/mois_supportConditions_full.json",
+      "/tmp/youth_policy_full.json"
+    ],
+    "catalogCounts": {
+      "sourceCatalogCount": 13712,
+      "activeCount": 798,
+      "upcomingCount": 13,
+      "expiredCount": 1343,
+      "dateUnknownCount": 11558
+    },
+    "uniqueBenefitsWithRegionRules": 2521,
+    "totalRegionRuleCount": 2522,
+    "procedure": "For every region_in rule actually present in the frozen catalog's extracted eligibility rules, evaluated matchRegion() twice per (profile, rule) pair: once with a verbatim reproduction of the pre-checkpoint exact-match-only algorithm (matchRegionExactMatchOnly, audit-only, never used at runtime), and once with the real current matchRegion() import. Tallied PASS/UNKNOWN/FAIL counts per profile, and individually recorded every (profile, rule) pair where the result changed."
+  },
+  "unionCompletionAudit": {
+    "rulesWithTwoOrMoreSpecs": 236,
+    "rulesContainingBothGwangjuAndJeonnamProvince": 1,
+    "rulesContainingOldJungAndOldDong": 0,
+    "rulesContainingSeohaeAndGeomdan": 1,
+    "rulesContainingYeongjongAndJemulpo": 0,
+    "unionCausedChangeCount": 1,
+    "unionCausedChangeDetails": [
+      {
+        "profile": "legacy_incheon_seo",
+        "benefitId": "mois-O00027100003",
+        "benefitTitle": "노인여가복지서비스",
+        "specs": [
+          {
+            "province": "인천광역시",
+            "city": "서해구"
+          },
+          {
+            "province": "인천광역시",
+            "city": "검단구"
+          }
+        ],
+        "singleSpecResult": "unknown",
+        "unionAwareResult": "pass"
+      }
+    ]
+  },
+  "oldCurrentNameUsageCounts": {
+    "province:광주광역시": 59,
+    "province:전라남도": 271,
+    "province:전남광주통합특별시": 69,
+    "인천광역시:중구": 0,
+    "인천광역시:동구": 0,
+    "인천광역시:서구": 2,
+    "인천광역시:영종구": 7,
+    "인천광역시:제물포구": 4,
+    "인천광역시:검단구": 1,
+    "인천광역시:서해구": 3
+  },
+  "transitionProfilePassUnknownFailBeforeAfter": {
+    "current_jeonnamGwangju_mokpo": {
+      "before": {
+        "pass": 52,
+        "unknown": 0,
+        "fail": 2470
+      },
+      "after": {
+        "pass": 80,
+        "unknown": 0,
+        "fail": 2442
+      }
+    },
+    "current_jeonnamGwangju_gwangsan": {
+      "before": {
+        "pass": 52,
+        "unknown": 0,
+        "fail": 2470
+      },
+      "after": {
+        "pass": 89,
+        "unknown": 0,
+        "fail": 2433
+      }
+    },
+    "current_jeonnamGwangju_provinceOnly": {
+      "before": {
+        "pass": 52,
+        "unknown": 7,
+        "fail": 2463
+      },
+      "after": {
+        "pass": 52,
+        "unknown": 307,
+        "fail": 2163
+      }
+    },
+    "legacy_jeonnam_mokpo": {
+      "before": {
+        "pass": 30,
+        "unknown": 0,
+        "fail": 2492
+      },
+      "after": {
+        "pass": 80,
+        "unknown": 0,
+        "fail": 2442
+      }
+    },
+    "legacy_gwangju_gwangsan": {
+      "before": {
+        "pass": 39,
+        "unknown": 0,
+        "fail": 2483
+      },
+      "after": {
+        "pass": 89,
+        "unknown": 0,
+        "fail": 2433
+      }
+    },
+    "current_incheon_yeongjong": {
+      "before": {
+        "pass": 59,
+        "unknown": 0,
+        "fail": 2463
+      },
+      "after": {
+        "pass": 59,
+        "unknown": 0,
+        "fail": 2463
+      }
+    },
+    "current_incheon_jemulpo": {
+      "before": {
+        "pass": 57,
+        "unknown": 0,
+        "fail": 2465
+      },
+      "after": {
+        "pass": 57,
+        "unknown": 0,
+        "fail": 2465
+      }
+    },
+    "current_incheon_geomdan": {
+      "before": {
+        "pass": 54,
+        "unknown": 0,
+        "fail": 2468
+      },
+      "after": {
+        "pass": 55,
+        "unknown": 0,
+        "fail": 2467
+      }
+    },
+    "current_incheon_seohae": {
+      "before": {
+        "pass": 56,
+        "unknown": 0,
+        "fail": 2466
+      },
+      "after": {
+        "pass": 57,
+        "unknown": 0,
+        "fail": 2465
+      }
+    },
+    "legacy_incheon_jung": {
+      "before": {
+        "pass": 53,
+        "unknown": 0,
+        "fail": 2469
+      },
+      "after": {
+        "pass": 53,
+        "unknown": 10,
+        "fail": 2459
+      }
+    },
+    "legacy_incheon_dong": {
+      "before": {
+        "pass": 53,
+        "unknown": 0,
+        "fail": 2469
+      },
+      "after": {
+        "pass": 57,
+        "unknown": 0,
+        "fail": 2465
+      }
+    },
+    "legacy_incheon_seo": {
+      "before": {
+        "pass": 54,
+        "unknown": 0,
+        "fail": 2468
+      },
+      "after": {
+        "pass": 55,
+        "unknown": 2,
+        "fail": 2465
+      }
+    }
+  },
+  "generalProfilePassUnknownFailBeforeAfter": {
+    "empty": {
+      "before": {
+        "pass": 0,
+        "unknown": 2522,
+        "fail": 0
+      },
+      "after": {
+        "pass": 0,
+        "unknown": 2522,
+        "fail": 0
+      }
+    },
+    "singleUnemployedUniv": {
+      "before": {
+        "pass": 84,
+        "unknown": 0,
+        "fail": 2438
+      },
+      "after": {
+        "pass": 84,
+        "unknown": 0,
+        "fail": 2438
+      }
+    },
+    "marriedEmployedHighIncome": {
+      "before": {
+        "pass": 69,
+        "unknown": 0,
+        "fail": 2453
+      },
+      "after": {
+        "pass": 69,
+        "unknown": 0,
+        "fail": 2453
+      }
+    },
+    "singleParentLowIncome": {
+      "before": {
+        "pass": 63,
+        "unknown": 0,
+        "fail": 2459
+      },
+      "after": {
+        "pass": 63,
+        "unknown": 0,
+        "fail": 2459
+      }
+    },
+    "studentNoIncome": {
+      "before": {
+        "pass": 31,
+        "unknown": 0,
+        "fail": 2491
+      },
+      "after": {
+        "pass": 31,
+        "unknown": 0,
+        "fail": 2491
+      }
+    },
+    "homeownerFreelancer": {
+      "before": {
+        "pass": 28,
+        "unknown": 0,
+        "fail": 2494
+      },
+      "after": {
+        "pass": 28,
+        "unknown": 0,
+        "fail": 2494
+      }
+    }
+  },
+  "generalProfileCandidateImpact": {
+    "empty": {
+      "beforeCandidateCount": 11660,
+      "afterCandidateCount": 11660
+    },
+    "singleUnemployedUniv": {
+      "beforeCandidateCount": 6850,
+      "afterCandidateCount": 6850
+    },
+    "marriedEmployedHighIncome": {
+      "beforeCandidateCount": 6320,
+      "afterCandidateCount": 6320
+    },
+    "singleParentLowIncome": {
+      "beforeCandidateCount": 6656,
+      "afterCandidateCount": 6656
+    },
+    "studentNoIncome": {
+      "beforeCandidateCount": 6975,
+      "afterCandidateCount": 6975
+    },
+    "homeownerFreelancer": {
+      "beforeCandidateCount": 6718,
+      "afterCandidateCount": 6718
+    }
+  },
+  "changedRuleCount": 484,
+  "uniqueChangedBenefitCount": 365,
+  "manualInspection": {
+    "mode": "deterministic_stratified_sample",
+    "sampleSize": 30,
+    "sample": [
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-135200005017",
+        "benefitTitle": "한국형 상병수당 시범사업",
+        "sourceField": "지원대상",
+        "sourceText": "○ (1단계 시범사업 대상지역) 서울 종로구, 경기 부천시, 충남 천안시, 전남 순천시, 경북 포항시, 경남 창원시('22.7~2024. 12. 31 종료) ○ (2단계 시범사업 대상지역) 경기 안양시, 경기 용인시, 대구 달서구, 전북 익산시('23.7~) ○ (3단계 시범사업 대상지역) 충북 충주시, 충남 홍성군, 전북 전주시, 강원 원주시('24.7~) ○ (기본 자격) 시범사업 지역 거주 취업자 또는 시범사업 지역 소재 사업장 근로자(거주지 무관), 만 15세 이상 ~ 만 65세 미만 대한민국 국적자(난민 등 일부 외국인 예외 적용) ○ (취업자 기준) ① 건강보험 직장가입자(직전 2개월(60일) 동안 30일 이상 가입 자격 유지), ② 고용보험 또는 산재보험 가입자(직전 2개월(60일) 동안 30일 이상 가입 자격 유지, 일용근로자의 경우 직전 1개월 간 10일 이상 또는 2개월 중 20일 이상 가입한 경우 인정), ③ 사업 기간 및 매출 기준을 충족하는 자영업자(직전 3개월 동안 사업자등록 유지 + 직전 3개월 월평균 매출액 206만원 이상) * 단, 시범사업 기간 동안 한시적으로 직전 3개월 중 1개월 이상 매출이 206만원 이상인 경우 예외 인정 ○ (소득·재산 기준) 2·3단계 시범사업에만 해당 ① 가구 합산 건강보험료 기준중위소득 120% 이하 ○ (가구원) 동일 주민등록표에 기재된 민법상 가족(2촌 이내) 일부 비동거 가족* * 배우자 및 만 25세 미만 자녀, 피부앵자 세대 동일 건강보험증 상 비동거 가족",
+        "specs": [
+          {
+            "province": "서울특별시",
+            "city": "종로구"
+          },
+          {
+            "province": "경기도",
+            "city": "부천시"
+          },
+          {
+            "province": "충청남도",
+            "city": "천안시"
+          },
+          {
+            "province": "전라남도",
+            "city": "순천시"
+          },
+          {
+            "province": "경상북도",
+            "city": "포항시"
+          },
+          {
+            "province": "경상남도",
+            "city": "창원시"
+          },
+          {
+            "province": "경기도",
+            "city": "안양시"
+          },
+          {
+            "province": "경기도",
+            "city": "용인시"
+          },
+          {
+            "province": "대구광역시",
+            "city": "달서구"
+          },
+          {
+            "province": "전북특별자치도",
+            "city": "익산시"
+          },
+          {
+            "province": "충청북도",
+            "city": "충주시"
+          },
+          {
+            "province": "충청남도",
+            "city": "홍성군"
+          },
+          {
+            "province": "전북특별자치도",
+            "city": "전주시"
+          },
+          {
+            "province": "강원특별자치도",
+            "city": "원주시"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-360000000105",
+        "benefitTitle": "효드림수당",
+        "sourceField": "지원대상",
+        "sourceText": "○ 광주 서구에서 80세이상 효도대상자를 모시는 3대(효도대상자-효도자-자녀)가 주민등록상 같은 주소에 2년 이상 거주한 가구",
+        "specs": [
+          {
+            "province": "광주광역시",
+            "city": "서구"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_mokpo",
+        "benefitId": "mois-480000000107",
+        "benefitTitle": "영유아 영양제 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 목포시 관내에 주민등록 둔 만1세-만6세 영유아(1인 1회 지원)",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "목포시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-481000000108",
+        "benefitTitle": "장애인가정 출산지원금 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 신생아의 출생일을 기준으로 1년 전부터 신청일 현재까지 계속하여 여수시 관내에 주민등록을 두고 거주하는 장애인 가정 ○ 장애인가정 : 신생아의 부 또는 모가「장애인복지법」제32조에 따라 등록한 장애인으로서 주민등록을 같이하는 세대",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "여수시"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_mokpo",
+        "benefitId": "mois-481000000379",
+        "benefitTitle": "여수시 다자녀가정 보금자리 지원 중단 신청",
+        "sourceField": "지원대상",
+        "sourceText": "○ 여수시 다자녀가정 주택구입 대출이자 일부 지원 사업 대상자 중 아래 해지 사유 발생으로 해지 신청 - 지원 대상자(신청자)가 여수시 내 타 시군으로 전출한 경우, 전남에 주소를 둔 가구 구성원(배우자 및 자녀)이 전남 외 타 시도로 전출한 경우 : 전출일자가 포함된 달까지 지급 - 1가구 다주택 소유자(분양권 포함) : 보금자리 지원대상 주택 외 추가 주택등기를접수한 달까지 지급 - 사업대상 주택의 소유권을 이전하는 경우 : 소유권 이전 등기를 접수한 달까지 지급 - 주택구입 대출금 상환을 완료한 경우 : 주택구입 대출금 상환을 완료한 달까지 지급 - 그 밖에 지원해제 사유가 있다고 판단되는 경우 : 해당사유 발생한 달까지 지급",
+        "specs": [
+          {
+            "province": "전라남도"
+          },
+          {
+            "province": "전라남도"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-482000000147",
+        "benefitTitle": "귀농인 이웃주민 초청행사",
+        "sourceField": "지원대상",
+        "sourceText": "지원대상 - 1년이상 농촌외의 지역에서 저주 후 농촌지역으로 이주한 자로 전입일로부터 만 5년이 경과하지 않는 자 중 농업경영체 등록 농가(세대주)신청 - 거주지와 경작지가 모두 순천시인 자 지원제외 대상 - 식당, 뷔페 이용 지원 불가 - 행사 추진후 사업을 신청하거나, 사업대상자 확정 전에 사업을 추진한 자 - 타 산업분야에 전업적 직업을 가진 자(건강보험자격득실확인서 상 가입자 구분이 직장가입자인자 - 부부, 직계 존비속 중복신청 불가 등",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "순천시"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-484000000122",
+        "benefitTitle": "다문화가정 우리가족행복 문화체험비 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 광양시에 6개월이상 주소를 두고 실제 거주하는 다문화 가정 ※지원제외대상 - 최근 2년이내 해당사업으로 지원받은 가구 - 400천원 미만 지출증빙 시",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "광양시"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "legacy_gwangju_gwangsan",
+        "benefitId": "mois-484000000385",
+        "benefitTitle": "청년부부 결혼축하금 지원(광양)",
+        "sourceField": "지원대상",
+        "sourceText": "□ 지원대상 : 광양시 거주 49세 이하 청년부부 ※ 전남광주통합특별시 청년부부 결혼축하금 지원사업과 동일 □ 지원기준 ※ 아래 조건을 모두 충족해야 지원 대상자에 해당 - 연령 : 혼인신고일 기준, 부부 모두 49세 이하인 자 - 거주 : 혼인신고 이후, 부부 모두 계속해서 도내 6개월 이상 주민등록을 두고, 부부 중 1명(신청자)은 신청일에서 지급일까지 광양시에 주민등록을 두고 거주",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-485000000123",
+        "benefitTitle": "장애인 휠체어 수리비 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 담양군 거주 등록장애인 중 이동기기 수리가 필요한 자 - 기초수급자 장애인 및 차상위장애인 : 연간 30만원 이내에서 수리비의 100%지원 - 일반장에인 : 연간 20만원이내에서 수리비의 50%지원",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "담양군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-487000000132",
+        "benefitTitle": "구례군 여성청소년 위생용품 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 대상 : 구례군에 주소를 둔 여성청소년 ○ 연령 : 11세~18세로 2014년생일이 지난자 ~ 2007년 생일 전까지 (2025년 기준)",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "구례군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-488000000119",
+        "benefitTitle": "도전! 청년농부 농지임차료 등 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 고흥군에 주소를 두고 있으면서 영농에 종사하는 18세~49세 청년(농가주) ○ ‘23년 말 기준 경작면적 5ha 이하의 농업인 또는 신규농업인",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "고흥군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-489000000123",
+        "benefitTitle": "국가보훈대상자 명예수당 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 보성군에 주소를 둔 국가보훈대상자 - 참전명예수당 지급대상자 제외",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "보성군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_mokpo",
+        "benefitId": "mois-490000000282",
+        "benefitTitle": "화순군 전입장려금 및 전입세대 이사비용 지원사업",
+        "sourceField": "지원대상",
+        "sourceText": "○ 전입장려금 : 타시군구에서 1년이상 거주하다가 2020.12.15이후 화순군에 전입하여 20개월 이상 계속 거주한 군민 ○ 이사비용 : 타시군구에서 1년이상 거주하다가 2023.8.10 이후 화순군에 전입하여 6개월 이상 계속 거주한 군민 ○ 학생전입 : 관내 고등·대학생(관외 대학생 중 전남광주학숙 학생 포함)으로, 타 시군구에 1년 이상 거주하다가 2021.7.8. 이후 우리 군에 전입하여 10개월 이상 계속 거주한 군민",
+        "specs": [
+          {
+            "province": "전라남도"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-491000000285",
+        "benefitTitle": "신혼부부 웨딩포토비 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 장흥군에 주민등록을 두고 혼인신고한 49세 이하 신혼부부 / 혼인신고일 기준 6개월이내 신청",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "장흥군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-493000000154",
+        "benefitTitle": "영농 창업지원 상품권 지원",
+        "sourceField": "지원대상",
+        "sourceText": "1) 귀농인: 도시지역에 1년이상 거주하다가 해남군에 전입하여 신규로 농업경영체에 등록한 65세 이하의 세대주로서 도시지역에서 해남군 전입일로부터 5년 이내인 자 2) 귀향인: 해남군에 주민등록주소 혹은 등록기준지를 10년이상 두(었)고 타지역에 1년이상 거주하다가 해남군에 전입하여 신규로 농업경영체를 등록한 65세 이하의 세대주로서 타지역에서 해남군 전입일로부터 5년이내인 자",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "해남군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-494000000140",
+        "benefitTitle": "영암군 군 복무 청년 상해보험 가입 서비스",
+        "sourceField": "지원대상",
+        "sourceText": "○ 보험 가입기간 중 영암군에 주민등록을 두고 군 복무 중이거나 신규 입영하는 자(육군, 상근예비역, 해군, 공군, 의무경찰 등) ※ 직업군인 및 대체복무자(사회복무요원 등)는 가입 제외",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "영암군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-496000000108",
+        "benefitTitle": "인재양성 장학금 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 당해연도 선발요강의 자격조건을 모두 갖춘 사람 <지역인재 분야 대학생> - 주민등록상 군에 주소를 두고 군내 고등학교 졸업일을 기준으로 7년이상 군에 계속하여 거주하여야 함 <성적우수 분야 대학생> - 주민등록상 군에 주소를 두고 군내 고등학교 졸업일을 기준으로 3년이상 군에 계속하여 거주하여야함 <학업장려금> - 주민등록상 군에 주소를 두고 군내 고등학교 졸업일을 기준으로 7년이상 군에 계속하여 거주하여야 함 - 중위소득 100%이하인 가구(학자금지원구간 5구간이하) <특기자> - 공고일 현재 주민등록상 주소를 함평군에 3년 이상 둔 대학생 및 초중고등학생 - 문화․예술․체육․과학․농업분야에 소질과 재능이 뛰어난 사람 중 직전년도 도 단위 이상 공식대회에서 입상한 경력이 있는 자 * 대상자 부모중 1인또는 실질적인 보호자는 학생이 지원받고자 하는 분야의 필수거주간으로 부터 선발 공고일 현재까지 주민등록상 군에 주소를 두고 계속 거주하여야 함",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "함평군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "legacy_jeonnam_mokpo",
+        "benefitId": "mois-498000000106",
+        "benefitTitle": "인구늘리기 장려금 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 전입장려금 : 전입일 기준으로 타 시군구에 1년 이상 거주하다 장성군으로 전입신고한 사람 단, 출생 후 1년 이하의 신생아는 예외 ※ 최초 1회만 지급 ○ 결혼축하금 : - 1회차 : 다음 각 호 요건 모두 충족 ∙ 혼인신고일 기준 모두 만 49세 이하의 1명 이상 초혼인 부부 ∙ 혼인신고일 기준 부부 중 1명 이상 전남광주통합특별시 내 1년(우리군 6개월)이상 계속해서 거주 ∙ 결혼축하금 신청일 현재 부부 모두 장성군에 거주 ※ 부부 중 1명이라도 수혜받은 경우 대상에서 제외 - 2~3회차 : 최초신청일로부터 부부 모두 장성군에 계속해서 거주 ○ 국적취득축하금 : 대한민국 국적취득에 의한 신규등록일로부터 1년 이상 계속하여 장성군에 거주한 사람 ○ 전입유공기관 장려금 : 산업집적 활성화 및 공장설립에 관한 법률 시행령 제2조제1항에 따라 장성군 내에 공장등록을 하고 제조업을 영위하는 3인 이상 사업체",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-500000000103",
+        "benefitTitle": "국가보훈대상자명예수당",
+        "sourceField": "지원대상",
+        "sourceText": "○ 진도군 거주 만65세이상 공상군경 및 유족, 무공수훈 및 유족,보국수훈자 및 유족, 순직군경유족, 전몰군경유족, 전상군경 및 유족",
+        "specs": [
+          {
+            "province": "전라남도",
+            "city": "진도군"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_gwangsan",
+        "benefitId": "mois-554000000106",
+        "benefitTitle": "임산부 물품 및 영양제(엽산제, 철분제) 택배발송(경기도 광주시)",
+        "sourceField": "지원대상",
+        "sourceText": "○ 주민등록상 주소지 광주시로 등재되어 있는 임산부 ○ 맘편한임신 등록 임산부(맘편한임신 미등록한 경우 임신확인서 첨부 필수)",
+        "specs": [
+          {
+            "province": "광주광역시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-554000000183",
+        "benefitTitle": "광주시 청년지원센터 더누림 플랫폼 창업누림운영",
+        "sourceField": "지원대상",
+        "sourceText": "광주시에 거주사는 19~39세 청년(예비)창업가",
+        "specs": [
+          {
+            "province": "광주광역시"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "legacy_jeonnam_mokpo",
+        "benefitId": "mois-629000000109",
+        "benefitTitle": "참전유공자명예수당",
+        "sourceField": "지원대상",
+        "sourceText": "○ 지원대상 -전남광주통합특별시에 주민등록을 두고 거주하는 65세 이상의 참전유공로자로 · 전상군경, 고업제후유의증, 공상군경, 재일학도의용군인, 재해부상군경 : 8만원 ·일반참전유공자( 6.25 및 월남참전자) : 65세 이상~79세 13만원, 80세 이상 18만원",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "legacy_jeonnam_mokpo",
+        "benefitId": "mois-629000000143",
+        "benefitTitle": "행복한 가족 건강 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 전남광주통합특별시 거주 예비부모, 다문화가정 임산부, 취약계층 임산부(난임부부, 미혼부·미혼모, 장애인 임산부 등)",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "legacy_gwangju_gwangsan",
+        "benefitId": "mois-629000000186",
+        "benefitTitle": "지역공동체일자리사업",
+        "sourceField": "지원대상",
+        "sourceText": "○ 18세 이상(사업개시일 기준)의 근로능력이 있는 전남광주통합특별시 주민등록자로서 취업취약계층 - 가구소득이 기준 중위소득 70%이하이면서 가구재산이 4억원 이하인 가구의 구성원( 재산가액 산정시 차감하는 기본재산액: 7,700만원) * 취업취약계층 : 저소득층, 장애인, 장기실직자, 여성가장, 결혼이민자, 성매매피해자, 한부모가족 지원법에 의한 보호대상자, 북한이탈주민, 위기청소년, 갱생보호대상자, 수형자로로서 출소후 6개월 미만자, 노숙자 등",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "current_jeonnamGwangju_provinceOnly",
+        "benefitId": "mois-629000000803",
+        "benefitTitle": "임산부 직장맘 친화환경조성 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 광주시 소재 300인 미만 중소사업장 근무 임산부(광주 거주자) - 본사가 타 지역에 있을 경우 광주 사업장 고용인원이 300인 미만이면 가능 - 사회복지시설, 비영리법인, 민간위탁기관, 어린이집 등 가능 ○ 광주시 관내 여성가족부 가족친화인증 300인 미만 기관,기업",
+        "specs": [
+          {
+            "province": "광주광역시"
+          },
+          {
+            "province": "광주광역시"
+          },
+          {
+            "province": "광주광역시"
+          },
+          {
+            "province": "광주광역시"
+          }
+        ],
+        "before": "fail",
+        "after": "unknown"
+      },
+      {
+        "profile": "current_jeonnamGwangju_mokpo",
+        "benefitId": "mois-646000000114",
+        "benefitTitle": "산모·신생아 건강관리 본인부담금 추가지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 도내 주민등록을 둔 산모신생아 건강관리 서비스 이용자 - 기준중위소득 150%이하 출산가정 및 예외지원 대상자 * 산모, 신생아 건강관리 서비스 이용자는 모두 본인부담금 추가지원 대상임 ** 전남 도내 산모는 소득기준 제한없이 지원 ***(구)전남 22개 시군 대상 사업",
+        "specs": [
+          {
+            "province": "전라남도"
+          },
+          {
+            "province": "전라남도"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "legacy_gwangju_gwangsan",
+        "benefitId": "mois-646000000189",
+        "benefitTitle": "일제강점기 여자근로정신대 피해자 지원",
+        "sourceField": "지원대상",
+        "sourceText": "○ 여자근로정신대 피해자로 결정된 사람중 전남광주통합특별시에 주민등록을 두고 1년 이상 실제 거주한 자 ※ 대일항쟁기 강제동원 피해조사 및 국외 강제동원 희생자 등 지원위원회’ 심사에 따라 결정",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "legacy_incheon_seo",
+        "benefitId": "mois-O00027100003",
+        "benefitTitle": "노인여가복지서비스",
+        "sourceField": "지원대상",
+        "sourceText": "인천 서해구, 검단구 거주자로 만 60세 이상의 어르신",
+        "specs": [
+          {
+            "province": "인천광역시",
+            "city": "서해구"
+          },
+          {
+            "province": "인천광역시",
+            "city": "검단구"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "profile": "legacy_jeonnam_mokpo",
+        "benefitId": "mois-O00093700011",
+        "benefitTitle": "2026년 전남광주통합특별시 장애인 평생교육이용권 지원(전남, 2차)",
+        "sourceField": "지원대상",
+        "sourceText": "○ (신청자격) 신청일 기준 아래의 요건을 모두 충족하는 자 가. 전남광주통합특별시에 주민등록을 둔 자(해당 지역 확인 필수) 나. ｢장애인복지법」에 따라 등록된 19세 이상 장애인 ※2007. 12. 31.生까지 인정 ※중복수혜 불가 : ’26년 평생교육이용권 수급자, 지자체(자체 사업비 편성) 평생교육이용권 수급자",
+        "specs": [
+          {
+            "province": "전남광주통합특별시"
+          }
+        ],
+        "before": "fail",
+        "after": "pass"
+      }
+    ],
+    "exactAggregateCounts": {
+      "changedRuleCount": 484,
+      "uniqueChangedBenefitCount": 365,
+      "byBeforeAfterTransition": {
+        "fail->pass": 172,
+        "fail->unknown": 312
+      }
+    }
+  },
+  "conclusion": {
+    "outcome": "REVIEWED_AND_APPLIED",
+    "generalProfilesUnaffected": true,
+    "onlyObservedTransitions": [
+      "fail->pass",
+      "fail->unknown"
+    ],
+    "summary": "Every changed (profile, region_in rule) result is either fail->pass or fail->unknown, never pass->fail (the new transition-compatibility layer only ever ADDS containment/overlap relations on top of the original exact-match ones, it never removes the original pass condition) and never ->fail (transitions never manufacture a new hard exclusion). All 6 general (non-transition-residence) representative profiles are byte-for-byte unaffected -- candidate counts and PASS/UNKNOWN/FAIL tallies are identical before and after across every one of them, confirming the change is scoped exactly to the two named 2026-07-01 administrative transitions and does not alter any other region_in evaluation."
+  }
+}

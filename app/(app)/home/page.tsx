@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 // for why this no longer fetches (or re-derives top-N from) the full
 // personalized relevant set.
 export default function HomePage() {
-  const { recommended, needsReview, summary, loading, error } = useMatchedBenefits();
+  const { recommended, needsReview, summary, statuses, loading, error } = useMatchedBenefits();
   const isDemo = recommended.length > 0 && recommended.every((b) => b.isDemo);
 
   return (
@@ -53,7 +53,7 @@ export default function HomePage() {
         ) : (
           <div className="flex flex-col gap-2">
             {recommended.map((benefit) => (
-              <BenefitMiniRow key={benefit.id} benefit={benefit} />
+              <BenefitMiniRow key={benefit.id} benefit={benefit} status={statuses[benefit.id]} returnTo="/home" />
             ))}
           </div>
         )}
@@ -69,7 +69,7 @@ export default function HomePage() {
           </div>
           <div className="flex flex-col gap-2">
             {needsReview.map((benefit) => (
-              <BenefitMiniRow key={benefit.id} benefit={benefit} />
+              <BenefitMiniRow key={benefit.id} benefit={benefit} status={statuses[benefit.id]} returnTo="/home" />
             ))}
           </div>
         </section>

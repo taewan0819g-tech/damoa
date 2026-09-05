@@ -1,6 +1,6 @@
 import type { EligibilityRule } from "@/types/benefit";
 import { normalizeProvince, PROVINCE_ALIAS_KEYS, type RegionSpec } from "../region";
-import { resolveCityProvinces, getShortDistrictNames } from "../regionGazetteer";
+import { resolveCityProvinces, getShortDistrictNames, getCitiesForProvince } from "../regionGazetteer";
 import { intervalFromBoundaryWord } from "../interval";
 import { EMPLOYMENT_TARGET_SPECS } from "../employment";
 import type { MarriageDurationBoundary, MarriageDurationSpec } from "@/domain/profile/marriageDuration";
@@ -567,9 +567,11 @@ function parseIncomeClause(text: string): { rule?: EligibilityRule; unresolved?:
 //    never guessed — it's reported as unresolved instead.
 //
 // Only fires when the text expresses an APPLICANT RESIDENCE requirement
-// (see `hasResidenceSignal`) — a bare organization/location mention like
+// (see `residenceSignalIndices`) — a bare organization/location mention like
 // "이천시청에서 지원" or "접수처: 이천시청" never reaches this logic at all,
-// since neither contains a residence keyword.
+// since neither contains a residence keyword. Province mentions additionally
+// require a nearby residence signal, not merely one existing anywhere in the
+// (possibly multi-sentence) text — see `findProvinceRegionSpecs`.
 // ---------------------------------------------------------------------------
 /**
  * "주소를 둔"/"주소를 두고" ("[place]에 주소를 둔 사람" / "...주소를 두고 있는
@@ -669,10 +671,6 @@ function residenceSignalIndices(text: string): number[] {
   return indices;
 }
 
-function hasResidenceSignal(text: string): boolean {
-  return residenceSignalIndices(text).length > 0;
-}
-
 function isNearAnyIndex(tokenIndex: number, tokenLength: number, signalIndices: number[]): boolean {
   return signalIndices.some((si) => {
     const gapAfterToken = si - (tokenIndex + tokenLength); // signal occurs after the token
@@ -682,6 +680,51 @@ function isNearAnyIndex(tokenIndex: number, tokenLength: number, signalIndices: 
       (gapAfterSignal >= 0 && gapAfterSignal <= CITY_PROXIMITY_WINDOW)
     );
   });
+}
+
+/**
+ * The bullet marker ("○") real MOIS `지원대상`/`선정기준` text overwhelmingly
+ * uses to separate independent top-level clauses (e.g. "○ [residence
+ * condition] ○ [unrelated interview-eligibility condition]") — confirmed
+ * present in 8,280/10,967 frozen-catalog records' 지원대상/선정기준 text, and
+ * preserved as-is by `normalizeText` (which only touches whitespace/
+ * punctuation variants, never bullet characters). Used as a wider, structural
+ * companion to `CITY_PROXIMITY_WINDOW`: a real residence clause can legally
+ * put many characters of descriptive detail between the place name and the
+ * residence keyword ("서울특별시 성동구에 영아의 출생일 포함 1년 이상 계속하여
+ * ... 주민등록을 두고 실제 거주하는 부 또는 모가", real MOIS 303000000111,
+ * 47 chars from mention to signal) as long as nothing else interrupts that
+ * SAME clause — whereas a genuinely unrelated later clause (real MOIS
+ * 351050000123's "○ 서울, 경기, 인천 소재 기업 ... 면접 응시자") must not
+ * inherit an earlier clause's residence signal just because both happen to
+ * share one long, multi-topic 지원대상 field.
+ */
+const CLAUSE_DELIMITER = "○";
+
+/** The [start, end) span of the ○-delimited clause containing `index` (falls back to the whole text when no bullet structure is present at all). */
+function clauseBoundsAt(text: string, index: number): { start: number; end: number } {
+  const priorDelimiter = text.lastIndexOf(CLAUSE_DELIMITER, index);
+  const nextDelimiter = text.indexOf(CLAUSE_DELIMITER, index + 1);
+  return {
+    start: priorDelimiter === -1 ? 0 : priorDelimiter,
+    end: nextDelimiter === -1 ? text.length : nextDelimiter,
+  };
+}
+
+/**
+ * True when a province-mention span (`spanStart`..`spanStart + spanLength`)
+ * is genuinely bound to a residence signal: either the original narrow
+ * character-proximity check (unchanged, handles compact same-sentence lists
+ * like "서울, 경기, 인천 거주자"), OR the signal occurs in the SAME
+ * ○-delimited clause as the mention (handles a real residence clause with a
+ * long descriptive relative clause in between, without also re-admitting a
+ * later, structurally SEPARATE ○-clause describing something else, e.g. an
+ * employer/interview location).
+ */
+function isBoundToResidenceSignal(text: string, spanStart: number, spanLength: number, signalIndices: number[]): boolean {
+  if (isNearAnyIndex(spanStart, spanLength, signalIndices)) return true;
+  const { start, end } = clauseBoundsAt(text, spanStart);
+  return signalIndices.some((si) => si >= start && si < end);
 }
 
 /** True when a city-like token is immediately followed by "청" (시청/군청/구청 = a government office name, not a residence). */
@@ -700,11 +743,29 @@ function isInstitutionMention(text: string, matchEndIndex: number): boolean {
  * stated province) or a wholly unrecognized token safely falls back to the
  * broader, still-correct province-only spec rather than asserting a wrong
  * city-level restriction.
+ *
+ * `POLICY_REGION_GAZETTEER` (job B, backing `resolveCityProvinces`)
+ * deliberately has no "전남광주통합특별시" province key — see
+ * regionGazetteer.ts's file header — so a bare city mention never becomes
+ * newly ambiguous between the old and new province names. But that means an
+ * EXPLICIT "전남광주통합특별시 목포시"/"전남광주통합특별시 광산구" mention would
+ * otherwise lose its city specificity here (resolveCityProvinces("목포시")
+ * only ever returns ["전라남도"]), even though the text unambiguously named
+ * both the current province AND a real city that belongs to it. When the
+ * text explicitly names the current merged province, fall back to
+ * `getCitiesForProvince` (job A's exact current-roster lookup, which DOES
+ * list 전남광주통합특별시's cities) to keep that specificity — this is still
+ * driven entirely by what the text itself said, not a guess, and does NOT
+ * touch the lone-city (`findLoneCityCandidates`) path or its global reverse
+ * index at all.
  */
 function resolveCitySpec(province: string, cityToken: string | undefined): RegionSpec {
   if (!cityToken) return { province };
   const cityProvinces = resolveCityProvinces(cityToken);
   if (cityProvinces.includes(province)) {
+    return { province, city: cityToken };
+  }
+  if (getCitiesForProvince(province).includes(cityToken)) {
     return { province, city: cityToken };
   }
   return { province };
@@ -837,6 +898,34 @@ function findNextProvinceMention(text: string, searchFrom: number): { alias: str
  * also be a valid province alias (e.g. "광주시" in "경기도 광주시") would be
  * double-counted as an independent second province mention.
  */
+/**
+ * A parenthetical detail group ("(...)") immediately trailing a place-name
+ * mention (skipping only spaces in between) is, by standard Korean
+ * bureaucratic-text convention, an ANNOTATION of that same mention — not the
+ * start of independent new content — whether or not its contents happen to
+ * be structured, suffixed city tokens `extractProvinceCitySpecs` recognizes.
+ * Real MOIS 148000000035: "서울특별시(송파, 강동, 광진), 경기도(남양주, 용인,
+ * 이천, 하남, 여주, 광주, 가평, 양평), 강원도(춘천, 원주), 충청북도(충주)" — the
+ * bare (no 시/군/구 suffix) district names inside each province's parens
+ * aren't recognized as city tokens, but critically one of them ("광주")
+ * happens to ALSO be a real, unrelated province alias ("광주광역시") — without
+ * this skip, the main province-mention scan would treat that embedded "광주"
+ * as an independent THIRD mention sitting deep inside 경기도's own detail
+ * group, breaking the comma-joined list-continuation chain (`
+ * isCommaJoinedProvinceListContinuation`) for every province after it.
+ * Skipping the whole parenthetical (regardless of contents) once, right
+ * after a mention, keeps the scan cursor on the list's real top-level
+ * delimiters only.
+ */
+function skipTrailingParenGroup(text: string, pos: number): number {
+  let i = pos;
+  while (text[i] === " ") i++;
+  if (text[i] !== "(") return pos;
+  const close = text.indexOf(")", i);
+  if (close === -1) return pos;
+  return close + 1;
+}
+
 function extractProvinceCitySpecs(
   text: string,
   mention: { alias: string; index: number },
@@ -846,12 +935,12 @@ function extractProvinceCitySpecs(
   const after = text.slice(cursor, cursor + 12);
   const firstCityMatch = after.match(CITY_TOKEN_COMBINED_RE);
   if (!firstCityMatch || firstCityMatch.index === undefined) {
-    return { specs: [{ province }], consumedUntil: cursor };
+    return { specs: [{ province }], consumedUntil: skipTrailingParenGroup(text, cursor) };
   }
 
   const firstAbsIndex = cursor + firstCityMatch.index;
   if (!isValidCityTokenBoundary(text, firstAbsIndex, firstCityMatch[0])) {
-    return { specs: [{ province }], consumedUntil: cursor };
+    return { specs: [{ province }], consumedUntil: skipTrailingParenGroup(text, cursor) };
   }
 
   const specs: RegionSpec[] = [resolveCitySpec(province, firstCityMatch[0])];
@@ -880,20 +969,82 @@ function extractProvinceCitySpecs(
  * consumed before looking for the next mention. Returns `[]` when no
  * genuine province mention exists anywhere (the caller then falls back to
  * gazetteer-backed lone-city resolution).
+ *
+ * Each mention (plus its resolved city / sibling-city-list, i.e. the whole
+ * consumed span) must sit near a residence-signal occurrence — the SAME
+ * `residenceSignalIndices`/`isNearAnyIndex`/`CITY_PROXIMITY_WINDOW`
+ * proximity gate the lone-city path (`findLoneCityCandidates`) already
+ * uses — before it's allowed to become part of a `region_in` spec. Without
+ * this, `parseRegionClause`'s clause-level residence-signal-presence check
+ * only proves SOME residence signal exists somewhere in the (possibly
+ * multi-sentence) text, not that any given province mention is the thing
+ * that signal is describing. Real MOIS example (351050000123, "미추홀구 청년
+ * 면접수당 지원"): "인천광역시 미추홀구에 주민등록되어있는 ... 청년. 서울,
+ * 경기, 인천 소재 기업 및 공공기관 취업면접 ... 응시자" — "주민등록" binds only
+ * to "인천광역시 미추홀구"; the second sentence's "서울, 경기, 인천" names the
+ * INTERVIEW-eligible employer location, not applicant residence, and must
+ * NOT become an allowed residence alternative. A mention that fails the
+ * proximity check is dropped from the result (not reported unresolved —
+ * exactly as a lone-city token that fails `isValidCityTokenBoundary` is
+ * silently treated as noise, never as a signal reaching the rule-vs-
+ * unresolved decision), while the scan cursor still advances past it so
+ * scanning for the next genuine mention continues uninterrupted. A compact
+ * OR list ("서울, 경기, 인천 거주자") stays intact because each member's own
+ * span sits within `CITY_PROXIMITY_WINDOW` of the single trailing "거주"
+ * signal — no per-element residence word is required.
  */
-function findProvinceRegionSpecs(text: string): RegionSpec[] {
+/**
+ * True when the span between two adjacent province mentions consists of
+ * nothing but a list delimiter (","/"·"/"또는"), optionally preceded by ONE
+ * non-nested parenthetical detail group — i.e. the first mention's own
+ * trailing "(city, city, ...)" group that `extractProvinceCitySpecs` did NOT
+ * recognize as suffixed city tokens (real MOIS 148000000035: "서울특별시(송파,
+ * 강동, 광진), 경기도(남양주, 용인, ...), 강원도(춘천, 원주), 충청북도(충주)" — a
+ * single compact residence-area OR-list of provinces, each annotated with its
+ * own bare, no-시/군/구-suffix district detail in parens). Used so that once
+ * the FIRST member of such a list is bound to a residence signal, later
+ * members of the SAME uninterrupted comma-joined list inherit that binding —
+ * mirroring the existing sibling-CITY continuation already used inside
+ * `extractProvinceCitySpecs` (`CITY_LIST_DELIMITER_RE`), generalized to
+ * province-level list items. Never crosses a real clause boundary or any
+ * other unrelated content: any other text in the gap fails the check.
+ */
+function isCommaJoinedProvinceListContinuation(text: string, from: number, to: number): boolean {
+  const gap = text.slice(from, to);
+  const stripped = gap.replace(/\([^()]*\)/, "").trim();
+  return /^(또는|,|·)$/.test(stripped);
+}
+
+function findProvinceRegionSpecs(text: string, signalIndices: number[]): RegionSpec[] {
   const specs: RegionSpec[] = [];
   let cursor = 0;
+  let prevBound = false;
+  let prevConsumedUntil = -1;
   while (cursor < text.length) {
     const mention = findNextProvinceMention(text, cursor);
     if (!mention) break;
     const province = normalizeProvince(mention.alias);
     if (!province) {
       cursor = mention.index + mention.alias.length;
+      prevBound = false;
+      prevConsumedUntil = -1;
       continue;
     }
     const result = extractProvinceCitySpecs(text, mention, province);
-    specs.push(...result.specs);
+    const spanLength = result.consumedUntil - mention.index;
+    const excluded = isExcludedProvinceMention(text, mention.index, result.consumedUntil, mention.alias);
+    const directlyBound: boolean = !excluded && isBoundToResidenceSignal(text, mention.index, spanLength, signalIndices);
+    const chained: boolean =
+      !excluded &&
+      prevBound &&
+      prevConsumedUntil >= 0 &&
+      isCommaJoinedProvinceListContinuation(text, prevConsumedUntil, mention.index);
+    const bound: boolean = directlyBound || chained;
+    if (bound) {
+      specs.push(...result.specs);
+    }
+    prevBound = bound;
+    prevConsumedUntil = result.consumedUntil;
     cursor = result.consumedUntil;
   }
   return specs;
@@ -927,6 +1078,20 @@ function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresol
     const idx = match.index;
     if (!isValidCityTokenBoundary(text, idx, token)) continue;
     if (!isNearAnyIndex(idx, token.length, signalIndices)) continue;
+    // Same structural exclusions (Sections 4-7: illustrative examples,
+    // institution/location mentions, brand literals, government-entity
+    // lists, event-organizer subjects) applied to province-name mentions
+    // must also apply here — a city-shaped token is just as capable of
+    // sitting inside a "~ 소재 학교"/"(예시) ..." span (real shape: "서울시
+    // 소재 학교 학생" glues the province alias "서울" to a city-suffix "시",
+    // matching CITY_TOKEN_RE as a lone-city candidate even though the
+    // province-level scan already correctly excludes it as an institution
+    // mention). Without this, an excluded mention could either wrongly
+    // resolve as a false residence city OR (as "서울시" does, since it isn't
+    // itself a real gazetteer city) get flagged `hadUnresolvableToken`,
+    // silently wiping an unrelated, otherwise-valid lone-city resolution
+    // elsewhere in the same field.
+    if (isExcludedProvinceMention(text, idx, idx + token.length, token)) continue;
 
     const provinces = resolveCityProvinces(token);
     if (provinces.length === 1) {
@@ -935,48 +1100,462 @@ function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresol
         seen.add(key);
         specs.push({ province: provinces[0], city: token });
       }
-    } else {
-      // Either genuinely ambiguous (2+ real provinces, e.g. 중구) or a
-      // wholly-unrecognized-but-structurally-valid place-like token (0
-      // provinces, e.g. 없는시): both passed boundary validation, so both
-      // are real, residence-adjacent place-shaped mentions we can't safely
-      // resolve — reported as unresolved rather than guessed OR dropped.
-      hadUnresolvableToken = true;
+      continue;
     }
+
+    // Cross-province-ambiguous token (e.g. 동구 is real in 대구/인천/광주/
+    //울산): if exactly one of its candidate provinces is ALSO literally
+    // named elsewhere in the SAME field (real MOIS 371000000104: "울산 동구
+    // 관내에 출생신고한 ... ○ ... 동구 거주 및 주민등록상 등재되어 있어야 함" — "울산"
+    // disambiguates the later bare "동구" residence clause), that field-level
+    // literal mention IS the applicant's real province, not a guess from an
+    // external gazetteer default. Otherwise (0 or 2+ candidates confirmed in
+    // the field, or a wholly-unrecognized token like "없는시") this is a
+    // real, residence-adjacent place-shaped mention we can't safely resolve
+    // — reported as unresolved rather than guessed or dropped.
+    if (provinces.length > 1) {
+      const literalProvinces = new Set(findAllLiteralProvinceMentions(text).map((m) => m.province));
+      const disambiguated = provinces.filter((p) => literalProvinces.has(p));
+      if (disambiguated.length === 1) {
+        const key = `${disambiguated[0]}|${token}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          specs.push({ province: disambiguated[0], city: token });
+        }
+        continue;
+      }
+    }
+    hadUnresolvableToken = true;
   }
 
   return { specs, hadUnresolvableToken };
 }
 
-function parseRegionClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
-  if (!hasResidenceSignal(text)) return undefined;
+// ---------------------------------------------------------------------------
+// Closeout checkpoint: structural exclusions (Sections 4-6) applied to a
+// province-mention span BEFORE it is allowed to participate either in normal
+// residence binding (`findProvinceRegionSpecs`) or in anaphoric anchor
+// counting (`findAllLiteralProvinceMentions`, below). Each is a narrow,
+// verified structural signal — never a broad keyword blacklist.
+// ---------------------------------------------------------------------------
 
-  const provinceSpecs = findProvinceRegionSpecs(text);
-  if (provinceSpecs.length > 0) {
-    return {
-      rule: { id: "text-region", field: "residence", operator: "region_in", value: provinceSpecs, required: true },
-    };
+/**
+ * Section 4: illustrative/comparison examples ("(예시) 서울시 소재 학교 학생",
+ * "예시: ...", "예를 들어 ...") describe a HYPOTHETICAL other case used to
+ * explain a funding-gap calculation, not the applicant's own residence.
+ * Scoped to these three explicit markers only (never a broad "예" blacklist)
+ * — a span runs from the marker to the next such marker, the next ○/※
+ * delimiter, or the end of the text, whichever comes first.
+ */
+const EXAMPLE_SPAN_MARKERS = ["(예시)", "예시:", "예를 들어"];
+const EXAMPLE_SPAN_BREAK_RE = /[○※]/;
+
+function isWithinExampleSpan(text: string, idx: number): boolean {
+  for (const marker of EXAMPLE_SPAN_MARKERS) {
+    const start = text.lastIndexOf(marker, idx);
+    if (start === -1) continue;
+    const afterMarker = start + marker.length;
+    if (idx < afterMarker) continue;
+    const breakMatch = text.slice(afterMarker).match(EXAMPLE_SPAN_BREAK_RE);
+    const end = breakMatch && breakMatch.index !== undefined ? afterMarker + breakMatch.index : text.length;
+    if (idx < end) return true;
   }
+  return false;
+}
+
+/**
+ * Section 5: "OO 소재 대학/학교/기업/사업장" names the location of an
+ * INSTITUTION or FACILITY (a university's campus city, an employer's
+ * business address, ...) — a structurally distinct eligibility dimension
+ * from applicant residence, even though both use a bare province/city name.
+ * Real MOIS example (O00101000019): "수도권(서울, 경기, 인천) 소재 대학 ...
+ * 재학생" names where the UNIVERSITY is, not where the applicant lives; the
+ * applicant's actual residence condition is a separate, later sentence
+ * ("전북특별자치도에 ... 주민등록이 되어 있는 사람"). Deliberately narrow: only
+ * fires when "소재" follows the mention within a short window AND is itself
+ * followed by a closed set of institution/facility nouns, so a genuine
+ * "OO에 소재하며 실제 거주하는" compound (residence signal appears BETWEEN the
+ * mention and "소재") is never excluded.
+ */
+const INSTITUTION_LOCATION_NOUNS = ["대학", "학교", "기업", "사업장", "사업체", "법인", "기관", "사업소"];
+const INSTITUTION_LOCATION_WINDOW = 30;
+
+function isInstitutionLocationMention(text: string, mentionEnd: number): boolean {
+  const window = text.slice(mentionEnd, mentionEnd + INSTITUTION_LOCATION_WINDOW);
+  const sojaeIdx = window.indexOf("소재");
+  if (sojaeIdx === -1) return false;
+  const between = window.slice(0, sojaeIdx);
+  if (RESIDENCE_SIGNAL_PHRASES.some((p) => between.includes(p)) || between.includes(RESIDENCE_REGISTRATION_TOKEN)) {
+    return false;
+  }
+  const afterSoJae = window.slice(sojaeIdx + 2).replace(/^[\s)]*/, "");
+  return INSTITUTION_LOCATION_NOUNS.some((noun) => afterSoJae.startsWith(noun));
+}
+
+/**
+ * Section 6: confirmed real cases where a province alias is embedded inside
+ * a longer institution/product/portal BRAND name rather than naming
+ * applicant residence — "SGI서울보증" (surety-bond company), "경남바로서비스"
+ * (a public-service portal name), "경기 아이-플러스" (a benefit-card brand,
+ * "경기 아이-플러스(I-plus) 카드"). A general word-boundary rule was
+ * considered first but rejected: requiring a non-Hangul/particle character
+ * immediately after the alias would ALSO reject legitimate program-name
+ * compounds this same checkpoint depends on as anaphoric anchors (e.g.
+ * "(전북형) 난임부부" — "전북" + "형", a real, intended province reference; see
+ * `resolveSingleAnchorAnaphora`). So this is a tiny, individually-verified
+ * literal exclusion list (Section 6's documented fallback), not a growing
+ * generic blacklist.
+ */
+const PROVINCE_BRAND_LITERAL_EXCLUSIONS = ["SGI서울보증", "경남바로서비스", "경기 아이-플러스"];
+
+function isWithinBrandLiteralExclusion(text: string, idx: number): boolean {
+  return PROVINCE_BRAND_LITERAL_EXCLUSIONS.some((literal) => {
+    const literalStart = text.lastIndexOf(literal, idx);
+    return literalStart !== -1 && idx >= literalStart && idx < literalStart + literal.length;
+  });
+}
+
+/**
+ * Confirmed false-positive shape distinct from Section 6's "소재" institution
+ * pattern: a province/city name naming a GOVERNMENT-LEVEL ENTITY that is the
+ * SUBJECT of a fee-waiver/exemption-eligibility list or an event's host, not
+ * the applicant's residence. Two real MOIS shapes:
+ *  - O00026900002 (문화시설 대관료 감면): "사용료 전액 감면할 수 있는 대상 - 국가,
+ *    인천광역시 및 인천광역시 남동구" — an enumerated list of GRANTEE government
+ *    bodies (the State/시/구 themselves get the fee waiver as legal entities),
+ *    never an individual applicant's residence.
+ *  - O00007100023 (체육시설 이용요금 감면): "국가ㆍ경기도 또는 시가 주최ㆍ주관하는
+ *    행사" — the province/city is the EVENT ORGANIZER, not a residence.
+ * Both are narrow, structural signals (an explicit "국가" leading a
+ * comma/·/및-joined entity enumeration, or a following "가/이 주최"/"가/이
+ * 주관" host-marker) — never a generic "government word" blacklist.
+ */
+const GOVERNMENT_ENTITY_LIST_TAIL_RE = /국가(?:\s*(?:,|·|및)\s*[가-힣]+)*\s*(?:,|·|및)\s*$/;
+const ORGANIZER_SUBJECT_MARKERS = ["가 주최", "가 주관", "이 주최", "이 주관"];
+const ORGANIZER_SUBJECT_WINDOW = 20;
+
+function isGovernmentEntityListMention(text: string, mentionStart: number): boolean {
+  const { start } = clauseBoundsAt(text, mentionStart);
+  const before = text.slice(start, mentionStart);
+  return GOVERNMENT_ENTITY_LIST_TAIL_RE.test(before);
+}
+
+function isOrganizerSubjectMention(text: string, mentionEnd: number): boolean {
+  const window = text.slice(mentionEnd, mentionEnd + ORGANIZER_SUBJECT_WINDOW);
+  return ORGANIZER_SUBJECT_MARKERS.some((m) => window.includes(m));
+}
+
+/**
+ * "경기" is the one `PROVINCE_ALIAS_KEYS` entry that collides with an
+ * extremely common, wholly unrelated Korean noun — "경기" also means
+ * "match/game" ("각종 경기에 출전하는 선수", "선발경기") and "economy" ("경기
+ * 침체/회복/부양책"), both routine in benefit/facility-fee text. Every OTHER
+ * bare 2-character province alias (전북, 경북, 경남, 인천, 부산, 대구, 광주,
+ * 대전, 울산, 세종, 제주, 강원, 전남, 서울, ...) names a place and nothing else,
+ * so this is a single, individually-confirmed lexical collision — not a
+ * growing blacklist. Real MOIS regression case: O00007100023 (체육시설 이용요금
+ * 감면) — "각종 경기에 시의 대표로 출전하는 선수 선발경기" — a bare "경기" (game)
+ * match was being treated as a literal-province anaphora anchor, resolving
+ * this record's separate deictic "시 관내"/"관내에 주소를 둔" residence phrases
+ * to a guessed "경기도", even though the field never actually names the
+ * applicant's real province. A trailing-context check distinguishes the
+ * place sense (immediately followed by a real city name, e.g. "경기 이천시",
+ * or a place-confirming word) from the unrelated "game"/"economy" sense.
+ */
+function isAmbiguousBareGyeonggiMention(text: string, mentionIndex: number, alias: string): boolean {
+  if (alias !== "경기") return false;
+  const after = text.slice(mentionIndex + alias.length, mentionIndex + alias.length + 10);
+  const trimmed = after.replace(/^\s+/, "");
+  const cityMatch = trimmed.match(CITY_TOKEN_COMBINED_RE);
+  if (cityMatch && cityMatch.index === 0) return false; // "경기 이천시" — confirmed real place usage
+  // A list delimiter immediately after "경기" ("경기, 인천 거주자", "경기·인천",
+  // "경기 또는 인천") is the same compact-OR-list shape already handled for
+  // sibling cities/provinces elsewhere in this file — real MOIS lists always
+  // sit "경기" directly next to a delimiter into another named place, never
+  // the "match/game" sense (which takes a particle like "에"/"에서", not a
+  // bare list delimiter).
+  if (/^(,|·)/.test(trimmed) || trimmed.startsWith("또는")) return false;
+  // "경기북부"/"경기남부" (and "동부"/"서부") are real, commonly-used compass
+  // sub-region qualifiers for 경기도 in MOIS text (e.g. "경기북부권 지역
+  // 거주자") — not the "game"/"economy" sense, so treat immediately-following
+  // compass words the same as an immediately-following city token.
+  const COMPASS_SUBREGION_WORDS = ["북부", "남부", "동부", "서부"];
+  if (COMPASS_SUBREGION_WORDS.some((w) => trimmed.startsWith(w))) return false;
+  const PLACE_CONFIRM_WORDS = ["지역", "거주", "소재", "도민", "도내"];
+  if (PLACE_CONFIRM_WORDS.some((w) => trimmed.startsWith(w))) return false;
+  return true; // ambiguous / most likely "game"/"economy" usage, not a safe province mention
+}
+
+/** Single shared gate combining Sections 4-6 — used identically by normal
+ * residence binding and by anaphoric anchor-scanning, so a mention excluded
+ * from one is excluded from the other. */
+function isExcludedProvinceMention(text: string, mentionStart: number, mentionEnd: number, alias?: string): boolean {
+  return (
+    isWithinExampleSpan(text, mentionStart) ||
+    isInstitutionLocationMention(text, mentionEnd) ||
+    isWithinBrandLiteralExclusion(text, mentionStart) ||
+    isGovernmentEntityListMention(text, mentionStart) ||
+    isOrganizerSubjectMention(text, mentionEnd) ||
+    (alias !== undefined && isAmbiguousBareGyeonggiMention(text, mentionStart, alias))
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section 1: same-field anaphoric region references. Real MOIS text
+// sometimes states a region requirement using a pronoun-like back-reference
+// ("도내 주민등록", "우리 도에 주민등록", "시범사업 지역 거주") instead of
+// literally repeating the place name — but the SAME field also literally
+// names, elsewhere, exactly what that reference means. Two distinct shapes
+// are handled (never inferred from provider/title, only same-field text):
+//
+//  A. Single anchor: exactly one distinct province is literally named
+//     anywhere in the field, and a deictic residence phrase ("도내", "관내",
+//     "우리 도"/"시"/"군"/"구", or a bare "시"/"도"/"군"/"구" token used as a
+//     standalone word) appears in a residence-signal-bearing clause. The one
+//     literal province IS what the deictic phrase refers to.
+//  B. Named region SET: a labeled, parenthetical region list ("(1단계
+//     시범사업 대상지역) 서울 종로구, ...") enumerates 2+ regions, and a later
+//     back-reference to the shared label root ("시범사업 지역 거주") appears
+//     elsewhere in the field. The back-reference resolves to the UNION of
+//     every region in that list.
+//
+// Both require the anchor/set to be structurally unique — 0 or 2+ candidates
+// never guesses, and reports `{ unresolved: text }` instead (Section 3).
+// ---------------------------------------------------------------------------
+
+/**
+ * Every literal province mention anywhere in `text`, after applying the same
+ * Section 4-6 exclusions as normal residence binding, but WITHOUT requiring
+ * residence-signal proximity. Used only to find a same-field anaphoric
+ * anchor (pattern A) — never to emit a `region_in` spec directly, since a
+ * mention found this way (e.g. "경북도 관내 임차보증금 ... 주택" describing the
+ * TARGET HOUSING, not the applicant) is not itself a residence statement.
+ */
+function findAllLiteralProvinceMentions(text: string): { province: string; index: number }[] {
+  const mentions: { province: string; index: number }[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const mention = findNextProvinceMention(text, cursor);
+    if (!mention) break;
+    const province = normalizeProvince(mention.alias);
+    const mentionEnd = mention.index + mention.alias.length;
+    if (province && !isExcludedProvinceMention(text, mention.index, mentionEnd, mention.alias)) {
+      mentions.push({ province, index: mention.index });
+    }
+    cursor = mentionEnd;
+  }
+  return mentions;
+}
+
+/**
+ * Deictic ("pronoun-like") region back-references that never name a place on
+ * their own: "도내", "관내", "우리 도"/"우리 시"/"우리 군"/"우리 구", and a bare
+ * "시"/"도"/"군"/"구" token used as a standalone word (gated by the same
+ * leading-boundary requirement as a real province mention — never the tail
+ * of a longer name like "인천광역시") immediately followed by a case particle
+ * (real MOIS example, 731000000015: "시에 「주민등록법」에 따른 주민등록이 되어
+ * 있는 학생").
+ */
+const DEICTIC_PHRASE_RE = /(도내|관내|우리\s*(?:도|시|군|구))/;
+const DEICTIC_BARE_TOKEN_RE = /(?:^|[^가-힣])[시도군구](?=에|의|에서)/;
+
+function findDeicticResidenceClauses(text: string, signalIndices: number[]): { start: number; end: number }[] {
+  const clauses: { start: number; end: number }[] = [];
+  const seen = new Set<string>();
+  for (const si of signalIndices) {
+    const { start, end } = clauseBoundsAt(text, si);
+    const key = `${start}-${end}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const clauseText = text.slice(start, end);
+    if (DEICTIC_PHRASE_RE.test(clauseText) || DEICTIC_BARE_TOKEN_RE.test(clauseText)) {
+      clauses.push({ start, end });
+    }
+  }
+  return clauses;
+}
+
+type SingleAnchorAnaphoraResult =
+  | { kind: "resolved"; specs: RegionSpec[] }
+  | { kind: "unresolved" }
+  | { kind: "not-deictic" };
+
+/**
+ * Pattern A (single anchor). Returns "not-deictic" when no deictic residence
+ * phrase exists at all (caller should fall through to ordinary undefined),
+ * "unresolved" when a deictic phrase exists but 0 or 2+ distinct literal
+ * provinces are named in the field (can't safely pick one), and "resolved"
+ * when exactly one candidate exists.
+ */
+function resolveSingleAnchorAnaphora(text: string, signalIndices: number[]): SingleAnchorAnaphoraResult {
+  if (findDeicticResidenceClauses(text, signalIndices).length === 0) return { kind: "not-deictic" };
+  const distinct = new Set(findAllLiteralProvinceMentions(text).map((m) => m.province));
+  if (distinct.size !== 1) return { kind: "unresolved" };
+  const [province] = distinct;
+  return { kind: "resolved", specs: [{ province }] };
+}
+
+/**
+ * Extracts every province(+city) spec from an isolated text span (e.g. one
+ * labeled list clause's body), ignoring residence-signal binding entirely —
+ * the enumerated list itself is not phrased with "거주" per item; the
+ * residence signal lives in the separate back-reference sentence instead.
+ */
+function extractAllProvinceCitySpecsFromSpan(span: string): RegionSpec[] {
+  const specs: RegionSpec[] = [];
+  let cursor = 0;
+  while (cursor < span.length) {
+    const mention = findNextProvinceMention(span, cursor);
+    if (!mention) break;
+    const province = normalizeProvince(mention.alias);
+    if (!province) {
+      cursor = mention.index + mention.alias.length;
+      continue;
+    }
+    const result = extractProvinceCitySpecs(span, mention, province);
+    specs.push(...result.specs);
+    cursor = result.consumedUntil;
+  }
+  return specs;
+}
+
+/**
+ * Pattern B (named region SET). A candidate list clause is any ○-delimited
+ * clause starting with a parenthetical label ending in "...지역)" and
+ * immediately followed by 2+ province(+city) mentions. Clauses are grouped
+ * by their label's "core" (a leading numeric "N단계" stage prefix stripped,
+ * e.g. "1단계 시범사업 대상지역" / "2단계 시범사업 대상지역" both become
+ * "시범사업 대상지역") so a multi-stage list counts as ONE named set, not
+ * several unrelated ones.
+ */
+const NAMED_LIST_LABEL_RE = /^\s*\(([^()]{2,30}지역)\)\s*/;
+const NAMED_LIST_STAGE_PREFIX_RE = /^\d+\s*단계\s*/;
+
+function coreListLabel(label: string): string {
+  return label.replace(NAMED_LIST_STAGE_PREFIX_RE, "").trim();
+}
+
+function findNamedRegionListGroups(text: string): Map<string, { specs: RegionSpec[]; end: number }> {
+  const groups = new Map<string, { specs: RegionSpec[]; end: number }>();
+  let searchFrom = 0;
+  while (searchFrom < text.length) {
+    const delimIdx = text.indexOf(CLAUSE_DELIMITER, searchFrom);
+    if (delimIdx === -1) break;
+    const bodyStart = delimIdx + 1;
+    const nextDelim = text.indexOf(CLAUSE_DELIMITER, bodyStart);
+    const bodyEnd = nextDelim === -1 ? text.length : nextDelim;
+    const clauseBody = text.slice(bodyStart, bodyEnd);
+    const labelMatch = clauseBody.match(NAMED_LIST_LABEL_RE);
+    if (labelMatch) {
+      const core = coreListLabel(labelMatch[1]);
+      const listSpecs = extractAllProvinceCitySpecsFromSpan(clauseBody.slice(labelMatch[0].length));
+      if (listSpecs.length >= 2) {
+        const existing = groups.get(core);
+        if (existing) {
+          existing.specs.push(...listSpecs);
+          existing.end = Math.max(existing.end, bodyEnd);
+        } else {
+          groups.set(core, { specs: listSpecs, end: bodyEnd });
+        }
+      }
+    }
+    searchFrom = bodyStart;
+  }
+  return groups;
+}
+
+/** Back-reference phrase candidates derived from a list's core label — the
+ * label itself, plus (real 상병수당 shape) the label with its "대상"
+ * qualifier dropped: "시범사업 대상지역" -> "시범사업 지역", exactly matching
+ * the real back-reference text "시범사업 지역 거주". */
+function backReferenceCandidates(core: string): string[] {
+  const candidates = new Set<string>([core]);
+  if (core.includes("대상")) {
+    candidates.add(core.replace("대상", "").replace(/\s+/g, " ").trim());
+  }
+  return [...candidates];
+}
+
+const NAMED_LIST_BACKREF_CONTEXT_WORDS = ["거주", "소재", "주소", "주민등록"];
+
+function findNamedListBackReference(text: string, core: string, afterIndex: number): boolean {
+  for (const candidate of backReferenceCandidates(core)) {
+    if (!candidate) continue;
+    let idx = text.indexOf(candidate, afterIndex);
+    while (idx !== -1) {
+      const { start, end } = clauseBoundsAt(text, idx);
+      const clauseText = text.slice(start, end);
+      if (NAMED_LIST_BACKREF_CONTEXT_WORDS.some((w) => clauseText.includes(w))) return true;
+      idx = text.indexOf(candidate, idx + 1);
+    }
+  }
+  return false;
+}
+
+/** Resolves pattern B end-to-end: exactly one candidate named list in the
+ * field, PLUS a same-field back-reference to it in a residence/location-
+ * signal-bearing clause -> the union of the list's specs (deduped). Zero or
+ * 2+ candidate lists never guesses which one a later reference means. */
+function resolveNamedRegionListAnaphora(text: string): RegionSpec[] | undefined {
+  const groups = findNamedRegionListGroups(text);
+  if (groups.size !== 1) return undefined;
+  const [[core, group]] = [...groups.entries()];
+  if (!findNamedListBackReference(text, core, group.end)) return undefined;
+
+  const seen = new Set<string>();
+  const specs: RegionSpec[] = [];
+  for (const spec of group.specs) {
+    const key = `${spec.province}|${spec.city ?? ""}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      specs.push(spec);
+    }
+  }
+  return specs;
+}
+
+function regionRule(specs: RegionSpec[]): { rule: EligibilityRule } {
+  return {
+    rule: { id: "text-region", field: "residence", operator: "region_in", value: specs, required: true },
+  };
+}
+
+function parseRegionClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
+  const signalIndices = residenceSignalIndices(text);
+  if (signalIndices.length === 0) return undefined;
+
+  const provinceSpecs = findProvinceRegionSpecs(text, signalIndices);
+  if (provinceSpecs.length > 0) return regionRule(provinceSpecs);
+
+  // Section 1B: an explicitly named region SET defined earlier in the same
+  // field, referred back to as a whole (e.g. "시범사업 지역 거주") rather than
+  // re-listed. Checked before the lone-city fallback below since the list's
+  // own province+city mentions are never themselves near a residence signal
+  // (the signal lives only in the separate back-reference sentence).
+  const namedListSpecs = resolveNamedRegionListAnaphora(text);
+  if (namedListSpecs && namedListSpecs.length > 0) return regionRule(namedListSpecs);
 
   // No province mention anywhere: try gazetteer-backed lone-city resolution.
   const { specs, hadUnresolvableToken } = findLoneCityCandidates(text);
-  if (specs.length > 0 && !hadUnresolvableToken) {
-    return {
-      rule: { id: "text-region", field: "residence", operator: "region_in", value: specs, required: true },
-    };
-  }
-  // A real, boundary-validated geographic signal exists (an
-  // unresolved/ambiguous city token, or some structurally-valid city-like
-  // token we couldn't safely place) but we can't turn it into a rule —
-  // report it rather than silently dropping it. Deliberately does NOT fall
-  // back to a raw, unvalidated `CITY_TOKEN_COMBINED_RE.test(text)` scan
-  // (Phase 1 root-cause fix): that used to bypass every boundary/proximity/
-  // institution-exclusion check this function just applied, so a phantom
-  // substring match like "노동구" inside "노동구제" (already correctly
-  // rejected above) would still flip this clause to "unresolved" through
-  // the back door. `findLoneCityCandidates` is now the single source of
-  // truth for "did a genuine place-shaped token exist in this text at all".
-  if (hadUnresolvableToken) return { unresolved: text };
+  if (specs.length > 0 && !hadUnresolvableToken) return regionRule(specs);
+
+  // Section 1A: a single province literally named elsewhere in the field is
+  // the safe referent of a deictic residence phrase ("도내 주민등록", "우리
+  // 도에 주민등록", "시에 ... 주민등록이 되어 있는").
+  const anaphora = resolveSingleAnchorAnaphora(text, signalIndices);
+  if (anaphora.kind === "resolved") return regionRule(anaphora.specs);
+
+  // Section 3: a real geographic residence restriction clearly exists (a
+  // deictic phrase with an ambiguous/missing same-field anchor, or a
+  // boundary-validated but unplaceable/ambiguous city-like token) but can't
+  // be safely turned into a rule — report it rather than silently treating
+  // the policy as unrestricted. Deliberately does NOT fall back to a raw,
+  // unvalidated `CITY_TOKEN_COMBINED_RE.test(text)` scan (Phase 1 root-cause
+  // fix): that used to bypass every boundary/proximity/institution-exclusion
+  // check this function just applied, so a phantom substring match like
+  // "노동구" inside "노동구제" (already correctly rejected above) would still
+  // flip this clause to "unresolved" through the back door.
+  if (hadUnresolvableToken || anaphora.kind === "unresolved") return { unresolved: text };
   return undefined;
 }
 

@@ -1,0 +1,378 @@
+{
+  "checkpoint": "D — Damoa Closed-Beta Readiness Audit",
+  "auditType": "AUDIT_ONLY_NO_IMPLEMENTATION",
+  "branch": "wip/beta-personalization-pass",
+  "auditedShaBeforeThisCheckpointsOwnCommit": "d8296250349dad384d14633cf0b0bdf5547c1270",
+  "divergedFromMainAt": "b4f5eb923930ff85ff6d35e103160dcb247970b4",
+  "branchRelationToMain": "main is a strict ancestor of wip/beta-personalization-pass (linear, no conflicts)",
+  "verdict": "READY_AFTER_SMALL_FIXES",
+  "supersededByCheckpoint": {
+    "title": "MOIS Region-Clause Precision correction ONLY",
+    "type": "REAL_CODE_FIX (not audit-only)",
+    "startedFromSha": "fcca37277703a65f9f45f90130b8d9482fdb7c2d",
+    "summary": "Found + fixed a real false-positive: findProvinceRegionSpecs scanned every province mention in the whole MOIS text with zero binding to a residence signal (unlike the already-correct lone-city path), so an unrelated later clause describing INTERVIEW/EMPLOYER location (e.g. '서울, 경기, 인천 소재 기업 면접 응시자') was incorrectly absorbed into the applicant's residence rule. Fixed via a positive-binding requirement (existing char-proximity window OR same '○'-delimited MOIS clause). See docs/audits/mois-region-binding-precision.json (frozen 10,967-record catalog before/after) and docs/audits/mois-region-top10-impact.json (Top-10/Top-20 impact, all 6 profiles).",
+    "concreteBugFixed": {
+      "serviceId": "351050000123",
+      "before": [{ "province": "인천광역시", "city": "미추홀구" }, { "province": "서울특별시" }, { "province": "경기도" }, { "province": "인천광역시" }, { "province": "서울특별시" }, { "province": "인천광역시" }],
+      "after": [{ "province": "인천광역시", "city": "미추홀구" }],
+      "verifiedNoLongerInIcheonHomeTop10": true
+    },
+    "catalogWideAggregate": {
+      "totalRecordsWithRegionRuleBefore": 2611, "totalRecordsWithRegionRuleAfter": 2595,
+      "totalRegionSpecsBefore": 3092, "totalRegionSpecsAfter": 2960,
+      "affectedRecordCount": 28, "totalRemovedSpecCount": 61, "totalAddedSpecCount": 6,
+      "newlyEmptyFieldCount": 16,
+      "removalCategoryCounts": { "A_confirmedFalseResidenceSpec": 0, "B_validSpecAccidentallyRemoved": 7, "C_ambiguous": 54 },
+      "unexpectedNonRegionMismatchCount": 0
+    },
+    "residualFindingOutOfScope": "This fix targets ONLY the cross-'○'-clause binding gap. Auditing Top-20 Home results post-fix (scripts/auditMoisRegionTop10Impact.ts) surfaced a DIFFERENT, PRE-EXISTING, UNCHANGED-BY-THIS-FIX bug shape still present in Home Top-10 for 2/6 profiles (mois-401000000112, mois-569000000375: illustrative '(예시) 서울시 소재 학교...' comparison text inside the SAME single ○-clause as the true residence signal gets absorbed, because there is no clause boundary to bind against). Verified byte-identical extraction before/after this checkpoint's fix (same bug, not a regression). Left unfixed as out of scope; tracked as a new P1 issue below for the next checkpoint."
+  },
+  "coreJourneys": {
+    "A_onboarding_to_home": "PASS",
+    "B_home_rec_to_detail_to_home": "PASS",
+    "C_list_search_filter_sort_page_to_detail_to_back_exact_state": "PASS",
+    "D_saved_to_detail_to_saved": "PASS",
+    "E_profile_edit_partial_merge": "PASS",
+    "F_province_city_edit_canonical": "PASS",
+    "G_refresh_deep_link_identical_request": "PASS",
+    "allPass": true,
+    "total": 7,
+    "passed": 7
+  },
+  "personalizationAuditCurrentState": {
+    "catalogSize": 13712,
+    "sourceArtifact": "docs/audits/beta-readiness-personalization.json",
+    "sourceScript": "scripts/auditBetaReadiness.ts",
+    "likelyEligibleAcrossAllProfiles": 0,
+    "profiles": [
+      { "id": "A_icheon_unemployed_youth", "label": "A 이천 무직 청년", "likely_eligible": 0, "unknown": 7801, "not_eligible": 5911, "relevantFeedSize": 6409, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "B_seoul_university_student", "label": "B 서울 대학생", "likely_eligible": 0, "unknown": 7971, "not_eligible": 5741, "relevantFeedSize": 6362, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "C_suwon_high_income_worker", "label": "C 수원 고소득 직장인", "likely_eligible": 0, "unknown": 7553, "not_eligible": 6159, "relevantFeedSize": 6145, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "D_icheon_newlywed", "label": "D 이천 신혼부부", "likely_eligible": 0, "unknown": 7946, "not_eligible": 5766, "relevantFeedSize": 6244, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "E_jeonnam_single_parent", "label": "E 전남 한부모", "likely_eligible": 0, "unknown": 8039, "not_eligible": 5673, "relevantFeedSize": 6312, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "F_minimal_input", "label": "F 최소 입력", "likely_eligible": 0, "unknown": 9844, "not_eligible": 3868, "relevantFeedSize": 8091, "homeRecommended": 0, "homeRecommendedPctUnknown": null, "homeNeedsReview": 10 }
+    ],
+    "numbersUpdatedByMoisRegionClausePrecisionCheckpoint": true,
+    "numbersRefreshedByMoisRegionParserFinalCloseoutCheckpoint": true,
+    "top10HomeRecommendedProfilesAtoE": {
+      "strengthStrongPct": 100,
+      "sourceGovernmentPct": 100,
+      "sourceYouthPolicyPct": 0,
+      "regionSpecificEvidenceRange": "5/10 (A) to 10/10 (C,D,E)",
+      "interestOverlapRange": "0/10 to 10/10 depending on profile"
+    },
+    "likelyEligibleRegressionStatus": "unchanged from pre-pass baseline (docs/beta-personalization-audit.md); known, previously-flagged, not a regression"
+  },
+  "youthRegionLeakage": {
+    "measuredNotFixed": true,
+    "zipCdImplemented": false,
+    "icheonProfiles": [
+      {
+        "profile": "A_icheon_unemployed_youth",
+        "homeTop10YouthCount": 0,
+        "homeTop20YouthCount": 0,
+        "relevantFeedYouthCount": 831,
+        "relevantFeedSize": 6413,
+        "relevantFeedYouthPct": 13.0,
+        "suspiciousLocalTitlesInRelevantFeed": 545
+      },
+      {
+        "profile": "D_icheon_newlywed",
+        "homeTop10YouthCount": 0,
+        "homeTop20YouthCount": 0,
+        "relevantFeedYouthCount": 604,
+        "relevantFeedSize": 6248,
+        "relevantFeedYouthPct": 9.7,
+        "suspiciousLocalTitlesInRelevantFeed": 476
+      }
+    ],
+    "riskClassification": {
+      "homeSurface": "LOW (measured 0/10 Top-10, 0/20 Top-20 for both Icheon profiles)",
+      "fullCatalogBrowse": "MODERATE (13.0% / 9.7% of relevant feed is Youth, with unverified but geographically-suggestive titles)"
+    },
+    "cause": "Side effect of strength-based ranking (built for personalization, not region-leakage mitigation) deprioritizing Youth's single-dimension region-blind matches below MOIS's multi-dimension matches — zipCd enforcement gap itself remains completely unresolved"
+  },
+  "moisRegionLeakage_HISTORICAL_supersededByFinalCloseout": {
+    "supersededNote": "This block reflects the intermediate state measured DURING the MOIS Region-Clause Precision correction checkpoint, BEFORE the later Final Closeout Fix checkpoint. It is kept only as historical evidence of what was measured at that point in time. Do NOT read residualHomeTop10ObviousMismatches below as current — see moisRegionLeakageCurrent for the present, authoritative state.",
+    "newThisCheckpoint": true,
+    "auditType": "metadata_only_heuristic (title/organization locality token vs profile province, NEVER used for production eligibility)",
+    "sourceArtifact": "docs/audits/mois-region-top10-impact.json (snapshot at that time)",
+    "confirmedBugFixed": {
+      "serviceId": "351050000123",
+      "profile": "A_icheon_unemployed_youth",
+      "verifiedAbsentFromHomeTop10AfterFix": true
+    },
+    "residualHomeTop10ObviousMismatches_ASMEASUREDATTHATTIME": [
+      { "profile": "A_icheon_unemployed_youth", "count": 2, "ids": ["mois-569000000402", "mois-631000000709"] },
+      { "profile": "B_seoul_university_student", "count": 2, "ids": ["mois-401000000112", "mois-569000000375"] },
+      { "profile": "C_suwon_high_income_employed", "count": 0, "ids": [] },
+      { "profile": "D_icheon_newlywed", "count": 0, "ids": [] },
+      { "profile": "E_jeonnam_single_parent", "count": 0, "ids": [] },
+      { "profile": "F_minimal_just_onboarded", "count": 0, "ids": [] }
+    ],
+    "rootCauseOfResidualAtThatTime": "Different bug shape than that checkpoint's fix — text has a SINGLE ○-clause (or none) so there is no clause boundary to bind against, and unrelated illustrative comparison mentions (e.g. \"(예시) 서울시 소재 학교...\") or organization-implied-only region (no residence sentence at all) sit within char-proximity of the one real residence signal. This was tracked as issue P1-5 and subsequently FIXED by moisRegionParserFinalCloseoutCheckpoint (see below)."
+  },
+  "moisRegionLeakageCurrent": {
+    "asOf": "moisRegionParserFinalCloseoutCheckpoint (MOIS region parser checkpoint CLOSED)",
+    "sourceArtifacts": ["docs/audits/mois-region-parser-closeout.json", "docs/audits/mois-region-top10-impact.json (rerun post-closeout)"],
+    "auditType": "metadata_only_heuristic (title/organization locality token vs profile province, NEVER used for production eligibility) for Top-20 samples; manual 28-record review for the confirmed parser-caused bugs",
+    "confirmedBugsFixedAndVerifiedRemovedFromHomeTop10": [
+      "mois-351050000123 (A_icheon_unemployed_youth)",
+      "mois-O00101000019 (B_seoul_university_student)",
+      "mois-401000000112 (B_seoul_university_student)",
+      "mois-569000000375 (B_seoul_university_student)"
+    ],
+    "parserCausedObviousWrongRegionItemsRemainingInHomeTop10": 0,
+    "residualSourceDataLimitations_NOT_parserBugs": [
+      {
+        "id": "mois-648000001072",
+        "profiles": ["A_icheon_unemployed_youth", "B_seoul_university_student"],
+        "reason": "Both the old and new parser produce no region rule for this record; its only textual anchor is the brand name 경남바로서비스, which is deliberately excluded from residence inference (would require brand-name guessing). Documented, unavoidable, not a regression."
+      },
+      {
+        "id": "mois-569000000402",
+        "profile": "A_icheon_unemployed_youth",
+        "reason": "Manually reviewed as ambiguous/source-data limitation, NOT a confirmed parser bug — frozen MOIS text lacks a provable region signal. The Top-20 title/org metadata heuristic flags it as 'clearly_wrong_region' by substring match alone, but that heuristic is not the authoritative classification (see docs/audits/mois-region-binding-manual-review.json's section4_homeTop20WrongRegionManualReview)."
+      },
+      {
+        "id": "mois-631000000709",
+        "profile": "A_icheon_unemployed_youth",
+        "reason": "Same as mois-569000000402 above — manually classified ambiguous/source-data limitation, not a confirmed parser bug."
+      }
+    ],
+    "correctlyLeftUnconvertedByDesign": ["mois-569000000402", "mois-631000000709"]
+  },
+  "eligibilityStatusProductRisk": {
+    "likelyEligibleReachable": false,
+    "likelyEligibleCountAllProfilesAllCatalog": 0,
+    "pctHomeRecommendedUnknownNonEmptyProfiles": 100,
+    "unknownAlwaysLabeled": true,
+    "unknownLabelText": "확인이 필요해요",
+    "labelOmissionCodePathFound": false,
+    "risk": "product-copy/comprehension risk only, not a bug — '다모아 추천' heading plus small badge could be misread as confirmed eligibility by first-time testers"
+  },
+  "deadOrMisleadingControls": [
+    {
+      "id": "dead_deposit_category_chip",
+      "location": "app/(app)/benefits/BenefitsPageClient.tsx (VISIBLE_CATEGORIES = ALL_CATEGORIES.filter(c => c !== \"deposit\"))",
+      "coverage": "0/13712 (financialFacetCoverage.deposit: 0 in docs/audits/category-topic-precision-audit.json)",
+      "status": "CLOSED",
+      "closedBy": "preBetaTinyCleanupCheckpoint",
+      "note": "Hidden from the /benefits selectable category chips. BenefitCategory = \"deposit\" and CATEGORY_LABELS.deposit are deliberately kept for future FSS integration; ?category=deposit URLs still parse and filter safely."
+    },
+    {
+      "id": "always_empty_financial_group_tab",
+      "location": "app/(app)/benefits/BenefitsPageClient.tsx (GROUP_FILTERS = ALL_GROUP_FILTERS.filter(f => f.value !== \"financial\")); domain/benefit/sourceGroup.ts (getSourceGroup), providers/index.ts (FSSFinancialProductProvider never registered)",
+      "coverage": "0 real records ever classified as source group 'financial' (MOIS=government, Youth=youth_policy, neither maps to financial types)",
+      "status": "CLOSED",
+      "closedBy": "preBetaTinyCleanupCheckpoint",
+      "note": "Hidden from the /benefits selectable group tabs. BenefitSourceGroup = \"financial\", SOURCE_GROUP_LABELS.financial, and getSourceGroup()'s financial bucket are deliberately kept for future FSS integration; ?group=financial URLs still parse and filter safely."
+    }
+  ],
+  "performance": {
+    "benchmarkScript": "scripts/benchmarkProductionStability.ts",
+    "isRealProductionTiming": false,
+    "note": "local benchmark only, frozen snapshots, zero live calls; NOT a substitute for real Vercel production timing",
+    "stages": [
+      { "stage": "MOIS catalog build", "coldMs": 422.1, "warmMs": 0.0 },
+      { "stage": "Youth catalog build", "coldMs": 98.8, "warmMs": 0.0 },
+      { "stage": "Merged catalog + candidate index", "coldMs": 34.4, "warmMs": 0.1 },
+      { "stage": "Total (first request in a fresh process)", "coldMs": 555, "warmMs": 0.1 },
+      { "stage": "Representative match request (candidates=6850/12356)", "coldMs": 38.3, "warmMs": null }
+    ],
+    "cacheArchitecture": "resilientCache: uninitialized/healthy/stale/unavailable, stale-if-error, process-local (not shared across serverless instances)",
+    "betaBlocker": false,
+    "widerScaleBlocker": "possible, if hosting platform recycles instances frequently"
+  },
+  "safetyAudit": {
+    "allPass": true,
+    "checks": [
+      { "name": "No mock backfill when a real provider key is configured", "result": "PASS" },
+      { "name": "Server-only API keys never reach the client bundle", "result": "PASS" },
+      { "name": "No secrets committed", "result": "PASS" },
+      { "name": "Invalid returnTo cannot cause an open redirect", "result": "PASS" },
+      { "name": "Missing official/application URL hidden, never invented", "result": "PASS" },
+      { "name": "not_eligible never shown as a personalized recommendation", "result": "PASS" },
+      { "name": "UNKNOWN never presented as confirmed eligibility", "result": "PASS (comprehension risk only, see eligibilityStatusProductRisk)" },
+      { "name": "Malformed benefits-list URL params fail safely", "result": "PASS" },
+      { "name": "API failure has a user-visible, non-crashing state", "result": "PASS" }
+    ]
+  },
+  "mobileUx": {
+    "codeLevelOnly": true,
+    "notPixelAuditedOnRealDevice": true,
+    "findings": [
+      "AppShell is max-w-md mx-auto mobile-first single-column shell with pb-24 clearance for BottomNav",
+      "Filter/category chip rows use horizontal scroll (-mx-4 overflow-x-auto px-4), not wrap/clip",
+      "All selects are native <select> elements (OS picker, no custom-dropdown risk)",
+      "Home, /benefits, and detail all have an EmptyState with actionable recovery copy; no dead ends found"
+    ]
+  },
+  "qualityGates": {
+    "typecheck": "pass",
+    "lint": "pass (0 errors, 1 pre-existing unrelated warning: scripts/auditPersonalizationBaseline.ts:421 unused var)",
+    "test": "pass (953/953 tests, 57/57 files) — rerun as of moisRegionParserFinalCloseoutCheckpoint",
+    "build": "pass (route shapes unchanged: /benefits static, /benefits/[id] dynamic) — rerun as of moisRegionParserFinalCloseoutCheckpoint",
+    "gitDiffCheck": "pass (clean, no whitespace errors) — rerun as of moisRegionParserFinalCloseoutCheckpoint",
+    "ciEvidence": "none claimed or referenced; no GitHub Actions run checked/exists for this SHA"
+  },
+  "issues": {
+    "p0": [],
+    "p1": [
+      {
+        "id": "P1-1",
+        "title": "Dead '예금' (deposit) category filter chip",
+        "evidence": "deadOrMisleadingControls.dead_deposit_category_chip; financialFacetCoverage.deposit: 0",
+        "smallestNextCheckpoint": "Exclude 'deposit' from the list page's ALL_CATEGORIES the same way INTEREST_CATEGORIES already excludes it (one-line change, no logic risk)",
+        "status": "CLOSED",
+        "closedBy": "preBetaTinyCleanupCheckpoint",
+        "closureNote": "Hidden from /benefits selectable category chips; domain type/label and URL parsing kept for future FSS integration."
+      },
+      {
+        "id": "P1-2",
+        "title": "Always-empty '금융상품' group tab",
+        "evidence": "deadOrMisleadingControls.always_empty_financial_group_tab; domain/benefit/sourceGroup.ts; providers/index.ts (FSS never registered)",
+        "smallestNextCheckpoint": "Hide the 'financial' tab from GROUP_FILTERS until FSS is a real provider, or add a distinct '곧 추가돼요' empty-state variant for that tab",
+        "status": "CLOSED",
+        "closedBy": "preBetaTinyCleanupCheckpoint",
+        "closureNote": "Hidden from /benefits selectable group tabs; domain type/label/grouping logic kept for future FSS integration."
+      },
+      {
+        "id": "P1-3",
+        "title": "likely_eligible structurally unreachable",
+        "evidence": "personalizationAuditCurrentState.likelyEligibleAcrossAllProfiles = 0; unchanged from pre-pass baseline",
+        "smallestNextCheckpoint": "Explicit product sign-off on loosening the MOIS/Youth 'incomplete' downgrade for well-verified dimension combinations, OR a copy-only disclaimer strengthening change; beta test plan item 9 is designed to inform this decision"
+      },
+      {
+        "id": "P1-4",
+        "title": "Youth Center region leakage in full-catalog browse",
+        "evidence": "youthRegionLeakage: 13.0% (A) / 9.7% (D) of relevant feed, mitigated only on Home (0/10, 0/20)",
+        "smallestNextCheckpoint": "A zipCd -> 행정동 crosswalk research spike (no implementation yet)"
+      },
+      {
+        "id": "P1-5",
+        "title": "Residual MOIS same-○-clause region false positives (mois-401000000112, mois-569000000375, and same-shape cases) still reach Home Top-10 for 2/6 profiles",
+        "evidence": "moisRegionLeakageCurrent (current state); moisRegionLeakage_HISTORICAL_supersededByFinalCloseout (historical measurement); docs/audits/mois-region-top10-impact.json",
+        "smallestNextCheckpoint": "A separate, narrowly-scoped checkpoint auditing single-○-clause (or no-○) MOIS text where an illustrative/comparison province mention sits within the same binding window as the true residence signal — different root cause than this checkpoint's cross-clause fix, needs its own frozen-catalog audit before choosing an implementation",
+        "status": "CLOSED",
+        "closedBy": "moisRegionParserFinalCloseoutCheckpoint",
+        "closureNote": "mois-401000000112 and mois-569000000375 confirmed fixed and removed from Home Top-10 (see moisRegionParserFinalCloseoutCheckpoint.section11_homeTop10Reaudit). One residual data-limitation case (mois-648000001072) remains, explicitly out of scope (would require brand-name inference)."
+      }
+    ],
+    "p2": [
+      { "id": "P2-1", "title": "Process-local/cold-start cache architecture", "note": "fine at 5-tester scale, revisit before wider rollout" },
+      { "id": "P2-2", "title": "Youth zipCd remains fundamentally unresolved", "note": "root cause of P1-4, tracked separately as the underlying architecture gap" },
+      { "id": "P2-3", "title": "'확인이 필요해요' comprehension", "note": "explicitly the subject of the beta test plan item 9; better learned from real testers than guessed at" }
+    ],
+    "counts": { "p0": 0, "p1": 5, "p1Open": 2, "p1Closed": 3, "p2": 3 }
+  },
+  "betaTestPlan": {
+    "instrumentation": "manual only — no analytics infrastructure exists in this codebase today (no analytics SDK/event-tracking imports found in app/, components/, hooks/)",
+    "testerCount": 5,
+    "recordPerTester": [
+      "Onboarding completion (yes/no, abandonment step if no)",
+      "Onboarding time (wall-clock start-to-finish)",
+      "Top-10 perceived relevance (0-10, direct question)",
+      "Useful new benefit discovered (yes/no + which one)",
+      "Obvious mismatch count (of the 10)",
+      "Detail clicks (count)",
+      "Official-link clicks (count)",
+      "Save usage (yes/no + count)",
+      "'확인이 필요해요' understanding (direct probe for P1-3)",
+      "Loading/error complaints (spontaneous mentions)"
+    ],
+    "suggestedModeration": "watch each session live or via screen-share where possible, especially for relevance/mismatch/comprehension items which need a follow-up question, not just click data"
+  },
+  "filesAddedThisCheckpoint": [
+    "docs/beta-readiness-audit.md",
+    "docs/audits/beta-readiness.json",
+    "docs/audits/beta-readiness-personalization.json",
+    "scripts/auditBetaReadiness.ts"
+  ],
+  "filesAddedByMoisRegionClausePrecisionCheckpoint": [
+    "docs/audits/mois-region-binding-precision.json",
+    "docs/audits/mois-region-top10-impact.json",
+    "scripts/auditMoisRegionBindingPrecision.ts",
+    "scripts/auditMoisRegionTop10Impact.ts"
+  ],
+  "noProductionCodeChanged": false,
+  "productionCodeChangedByMoisRegionClausePrecisionCheckpoint": [
+    "lib/eligibility/extraction/koreanEligibilityParser.ts"
+  ],
+  "moisRegionParserFinalCloseoutCheckpoint": {
+    "title": "Damoa MOIS Region Parser — Final Closeout Fix",
+    "type": "REAL_CODE_FIX (not audit-only); closes the checkpoint left open by Addendum 2",
+    "startedFromSha": "ba3dd7390147c502ca414e108f58a7817c724cfb",
+    "sourceOfTruth": "docs/audits/mois-region-binding-manual-review.json (28 manually-reviewed records)",
+    "closeoutArtifact": "docs/audits/mois-region-parser-closeout.json",
+    "fixesLanded": [
+      "Safe same-field anaphora recovery: single unambiguous province anchor + later deictic back-reference, and named region-list groups + whole-set back-reference (no service-ID special casing)",
+      "parseRegionClause returns { unresolved: text } instead of undefined when a real residence signal can't be safely anchored (narrow, deictic-phrase-gated)",
+      "New exclusions: illustrative (예시) spans, non-residence institution/location mentions (학교/대학/기업/사업장 소재), embedded province/brand literal tokens",
+      "Fixed a previously-undiscovered gap: findLoneCityCandidates lacked the same institution/example/brand exclusion gate already applied to province-level scanning",
+      "Compass sub-region (경기북부/남부/동부/서부) and list-delimiter refinements to bare-경기 disambiguation"
+    ],
+    "section9_manualReview28": { "total": 28, "pass": 28, "needsReview": 0 },
+    "section10_newlyEmpty16": {
+      "correct_to_be_unrestricted": { "total": 5, "pass": 5, "needsReview": 0 },
+      "should_still_have_region_rule": { "total": 7, "pass": 7, "needsReview": 0 },
+      "ambiguous": { "total": 4, "pass": 4, "needsReview": 0 }
+    },
+    "section12_fullCatalogSafety": {
+      "totalMOISRecords": 10967,
+      "totalFieldsProcessed": 12019,
+      "recordsWithRegionRuleBefore": 2595,
+      "recordsWithRegionRuleAfter": 2598,
+      "regionSpecCountBefore": 2960,
+      "regionSpecCountAfter": 2916,
+      "fieldRulesRestoredByAnaphoraOrDisambiguation": 6,
+      "specsRemovedByExampleInstitutionBrandGuards": 66,
+      "newlyUnresolvedFieldCount": 2,
+      "unexpectedNonRegionMismatchCount": 0
+    },
+    "section11_homeTop10Reaudit": {
+      "confirmedWrongRegionItemsFromManualReview": ["mois-O00101000019", "mois-401000000112", "mois-569000000375", "mois-648000001072"],
+      "verifiedRemovedFromHomeTop10": ["mois-O00101000019", "mois-401000000112", "mois-569000000375"],
+      "unchangedDataLimitation": {
+        "id": "mois-648000001072",
+        "reason": "Both old and new parser produce no region rule for this record; the only textual anchor is the brand name 경남바로서비스, which Section 7's design requires excluding via the brand-literal list. Documented, unavoidable data limitation, not a parser regression (same category as the accepted 357000000131 exception).",
+        "before10": true,
+        "after10": true
+      },
+      "correctlyLeftAmbiguous": ["mois-569000000402", "mois-631000000709"],
+      "parserCausedObviousWrongRegionItemsRemainingInHomeTop10": 0
+    },
+    "regressionTests": "Tests A-K added to __tests__/eligibility/koreanEligibilityParser.test.ts (describe block 'final closeout fix (anaphora recovery + false-positive exclusions)'); __tests__/fixtures/regionGoldSample.ts nationwide-no-place-name fixture corrected to nationwide-deictic-no-anchor/unresolved; __tests__/fixtures/regionGoldSampleReal.ts real-rule-multi-region-large-list restored to full 14-region expectation. Full suite: 953/953 tests, 57/57 files.",
+    "p1_5Status": "CLOSED — confirmed false positives fixed; remaining mois-648000001072 case is an explicit, documented, out-of-scope data limitation (would require brand-name inference, which the spec forbids)",
+    "verdictUnchanged": "READY_AFTER_SMALL_FIXES",
+    "moisRegionParserCheckpointStatus": "CLOSED"
+  },
+  "preBetaTinyCleanupCheckpoint": {
+    "title": "Damoa Pre-Beta Tiny Cleanup",
+    "type": "REAL_CODE_FIX (small, scoped UI-control hiding + documentation contradiction fix)",
+    "expectedStartSha": "abca2e29ee9a28fbb6d3f1e82f956e341cbf16b4",
+    "scope": "No eligibility parsing, ruleEngine, candidate retrieval, region logic, ranking, topics/facets semantics, profile/onboarding, navigation, Youth zipCd, likely_eligible semantics, or provider architecture changes.",
+    "fixesLanded": [
+      "Hid the dead '예금' category chip from /benefits' CURRENT selectable category filters (app/(app)/benefits/BenefitsPageClient.tsx: VISIBLE_CATEGORIES). BenefitCategory = \"deposit\" and CATEGORY_LABELS.deposit kept unchanged for future FSS integration.",
+      "Hid the always-empty '금융상품' group tab from /benefits' CURRENT selectable group filters (BenefitsPageClient.tsx: GROUP_FILTERS filters out \"financial\"). BenefitSourceGroup = \"financial\", SOURCE_GROUP_LABELS.financial, and getSourceGroup()'s financial bucket kept unchanged.",
+      "lib/benefits/listState.ts left unmodified — ?category=deposit and ?group=financial URLs continue to parse and filter safely; only the clickable UI controls are hidden.",
+      "Fixed a documentation contradiction in this file: the old moisRegionLeakage block (renamed moisRegionLeakage_HISTORICAL_supersededByFinalCloseout) still listed mois-401000000112 and mois-569000000375 as current residual Home Top-10 mismatches, even though moisRegionParserFinalCloseoutCheckpoint had already confirmed both fixed. Added moisRegionLeakageCurrent as the single authoritative current-state block; P1-1, P1-2, P1-5 marked CLOSED with closure notes."
+    ],
+    "filesChanged": [
+      "app/(app)/benefits/BenefitsPageClient.tsx",
+      "__tests__/components/benefitsPageClient.test.ts",
+      "docs/audits/beta-readiness.json",
+      "docs/beta-readiness-audit.md"
+    ],
+    "eligibilityRankingSnapshotChanged": false,
+    "finalP1P2State": {
+      "closedThisCheckpoint": ["P1-1 (dead deposit chip)", "P1-2 (empty financial tab)", "P1-5 (MOIS region parser residuals, closed by the prior checkpoint, documentation now consistent)"],
+      "remainingOpenDeliberatelyNotFixed": [
+        "P1-3: likely_eligible remains 0 in current real-adapter audit",
+        "P1-4: Youth zipCd region gap in full-catalog browse",
+        "P2-3: '확인이 필요해요' comprehension — to be tested in beta",
+        "Source-data limitations where frozen MOIS text lacks a provable region (e.g. mois-648000001072, mois-569000000402, mois-631000000709) — not parser bugs"
+      ]
+    }
+  }
+}

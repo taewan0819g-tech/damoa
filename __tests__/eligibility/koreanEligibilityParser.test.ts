@@ -753,6 +753,198 @@ describe("extractEligibilityFromText", () => {
       const { rules } = extractEligibilityFromText("f", "서울특별시중구 거주자만 신청 가능");
       expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "서울특별시" }] }));
     });
+
+    // -----------------------------------------------------------------
+    // Province-spec residence binding (Checkpoint: MOIS region-clause
+    // precision correction). Regression coverage for the fix to
+    // findProvinceRegionSpecs/isBoundToResidenceSignal: a province mention
+    // may become part of a residence region_in rule only when it is
+    // positively bound (proximity window OR same "○"-delimited clause) to
+    // an actual residence signal — NOT merely because a residence signal
+    // exists somewhere else in the same text. See
+    // docs/audits/mois-region-binding-precision.json for the frozen-catalog
+    // audit and MOIS 351050000123 for the real confirmed false positive.
+    // -----------------------------------------------------------------
+    describe("province-spec residence binding (region-clause precision fix)", () => {
+      it("A: a later ○-clause's employer/interview-location province mentions are NOT absorbed into the residence rule (real MOIS 351050000123 shape)", () => {
+        const { rules } = extractEligibilityFromText(
+          "f",
+          "○ 인천광역시 미추홀구에 주민등록되어있는 18~39세 미취업 청년\r\n\r\n○ 서울, 경기, 인천 소재 기업 및 공공기관 취업면접 또는 서울, 인천지역 공무원 면접 응시자"
+        );
+        const regionRule = rules.find((r) => r.operator === "region_in");
+        expect(regionRule).toEqual(
+          expect.objectContaining({
+            field: "residence",
+            operator: "region_in",
+            value: [{ province: "인천광역시", city: "미추홀구" }],
+          })
+        );
+      });
+
+      it("B: a compact OR list sharing one trailing residence word keeps all provinces as valid alternatives", () => {
+        const { rules } = extractEligibilityFromText("f", "서울, 경기, 인천 거주자");
+        expect(rules[0]).toEqual(
+          expect.objectContaining({
+            value: [{ province: "서울특별시" }, { province: "경기도" }, { province: "인천광역시" }],
+          })
+        );
+      });
+
+      it("C: a compact province+city OR list sharing one trailing residence word keeps both cities", () => {
+        const { rules } = extractEligibilityFromText("f", "경기도 이천시, 여주시 거주자");
+        expect(rules[0]).toEqual(
+          expect.objectContaining({
+            value: [
+              { province: "경기도", city: "이천시" },
+              { province: "경기도", city: "여주시" },
+            ],
+          })
+        );
+      });
+
+      it("D: a province mention in its own ○-clause with no residence signal anywhere near it is not silently added, even though a residence signal exists in a separate ○-clause elsewhere in the text", () => {
+        const { rules } = extractEligibilityFromText(
+          "f",
+          "○ 서울특별시 소재 협력업체 재직자 우대. ○ 신청자 본인의 주민등록상 거주지가 확인되는 자"
+        );
+        const regionRule = rules.find((r) => r.operator === "region_in");
+        expect(regionRule).toBeUndefined();
+      });
+
+      it("E: lone-city (no province mention anywhere) proximity-window behavior is unchanged", () => {
+        const { rules } = extractEligibilityFromText("f", "이천시 거주자만 신청 가능");
+        expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "이천시" }] }));
+
+        const result = extractEligibilityFromText(
+          "f",
+          "이천시에서 시행하는 사업으로, 접수는 온라인으로만 받으며 결과는 개별 통보합니다"
+        );
+        expect(result.rules).toEqual([]);
+      });
+    });
+
+    // -----------------------------------------------------------------
+    // Checkpoint: "Damoa MOIS Region Parser — Final Closeout Fix". Regression
+    // coverage for the anaphora-recovery (Section 2) and false-positive-
+    // exclusion (Sections 4-7) fixes made in this checkpoint, each traceable
+    // to a specific real MOIS record surfaced by
+    // docs/audits/mois-region-binding-manual-review.json /
+    // docs/audits/mois-region-parser-closeout.json.
+    // -----------------------------------------------------------------
+    describe("final closeout fix (anaphora recovery + false-positive exclusions)", () => {
+      it("A: a comma-joined OR-list of provinces, each annotated with its own bare (non-시/군/구-suffixed) district detail in parens, keeps every member once the first is bound to a residence signal (real MOIS 148000000035 shape)", () => {
+        const { rules } = extractEligibilityFromText(
+          "f",
+          "서울특별시(송파, 강동, 광진), 경기도(남양주, 용인), 강원특별자치도(춘천, 원주), 충청북도(충주) 거주자만 신청 가능"
+        );
+        expect(rules[0]).toEqual(
+          expect.objectContaining({
+            value: [
+              { province: "서울특별시" },
+              { province: "경기도" },
+              { province: "강원특별자치도" },
+              { province: "충청북도" },
+            ],
+          })
+        );
+      });
+
+      it("B: a bare district name inside a province's own trailing detail parens that happens to collide with an unrelated province alias (e.g. '광주') does not break the comma-joined list chain (real MOIS 148000000035 shape)", () => {
+        const { rules } = extractEligibilityFromText(
+          "f",
+          "경기도(남양주, 용인, 이천, 하남, 여주, 광주, 가평, 양평), 강원특별자치도(춘천, 원주) 거주자만 신청 가능"
+        );
+        expect(rules[0]).toEqual(
+          expect.objectContaining({ value: [{ province: "경기도" }, { province: "강원특별자치도" }] })
+        );
+      });
+
+      it("C: a province mention inside a government-entity enumeration (funding/administering bodies, not applicant residence) is not treated as a residence condition (real MOIS O00026900002 shape)", () => {
+        const result = extractEligibilityFromText(
+          "f",
+          "○ 사업시행자 : 국가, 인천광역시 및 인천광역시 남동구 ○ 신청일 기준 만 18세 이상인 자"
+        );
+        expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      });
+
+      it("D: a province mention inside an event-organizer clause ('~가 주최·주관하는') is not treated as a residence condition (real MOIS O00007100023 shape)", () => {
+        const result = extractEligibilityFromText("f", "국가ㆍ경기도 또는 시가 주최ㆍ주관하는 행사에 참가하는 선수");
+        expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      });
+
+      it("E: bare '경기' used in its 'match/game' sense (not Gyeonggi-do) is not guessed as a province mention when nothing after it confirms a place reading (real MOIS O00007100023 shape)", () => {
+        const result = extractEligibilityFromText("f", "각종 경기에 시의 대표로 출전하는 선수 선발경기");
+        expect(result.rules.find((r) => r.field === "residence")).toBeUndefined();
+      });
+
+      it("F: bare '경기' immediately followed by a compass sub-region word ('북부'/'남부'/'동부'/'서부') IS resolved as a genuine 경기도 residence mention, not excluded as ambiguous (real MOIS O00046700012 shape)", () => {
+        const { rules } = extractEligibilityFromText("f", "경기북부권 지역 거주자");
+        expect(rules[0]).toEqual(expect.objectContaining({ field: "residence", value: [{ province: "경기도" }] }));
+      });
+
+      it("G: Pattern A — a single province literally named elsewhere in the field is the safe referent of a deictic '도내 주민등록' back-reference", () => {
+        const { rules } = extractEligibilityFromText(
+          "지원대상",
+          "전북특별자치도에 1년 이상 계속하여 보호자의 주민등록이 되어 있는 사람으로서 도내 주민등록이 되어 있는 자"
+        );
+        expect(rules[0]).toEqual(
+          expect.objectContaining({ field: "residence", value: [{ province: "전북특별자치도" }] })
+        );
+      });
+
+      it("H: Pattern B — an explicitly-named region SET spelled out across multiple staged enumeration clauses is recovered as a whole when a LATER, separate clause back-references it by its list label (real MOIS 135200005017 shape)", () => {
+        const { rules } = extractEligibilityFromText(
+          "지원대상",
+          "○ (1단계 시범사업 대상지역) 서울 종로구, 경기 부천시('22.7~2024. 12. 31 종료) ○ (2단계 시범사업 대상지역) 경기 안양시, 대구 달서구('23.7~) ○ (기본 자격) 시범사업 지역 거주 취업자 또는 시범사업 지역 소재 사업장 근로자(거주지 무관), 만 15세 이상 대한민국 국적자"
+        );
+        const region = rules.find((r) => r.field === "residence");
+        expect(region).toEqual(
+          expect.objectContaining({
+            field: "residence",
+            value: [
+              { province: "서울특별시", city: "종로구" },
+              { province: "경기도", city: "부천시" },
+              { province: "경기도", city: "안양시" },
+              { province: "대구광역시", city: "달서구" },
+            ],
+          })
+        );
+      });
+
+      it("I: a province mention inside an illustrative '(예시)' span is excluded from residence alternatives (real MOIS 401000000112 shape)", () => {
+        const result = extractEligibilityFromText(
+          "지원대상",
+          "입학일 기준 시흥시에 주소를 둔 1학년 신입생 (예시) 서울시 소재 학교 학생 : 입학지원금 상한액 30만원"
+        );
+        const region = result.rules.find((r) => r.field === "residence");
+        expect(region).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "시흥시" }] }));
+      });
+
+      it("J: a non-residence institution-location mention ('~ 소재 대학') is excluded even while a genuine same-field residence anaphora resolves correctly (real MOIS O00101000019 shape)", () => {
+        const result = extractEligibilityFromText(
+          "지원대상",
+          "수도권(서울, 경기, 인천) 소재 대학, 산업대학 재학생으로서 전북특별자치도에 1년 이상 계속하여 보호자의 주민등록이 되어 있는 사람"
+        );
+        const region = result.rules.find((r) => r.field === "residence");
+        expect(region).toEqual(expect.objectContaining({ value: [{ province: "전북특별자치도" }] }));
+      });
+
+      it("K: embedded province/brand-name tokens (SGI서울보증, 경남바로서비스) are not treated as residence mentions", () => {
+        const withBrand = extractEligibilityFromText(
+          "지원대상",
+          "SGI서울보증에 가입한 자로서 신청일 기준 세종시에 주민등록이 되어 있는 자"
+        );
+        expect(withBrand.rules.find((r) => r.field === "residence")).toEqual(
+          expect.objectContaining({ value: [{ province: "세종특별자치시" }] })
+        );
+
+        const noAnchor = extractEligibilityFromText(
+          "지원대상",
+          "도내 주민등록이 되어 있는 무주택 청년으로서 경남바로서비스 참조"
+        );
+        expect(noAnchor.rules.find((r) => r.field === "residence")).toBeUndefined();
+      });
+    });
   });
 
   // ---------------------------------------------------------------------
@@ -1213,6 +1405,45 @@ describe("Phase 2: marital/family eligibility", () => {
       expect(result.rules).toContainEqual(
         expect.objectContaining({ field: "childrenCount", operator: "gte", value: 2 })
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // REGION — Checkpoint: Final Region Transition Compatibility.
+  // resolveCitySpec's explicit-current-province fallback must keep city
+  // specificity for "전남광주통합특별시 <city>" mentions, without touching the
+  // bare-city (province-less) parsing path or its conservative ambiguity
+  // handling at all.
+  // ---------------------------------------------------------------------
+  describe("전남광주통합특별시 explicit province+city parsing (city-specificity fix)", () => {
+    it('"전남광주통합특별시 목포시" resolves to {province, city} instead of losing city specificity', () => {
+      const result = extractEligibilityFromText("지원대상", "전남광주통합특별시 목포시에 거주하는 자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전남광주통합특별시", city: "목포시" }]);
+    });
+
+    it('"전남광주통합특별시 광산구" resolves to {province, city} instead of losing city specificity', () => {
+      const result = extractEligibilityFromText("지원대상", "전남광주통합특별시 광산구에 거주하는 자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전남광주통합특별시", city: "광산구" }]);
+    });
+
+    it('a "전남광주통합특별시"-prefixed city NOT in the current roster still falls back to province-only (no guessing)', () => {
+      const result = extractEligibilityFromText("지원대상", "전남광주통합특별시 없는시에 거주하는 자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전남광주통합특별시" }]);
+    });
+
+    it("bare '목포시' with no province prefix stays exactly as conservative as before (still resolves only to the historical province, never to the new merged name)", () => {
+      const result = extractEligibilityFromText("지원대상", "목포시 관내 거주자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "전라남도", city: "목포시" }]);
+    });
+
+    it("bare '광산구' with no province prefix does not become newly ambiguous or resolve to 전남광주통합특별시", () => {
+      const result = extractEligibilityFromText("지원대상", "광산구 관내 거주자");
+      const regionRule = result.rules.find((r) => r.field === "residence" && r.operator === "region_in");
+      expect(regionRule?.value).toEqual([{ province: "광주광역시", city: "광산구" }]);
     });
   });
 });

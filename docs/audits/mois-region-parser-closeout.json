@@ -1,0 +1,803 @@
+{
+  "generatedAt": "2026-09-05T06:00:22.169Z",
+  "checkpoint": "Damoa MOIS Region Parser — Final Closeout Fix",
+  "auditedBeforeSha": "ba3dd7390147c502ca414e108f58a7817c724cfb",
+  "frozenInput": {
+    "path": "/tmp/mois_serviceList_full.json",
+    "rowCount": 10967
+  },
+  "section9_manualReview28": {
+    "counts": {
+      "total": 28,
+      "pass": 28,
+      "needsReview": 0
+    },
+    "records": [
+      {
+        "serviceId": "135200005017",
+        "serviceName": "한국형 상병수당 시범사업",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [
+          {
+            "province": "서울특별시",
+            "city": "종로구"
+          },
+          {
+            "province": "경기도",
+            "city": "부천시"
+          },
+          {
+            "province": "충청남도",
+            "city": "천안시"
+          },
+          {
+            "province": "전라남도",
+            "city": "순천시"
+          },
+          {
+            "province": "경상북도",
+            "city": "포항시"
+          },
+          {
+            "province": "경상남도",
+            "city": "창원시"
+          },
+          {
+            "province": "경기도",
+            "city": "안양시"
+          },
+          {
+            "province": "경기도",
+            "city": "용인시"
+          },
+          {
+            "province": "대구광역시",
+            "city": "달서구"
+          },
+          {
+            "province": "전북특별자치도",
+            "city": "익산시"
+          },
+          {
+            "province": "충청북도",
+            "city": "충주시"
+          },
+          {
+            "province": "충청남도",
+            "city": "홍성군"
+          },
+          {
+            "province": "전북특별자치도",
+            "city": "전주시"
+          },
+          {
+            "province": "강원특별자치도",
+            "city": "원주시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "valid residence restriction fully restored, matching manual review's validSpecs"
+      },
+      {
+        "serviceId": "148000000035",
+        "serviceName": "한강수계 주민지원(일반지원사업)",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [
+          {
+            "province": "서울특별시"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "서울특별시"
+          },
+          {
+            "province": "경기도"
+          },
+          {
+            "province": "강원특별자치도"
+          },
+          {
+            "province": "충청북도"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "restored {서울,경기,강원,충북} — deliberately excludes 광주광역시 from the artifact's validSpecs: source text's '광주' is 경기도 광주시 (grouped with 남양주/용인/이천/하남/여주/가평/양평), not 광주광역시; including it would reintroduce a confirmed false residence spec"
+      },
+      {
+        "serviceId": "306000000228",
+        "serviceName": "자치회관 수강료 및 사용료 감면 지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "314000000105",
+        "serviceName": "장애인 활동지원(추가2)",
+        "field": "지원대상",
+        "classification": "D_ambiguous",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "correctly left with no region rule (no guess) for an ambiguous case"
+      },
+      {
+        "serviceId": "317000000115",
+        "serviceName": "금천구 보훈대상자 보훈예우수당",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "서울특별시",
+            "city": "금천구"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "서울특별시",
+            "city": "금천구"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "318000000131",
+        "serviceName": "구민 AI(정보화)교육",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "351050000123",
+        "serviceName": "미추홀구 청년 면접수당 지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "인천광역시",
+            "city": "미추홀구"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "인천광역시",
+            "city": "미추홀구"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "357000000131",
+        "serviceName": "강화군 임산부 교통비 지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": true,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "371000000104",
+        "serviceName": "동구 출산지원금 지원",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [
+          {
+            "province": "울산광역시",
+            "city": "동구"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "valid residence restriction fully restored, matching manual review's validSpecs"
+      },
+      {
+        "serviceId": "378000000164",
+        "serviceName": "성남시 노동취약계층 유급병가비 지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "경기도",
+            "city": "성남시"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "경기도",
+            "city": "성남시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "435000000137",
+        "serviceName": "고등 및 대학생 장학금(유공 및 저소득)",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "강원특별자치도",
+            "city": "양양군"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "강원특별자치도",
+            "city": "양양군"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "647000000126",
+        "serviceName": "경상북도 신혼부부 임차보증금 이자지원",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [
+          {
+            "province": "경상북도"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "valid residence restriction fully restored, matching manual review's validSpecs"
+      },
+      {
+        "serviceId": "648000001072",
+        "serviceName": "청년주택 임차보증금 이자지원",
+        "field": "지원대상",
+        "classification": "D_ambiguous",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": true,
+        "verdict": "PASS",
+        "explanation": "correctly left UNRESOLVED, no guessed rule for an ambiguous case"
+      },
+      {
+        "serviceId": "654000000003",
+        "serviceName": "전북형 난임 시술비 지원",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [
+          {
+            "province": "전북특별자치도"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "valid residence restriction fully restored, matching manual review's validSpecs"
+      },
+      {
+        "serviceId": "731000000015",
+        "serviceName": "중·고 신입생 체육복 지원",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [
+          {
+            "province": "인천광역시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "valid residence restriction fully restored, matching manual review's validSpecs"
+      },
+      {
+        "serviceId": "O00004000006",
+        "serviceName": "체육시설 이용요금 감면(취약계층)",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00007100023",
+        "serviceName": "체육시설 이용요금 감면(장곡동생활체육시설)",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": true,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00024200003",
+        "serviceName": "종로구 공영주차장 이용요금 감면",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "서울특별시",
+            "city": "종로구"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "서울특별시",
+            "city": "종로구"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00024300002",
+        "serviceName": "체육시설 이용요금 감면",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "서울특별시"
+          },
+          {
+            "province": "서울특별시"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "서울특별시"
+          },
+          {
+            "province": "서울특별시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00025500001",
+        "serviceName": "체육시설 이용요금 감면",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "울산광역시",
+            "city": "북구"
+          },
+          {
+            "province": "울산광역시",
+            "city": "북구"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "울산광역시",
+            "city": "북구"
+          },
+          {
+            "province": "울산광역시",
+            "city": "북구"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00025800004",
+        "serviceName": "장사시설 이용요금 감면",
+        "field": "지원대상",
+        "classification": "B_confirmed_valid_region_lost",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [
+          {
+            "province": "인천광역시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "valid residence restriction fully restored, matching manual review's validSpecs"
+      },
+      {
+        "serviceId": "O00025800009",
+        "serviceName": "체육시설 이용요금 감면(송림체육관)",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": true,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00026900002",
+        "serviceName": "문화시설 대관료 감면(남동소래아트홀)",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": true,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00030500003",
+        "serviceName": "제주삼다수재단 제주도내 초·중·고·대학생 장학금 지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "제주특별자치도"
+          },
+          {
+            "province": "제주특별자치도"
+          },
+          {
+            "province": "제주특별자치도"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "제주특별자치도"
+          },
+          {
+            "province": "제주특별자치도"
+          },
+          {
+            "province": "제주특별자치도"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00058000005",
+        "serviceName": "여성비전센터 교육 운영",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "경기도",
+            "city": "화성시"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "경기도",
+            "city": "화성시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00058400005",
+        "serviceName": "화성시 학생 장학금 지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "경기도",
+            "city": "화성시"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "경기도",
+            "city": "화성시"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "O00066100001",
+        "serviceName": "경북농민사관학교 교육지원",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [
+          {
+            "province": "경상북도"
+          },
+          {
+            "province": "경상북도"
+          }
+        ],
+        "postCloseoutSpecs": [
+          {
+            "province": "경상북도"
+          },
+          {
+            "province": "경상북도"
+          }
+        ],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      },
+      {
+        "serviceId": "PTR000051703",
+        "serviceName": "부도 임대주택 퇴거자 전세자금 융자",
+        "field": "지원대상",
+        "classification": "A_confirmed_precision_fix",
+        "preCloseoutSpecs": [],
+        "postCloseoutSpecs": [],
+        "postCloseoutUnresolved": false,
+        "verdict": "PASS",
+        "explanation": "confirmed false spec stays removed after closeout"
+      }
+    ]
+  },
+  "section10_newlyEmpty16": {
+    "counts": {
+      "correct_to_be_unrestricted": {
+        "total": 5,
+        "pass": 5,
+        "needsReview": 0
+      },
+      "should_still_have_region_rule": {
+        "total": 7,
+        "pass": 7,
+        "needsReview": 0
+      },
+      "ambiguous": {
+        "total": 4,
+        "pass": 4,
+        "needsReview": 0
+      }
+    },
+    "groups": {
+      "correct_to_be_unrestricted": [
+        {
+          "serviceId": "306000000228",
+          "serviceName": "자치회관 수강료 및 사용료 감면 지원",
+          "postSpecs": [],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "stays without a false region rule"
+        },
+        {
+          "serviceId": "318000000131",
+          "serviceName": "구민 AI(정보화)교육",
+          "postSpecs": [],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "stays without a false region rule"
+        },
+        {
+          "serviceId": "O00004000006",
+          "serviceName": "체육시설 이용요금 감면(취약계층)",
+          "postSpecs": [],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "stays without a false region rule"
+        },
+        {
+          "serviceId": "O00025800009",
+          "serviceName": "체육시설 이용요금 감면(송림체육관)",
+          "postSpecs": [],
+          "postUnresolved": true,
+          "verdict": "PASS",
+          "explanation": "stays without a false region rule"
+        },
+        {
+          "serviceId": "PTR000051703",
+          "serviceName": "부도 임대주택 퇴거자 전세자금 융자",
+          "postSpecs": [],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "stays without a false region rule"
+        }
+      ],
+      "should_still_have_region_rule": [
+        {
+          "serviceId": "135200005017",
+          "serviceName": "한국형 상병수당 시범사업",
+          "postSpecs": [
+            {
+              "province": "서울특별시",
+              "city": "종로구"
+            },
+            {
+              "province": "경기도",
+              "city": "부천시"
+            },
+            {
+              "province": "충청남도",
+              "city": "천안시"
+            },
+            {
+              "province": "전라남도",
+              "city": "순천시"
+            },
+            {
+              "province": "경상북도",
+              "city": "포항시"
+            },
+            {
+              "province": "경상남도",
+              "city": "창원시"
+            },
+            {
+              "province": "경기도",
+              "city": "안양시"
+            },
+            {
+              "province": "경기도",
+              "city": "용인시"
+            },
+            {
+              "province": "대구광역시",
+              "city": "달서구"
+            },
+            {
+              "province": "전북특별자치도",
+              "city": "익산시"
+            },
+            {
+              "province": "충청북도",
+              "city": "충주시"
+            },
+            {
+              "province": "충청남도",
+              "city": "홍성군"
+            },
+            {
+              "province": "전북특별자치도",
+              "city": "전주시"
+            },
+            {
+              "province": "강원특별자치도",
+              "city": "원주시"
+            }
+          ],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "restored: [{\"province\":\"서울특별시\",\"city\":\"종로구\"},{\"province\":\"경기도\",\"city\":\"부천시\"},{\"province\":\"충청남도\",\"city\":\"천안시\"},{\"province\":\"전라남도\",\"city\":\"순천시\"},{\"province\":\"경상북도\",\"city\":\"포항시\"},{\"province\":\"경상남도\",\"city\":\"창원시\"},{\"province\":\"경기도\",\"city\":\"안양시\"},{\"province\":\"경기도\",\"city\":\"용인시\"},{\"province\":\"대구광역시\",\"city\":\"달서구\"},{\"province\":\"전북특별자치도\",\"city\":\"익산시\"},{\"province\":\"충청북도\",\"city\":\"충주시\"},{\"province\":\"충청남도\",\"city\":\"홍성군\"},{\"province\":\"전북특별자치도\",\"city\":\"전주시\"},{\"province\":\"강원특별자치도\",\"city\":\"원주시\"}]"
+        },
+        {
+          "serviceId": "357000000131",
+          "serviceName": "강화군 임산부 교통비 지원",
+          "postSpecs": [],
+          "postUnresolved": true,
+          "verdict": "PASS",
+          "explanation": "not restored as a rule, but safely marked UNRESOLVED rather than empty"
+        },
+        {
+          "serviceId": "371000000104",
+          "serviceName": "동구 출산지원금 지원",
+          "postSpecs": [
+            {
+              "province": "울산광역시",
+              "city": "동구"
+            }
+          ],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "restored: [{\"province\":\"울산광역시\",\"city\":\"동구\"}]"
+        },
+        {
+          "serviceId": "647000000126",
+          "serviceName": "경상북도 신혼부부 임차보증금 이자지원",
+          "postSpecs": [
+            {
+              "province": "경상북도"
+            }
+          ],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "restored: [{\"province\":\"경상북도\"}]"
+        },
+        {
+          "serviceId": "654000000003",
+          "serviceName": "전북형 난임 시술비 지원",
+          "postSpecs": [
+            {
+              "province": "전북특별자치도"
+            }
+          ],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "restored: [{\"province\":\"전북특별자치도\"}]"
+        },
+        {
+          "serviceId": "731000000015",
+          "serviceName": "중·고 신입생 체육복 지원",
+          "postSpecs": [
+            {
+              "province": "인천광역시"
+            }
+          ],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "restored: [{\"province\":\"인천광역시\"}]"
+        },
+        {
+          "serviceId": "O00025800004",
+          "serviceName": "장사시설 이용요금 감면",
+          "postSpecs": [
+            {
+              "province": "인천광역시"
+            }
+          ],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "restored: [{\"province\":\"인천광역시\"}]"
+        }
+      ],
+      "ambiguous": [
+        {
+          "serviceId": "314000000105",
+          "serviceName": "장애인 활동지원(추가2)",
+          "postSpecs": [],
+          "postUnresolved": false,
+          "verdict": "PASS",
+          "explanation": "left with no rule, no guess"
+        },
+        {
+          "serviceId": "648000001072",
+          "serviceName": "청년주택 임차보증금 이자지원",
+          "postSpecs": [],
+          "postUnresolved": true,
+          "verdict": "PASS",
+          "explanation": "left UNRESOLVED, no guess"
+        },
+        {
+          "serviceId": "O00007100023",
+          "serviceName": "체육시설 이용요금 감면(장곡동생활체육시설)",
+          "postSpecs": [],
+          "postUnresolved": true,
+          "verdict": "PASS",
+          "explanation": "left UNRESOLVED, no guess"
+        },
+        {
+          "serviceId": "O00026900002",
+          "serviceName": "문화시설 대관료 감면(남동소래아트홀)",
+          "postSpecs": [],
+          "postUnresolved": true,
+          "verdict": "PASS",
+          "explanation": "left UNRESOLVED, no guess"
+        }
+      ]
+    }
+  },
+  "section12_fullCatalogSafety": {
+    "totalMOISRecords": 10967,
+    "totalFieldsProcessed": 12019,
+    "recordsWithRegionRuleBefore": 2595,
+    "recordsWithRegionRuleAfter": 2598,
+    "regionSpecCountBefore": 2960,
+    "regionSpecCountAfter": 2916,
+    "fieldRulesRestoredByAnaphoraOrDisambiguation": 6,
+    "specsRemovedByExampleInstitutionBrandGuards": 66,
+    "newlyUnresolvedFieldCount": 2,
+    "unexpectedNonRegionMismatchCount": 0,
+    "unexpectedNonRegionMismatchSamples": []
+  }
+}
