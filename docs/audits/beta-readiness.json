@@ -6,6 +6,27 @@
   "divergedFromMainAt": "b4f5eb923930ff85ff6d35e103160dcb247970b4",
   "branchRelationToMain": "main is a strict ancestor of wip/beta-personalization-pass (linear, no conflicts)",
   "verdict": "READY_AFTER_SMALL_FIXES",
+  "supersededByCheckpoint": {
+    "title": "MOIS Region-Clause Precision correction ONLY",
+    "type": "REAL_CODE_FIX (not audit-only)",
+    "startedFromSha": "fcca37277703a65f9f45f90130b8d9482fdb7c2d",
+    "summary": "Found + fixed a real false-positive: findProvinceRegionSpecs scanned every province mention in the whole MOIS text with zero binding to a residence signal (unlike the already-correct lone-city path), so an unrelated later clause describing INTERVIEW/EMPLOYER location (e.g. '서울, 경기, 인천 소재 기업 면접 응시자') was incorrectly absorbed into the applicant's residence rule. Fixed via a positive-binding requirement (existing char-proximity window OR same '○'-delimited MOIS clause). See docs/audits/mois-region-binding-precision.json (frozen 10,967-record catalog before/after) and docs/audits/mois-region-top10-impact.json (Top-10/Top-20 impact, all 6 profiles).",
+    "concreteBugFixed": {
+      "serviceId": "351050000123",
+      "before": [{ "province": "인천광역시", "city": "미추홀구" }, { "province": "서울특별시" }, { "province": "경기도" }, { "province": "인천광역시" }, { "province": "서울특별시" }, { "province": "인천광역시" }],
+      "after": [{ "province": "인천광역시", "city": "미추홀구" }],
+      "verifiedNoLongerInIcheonHomeTop10": true
+    },
+    "catalogWideAggregate": {
+      "totalRecordsWithRegionRuleBefore": 2611, "totalRecordsWithRegionRuleAfter": 2595,
+      "totalRegionSpecsBefore": 3092, "totalRegionSpecsAfter": 2960,
+      "affectedRecordCount": 28, "totalRemovedSpecCount": 61, "totalAddedSpecCount": 6,
+      "newlyEmptyFieldCount": 16,
+      "removalCategoryCounts": { "A_confirmedFalseResidenceSpec": 0, "B_validSpecAccidentallyRemoved": 7, "C_ambiguous": 54 },
+      "unexpectedNonRegionMismatchCount": 0
+    },
+    "residualFindingOutOfScope": "This fix targets ONLY the cross-'○'-clause binding gap. Auditing Top-20 Home results post-fix (scripts/auditMoisRegionTop10Impact.ts) surfaced a DIFFERENT, PRE-EXISTING, UNCHANGED-BY-THIS-FIX bug shape still present in Home Top-10 for 2/6 profiles (mois-401000000112, mois-569000000375: illustrative '(예시) 서울시 소재 학교...' comparison text inside the SAME single ○-clause as the true residence signal gets absorbed, because there is no clause boundary to bind against). Verified byte-identical extraction before/after this checkpoint's fix (same bug, not a regression). Left unfixed as out of scope; tracked as a new P1 issue below for the next checkpoint."
+  },
   "coreJourneys": {
     "A_onboarding_to_home": "PASS",
     "B_home_rec_to_detail_to_home": "PASS",
@@ -24,13 +45,14 @@
     "sourceScript": "scripts/auditBetaReadiness.ts",
     "likelyEligibleAcrossAllProfiles": 0,
     "profiles": [
-      { "id": "A_icheon_unemployed_youth", "label": "A 이천 무직 청년", "likely_eligible": 0, "unknown": 7805, "not_eligible": 5907, "relevantFeedSize": 6413, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "B_seoul_university_student", "label": "B 서울 대학생", "likely_eligible": 0, "unknown": 7974, "not_eligible": 5738, "relevantFeedSize": 6365, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "C_suwon_high_income_worker", "label": "C 수원 고소득 직장인", "likely_eligible": 0, "unknown": 7557, "not_eligible": 6155, "relevantFeedSize": 6149, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "D_icheon_newlywed", "label": "D 이천 신혼부부", "likely_eligible": 0, "unknown": 7950, "not_eligible": 5762, "relevantFeedSize": 6248, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "E_jeonnam_single_parent", "label": "E 전남 한부모", "likely_eligible": 0, "unknown": 8032, "not_eligible": 5680, "relevantFeedSize": 6305, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "A_icheon_unemployed_youth", "label": "A 이천 무직 청년", "likely_eligible": 0, "unknown": 7807, "not_eligible": 5905, "relevantFeedSize": 6415, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "B_seoul_university_student", "label": "B 서울 대학생", "likely_eligible": 0, "unknown": 7977, "not_eligible": 5735, "relevantFeedSize": 6368, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "C_suwon_high_income_worker", "label": "C 수원 고소득 직장인", "likely_eligible": 0, "unknown": 7559, "not_eligible": 6153, "relevantFeedSize": 6151, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "D_icheon_newlywed", "label": "D 이천 신혼부부", "likely_eligible": 0, "unknown": 7953, "not_eligible": 5759, "relevantFeedSize": 6251, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "E_jeonnam_single_parent", "label": "E 전남 한부모", "likely_eligible": 0, "unknown": 8039, "not_eligible": 5673, "relevantFeedSize": 6312, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
       { "id": "F_minimal_input", "label": "F 최소 입력", "likely_eligible": 0, "unknown": 9844, "not_eligible": 3868, "relevantFeedSize": 8091, "homeRecommended": 0, "homeRecommendedPctUnknown": null, "homeNeedsReview": 10 }
     ],
+    "numbersUpdatedByMoisRegionClausePrecisionCheckpoint": true,
     "top10HomeRecommendedProfilesAtoE": {
       "strengthStrongPct": 100,
       "sourceGovernmentPct": 100,
@@ -68,6 +90,26 @@
       "fullCatalogBrowse": "MODERATE (13.0% / 9.7% of relevant feed is Youth, with unverified but geographically-suggestive titles)"
     },
     "cause": "Side effect of strength-based ranking (built for personalization, not region-leakage mitigation) deprioritizing Youth's single-dimension region-blind matches below MOIS's multi-dimension matches — zipCd enforcement gap itself remains completely unresolved"
+  },
+  "moisRegionLeakage": {
+    "newThisCheckpoint": true,
+    "auditType": "metadata_only_heuristic (title/organization locality token vs profile province, NEVER used for production eligibility)",
+    "sourceArtifact": "docs/audits/mois-region-top10-impact.json",
+    "confirmedBugFixed": {
+      "serviceId": "351050000123",
+      "profile": "A_icheon_unemployed_youth",
+      "verifiedAbsentFromHomeTop10AfterFix": true
+    },
+    "residualHomeTop10ObviousMismatches": [
+      { "profile": "A_icheon_unemployed_youth", "count": 2, "ids": ["mois-569000000402", "mois-631000000709"] },
+      { "profile": "B_seoul_university_student", "count": 2, "ids": ["mois-401000000112", "mois-569000000375"] },
+      { "profile": "C_suwon_high_income_employed", "count": 0, "ids": [] },
+      { "profile": "D_icheon_newlywed", "count": 0, "ids": [] },
+      { "profile": "E_jeonnam_single_parent", "count": 0, "ids": [] },
+      { "profile": "F_minimal_just_onboarded", "count": 0, "ids": [] }
+    ],
+    "rootCauseOfResidual": "Different bug shape than this checkpoint's fix — text has a SINGLE ○-clause (or none) so there is no clause boundary to bind against, and unrelated illustrative comparison mentions (e.g. \"(예시) 서울시 소재 학교...\") or organization-implied-only region (no residence sentence at all) sit within char-proximity of the one real residence signal. Verified byte-identical extraction output before/after this checkpoint's fix (scripts/tmp_repro, not committed) — pre-existing, not a regression, out of this checkpoint's scope.",
+    "top20MetadataClassification": "clearly_compatible/clearly_wrong_region/ambiguous counts and samples per profile in docs/audits/mois-region-top10-impact.json; a known frozen-catalog data artifact ('전남광주통합특별시' placeholder org prefix on ~1,047/10,967 rows) is stripped before classification to avoid spurious matches"
   },
   "eligibilityStatusProductRisk": {
     "likelyEligibleReachable": false,
@@ -167,6 +209,12 @@
         "title": "Youth Center region leakage in full-catalog browse",
         "evidence": "youthRegionLeakage: 13.0% (A) / 9.7% (D) of relevant feed, mitigated only on Home (0/10, 0/20)",
         "smallestNextCheckpoint": "A zipCd -> 행정동 crosswalk research spike (no implementation yet)"
+      },
+      {
+        "id": "P1-5",
+        "title": "Residual MOIS same-○-clause region false positives (mois-401000000112, mois-569000000375, and same-shape cases) still reach Home Top-10 for 2/6 profiles",
+        "evidence": "moisRegionLeakage.residualHomeTop10ObviousMismatches; docs/audits/mois-region-top10-impact.json",
+        "smallestNextCheckpoint": "A separate, narrowly-scoped checkpoint auditing single-○-clause (or no-○) MOIS text where an illustrative/comparison province mention sits within the same binding window as the true residence signal — different root cause than this checkpoint's cross-clause fix, needs its own frozen-catalog audit before choosing an implementation"
       }
     ],
     "p2": [
@@ -174,7 +222,7 @@
       { "id": "P2-2", "title": "Youth zipCd remains fundamentally unresolved", "note": "root cause of P1-4, tracked separately as the underlying architecture gap" },
       { "id": "P2-3", "title": "'확인이 필요해요' comprehension", "note": "explicitly the subject of the beta test plan item 9; better learned from real testers than guessed at" }
     ],
-    "counts": { "p0": 0, "p1": 4, "p2": 3 }
+    "counts": { "p0": 0, "p1": 5, "p2": 3 }
   },
   "betaTestPlan": {
     "instrumentation": "manual only — no analytics infrastructure exists in this codebase today (no analytics SDK/event-tracking imports found in app/, components/, hooks/)",
@@ -199,5 +247,14 @@
     "docs/audits/beta-readiness-personalization.json",
     "scripts/auditBetaReadiness.ts"
   ],
-  "noProductionCodeChanged": true
+  "filesAddedByMoisRegionClausePrecisionCheckpoint": [
+    "docs/audits/mois-region-binding-precision.json",
+    "docs/audits/mois-region-top10-impact.json",
+    "scripts/auditMoisRegionBindingPrecision.ts",
+    "scripts/auditMoisRegionTop10Impact.ts"
+  ],
+  "noProductionCodeChanged": false,
+  "productionCodeChangedByMoisRegionClausePrecisionCheckpoint": [
+    "lib/eligibility/extraction/koreanEligibilityParser.ts"
+  ]
 }

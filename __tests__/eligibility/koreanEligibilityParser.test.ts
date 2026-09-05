@@ -753,6 +753,75 @@ describe("extractEligibilityFromText", () => {
       const { rules } = extractEligibilityFromText("f", "서울특별시중구 거주자만 신청 가능");
       expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "서울특별시" }] }));
     });
+
+    // -----------------------------------------------------------------
+    // Province-spec residence binding (Checkpoint: MOIS region-clause
+    // precision correction). Regression coverage for the fix to
+    // findProvinceRegionSpecs/isBoundToResidenceSignal: a province mention
+    // may become part of a residence region_in rule only when it is
+    // positively bound (proximity window OR same "○"-delimited clause) to
+    // an actual residence signal — NOT merely because a residence signal
+    // exists somewhere else in the same text. See
+    // docs/audits/mois-region-binding-precision.json for the frozen-catalog
+    // audit and MOIS 351050000123 for the real confirmed false positive.
+    // -----------------------------------------------------------------
+    describe("province-spec residence binding (region-clause precision fix)", () => {
+      it("A: a later ○-clause's employer/interview-location province mentions are NOT absorbed into the residence rule (real MOIS 351050000123 shape)", () => {
+        const { rules } = extractEligibilityFromText(
+          "f",
+          "○ 인천광역시 미추홀구에 주민등록되어있는 18~39세 미취업 청년\r\n\r\n○ 서울, 경기, 인천 소재 기업 및 공공기관 취업면접 또는 서울, 인천지역 공무원 면접 응시자"
+        );
+        const regionRule = rules.find((r) => r.operator === "region_in");
+        expect(regionRule).toEqual(
+          expect.objectContaining({
+            field: "residence",
+            operator: "region_in",
+            value: [{ province: "인천광역시", city: "미추홀구" }],
+          })
+        );
+      });
+
+      it("B: a compact OR list sharing one trailing residence word keeps all provinces as valid alternatives", () => {
+        const { rules } = extractEligibilityFromText("f", "서울, 경기, 인천 거주자");
+        expect(rules[0]).toEqual(
+          expect.objectContaining({
+            value: [{ province: "서울특별시" }, { province: "경기도" }, { province: "인천광역시" }],
+          })
+        );
+      });
+
+      it("C: a compact province+city OR list sharing one trailing residence word keeps both cities", () => {
+        const { rules } = extractEligibilityFromText("f", "경기도 이천시, 여주시 거주자");
+        expect(rules[0]).toEqual(
+          expect.objectContaining({
+            value: [
+              { province: "경기도", city: "이천시" },
+              { province: "경기도", city: "여주시" },
+            ],
+          })
+        );
+      });
+
+      it("D: a province mention in its own ○-clause with no residence signal anywhere near it is not silently added, even though a residence signal exists in a separate ○-clause elsewhere in the text", () => {
+        const { rules } = extractEligibilityFromText(
+          "f",
+          "○ 서울특별시 소재 협력업체 재직자 우대. ○ 신청자 본인의 주민등록상 거주지가 확인되는 자"
+        );
+        const regionRule = rules.find((r) => r.operator === "region_in");
+        expect(regionRule).toBeUndefined();
+      });
+
+      it("E: lone-city (no province mention anywhere) proximity-window behavior is unchanged", () => {
+        const { rules } = extractEligibilityFromText("f", "이천시 거주자만 신청 가능");
+        expect(rules[0]).toEqual(expect.objectContaining({ value: [{ province: "경기도", city: "이천시" }] }));
+
+        const result = extractEligibilityFromText(
+          "f",
+          "이천시에서 시행하는 사업으로, 접수는 온라인으로만 받으며 결과는 개별 통보합니다"
+        );
+        expect(result.rules).toEqual([]);
+      });
+    });
   });
 
   // ---------------------------------------------------------------------

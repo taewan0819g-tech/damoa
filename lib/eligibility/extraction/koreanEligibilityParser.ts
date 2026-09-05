@@ -567,9 +567,11 @@ function parseIncomeClause(text: string): { rule?: EligibilityRule; unresolved?:
 //    never guessed — it's reported as unresolved instead.
 //
 // Only fires when the text expresses an APPLICANT RESIDENCE requirement
-// (see `hasResidenceSignal`) — a bare organization/location mention like
+// (see `residenceSignalIndices`) — a bare organization/location mention like
 // "이천시청에서 지원" or "접수처: 이천시청" never reaches this logic at all,
-// since neither contains a residence keyword.
+// since neither contains a residence keyword. Province mentions additionally
+// require a nearby residence signal, not merely one existing anywhere in the
+// (possibly multi-sentence) text — see `findProvinceRegionSpecs`.
 // ---------------------------------------------------------------------------
 /**
  * "주소를 둔"/"주소를 두고" ("[place]에 주소를 둔 사람" / "...주소를 두고 있는
@@ -669,10 +671,6 @@ function residenceSignalIndices(text: string): number[] {
   return indices;
 }
 
-function hasResidenceSignal(text: string): boolean {
-  return residenceSignalIndices(text).length > 0;
-}
-
 function isNearAnyIndex(tokenIndex: number, tokenLength: number, signalIndices: number[]): boolean {
   return signalIndices.some((si) => {
     const gapAfterToken = si - (tokenIndex + tokenLength); // signal occurs after the token
@@ -682,6 +680,51 @@ function isNearAnyIndex(tokenIndex: number, tokenLength: number, signalIndices: 
       (gapAfterSignal >= 0 && gapAfterSignal <= CITY_PROXIMITY_WINDOW)
     );
   });
+}
+
+/**
+ * The bullet marker ("○") real MOIS `지원대상`/`선정기준` text overwhelmingly
+ * uses to separate independent top-level clauses (e.g. "○ [residence
+ * condition] ○ [unrelated interview-eligibility condition]") — confirmed
+ * present in 8,280/10,967 frozen-catalog records' 지원대상/선정기준 text, and
+ * preserved as-is by `normalizeText` (which only touches whitespace/
+ * punctuation variants, never bullet characters). Used as a wider, structural
+ * companion to `CITY_PROXIMITY_WINDOW`: a real residence clause can legally
+ * put many characters of descriptive detail between the place name and the
+ * residence keyword ("서울특별시 성동구에 영아의 출생일 포함 1년 이상 계속하여
+ * ... 주민등록을 두고 실제 거주하는 부 또는 모가", real MOIS 303000000111,
+ * 47 chars from mention to signal) as long as nothing else interrupts that
+ * SAME clause — whereas a genuinely unrelated later clause (real MOIS
+ * 351050000123's "○ 서울, 경기, 인천 소재 기업 ... 면접 응시자") must not
+ * inherit an earlier clause's residence signal just because both happen to
+ * share one long, multi-topic 지원대상 field.
+ */
+const CLAUSE_DELIMITER = "○";
+
+/** The [start, end) span of the ○-delimited clause containing `index` (falls back to the whole text when no bullet structure is present at all). */
+function clauseBoundsAt(text: string, index: number): { start: number; end: number } {
+  const priorDelimiter = text.lastIndexOf(CLAUSE_DELIMITER, index);
+  const nextDelimiter = text.indexOf(CLAUSE_DELIMITER, index + 1);
+  return {
+    start: priorDelimiter === -1 ? 0 : priorDelimiter,
+    end: nextDelimiter === -1 ? text.length : nextDelimiter,
+  };
+}
+
+/**
+ * True when a province-mention span (`spanStart`..`spanStart + spanLength`)
+ * is genuinely bound to a residence signal: either the original narrow
+ * character-proximity check (unchanged, handles compact same-sentence lists
+ * like "서울, 경기, 인천 거주자"), OR the signal occurs in the SAME
+ * ○-delimited clause as the mention (handles a real residence clause with a
+ * long descriptive relative clause in between, without also re-admitting a
+ * later, structurally SEPARATE ○-clause describing something else, e.g. an
+ * employer/interview location).
+ */
+function isBoundToResidenceSignal(text: string, spanStart: number, spanLength: number, signalIndices: number[]): boolean {
+  if (isNearAnyIndex(spanStart, spanLength, signalIndices)) return true;
+  const { start, end } = clauseBoundsAt(text, spanStart);
+  return signalIndices.some((si) => si >= start && si < end);
 }
 
 /** True when a city-like token is immediately followed by "청" (시청/군청/구청 = a government office name, not a residence). */
@@ -898,8 +941,31 @@ function extractProvinceCitySpecs(
  * consumed before looking for the next mention. Returns `[]` when no
  * genuine province mention exists anywhere (the caller then falls back to
  * gazetteer-backed lone-city resolution).
+ *
+ * Each mention (plus its resolved city / sibling-city-list, i.e. the whole
+ * consumed span) must sit near a residence-signal occurrence — the SAME
+ * `residenceSignalIndices`/`isNearAnyIndex`/`CITY_PROXIMITY_WINDOW`
+ * proximity gate the lone-city path (`findLoneCityCandidates`) already
+ * uses — before it's allowed to become part of a `region_in` spec. Without
+ * this, `parseRegionClause`'s clause-level residence-signal-presence check
+ * only proves SOME residence signal exists somewhere in the (possibly
+ * multi-sentence) text, not that any given province mention is the thing
+ * that signal is describing. Real MOIS example (351050000123, "미추홀구 청년
+ * 면접수당 지원"): "인천광역시 미추홀구에 주민등록되어있는 ... 청년. 서울,
+ * 경기, 인천 소재 기업 및 공공기관 취업면접 ... 응시자" — "주민등록" binds only
+ * to "인천광역시 미추홀구"; the second sentence's "서울, 경기, 인천" names the
+ * INTERVIEW-eligible employer location, not applicant residence, and must
+ * NOT become an allowed residence alternative. A mention that fails the
+ * proximity check is dropped from the result (not reported unresolved —
+ * exactly as a lone-city token that fails `isValidCityTokenBoundary` is
+ * silently treated as noise, never as a signal reaching the rule-vs-
+ * unresolved decision), while the scan cursor still advances past it so
+ * scanning for the next genuine mention continues uninterrupted. A compact
+ * OR list ("서울, 경기, 인천 거주자") stays intact because each member's own
+ * span sits within `CITY_PROXIMITY_WINDOW` of the single trailing "거주"
+ * signal — no per-element residence word is required.
  */
-function findProvinceRegionSpecs(text: string): RegionSpec[] {
+function findProvinceRegionSpecs(text: string, signalIndices: number[]): RegionSpec[] {
   const specs: RegionSpec[] = [];
   let cursor = 0;
   while (cursor < text.length) {
@@ -911,7 +977,10 @@ function findProvinceRegionSpecs(text: string): RegionSpec[] {
       continue;
     }
     const result = extractProvinceCitySpecs(text, mention, province);
-    specs.push(...result.specs);
+    const spanLength = result.consumedUntil - mention.index;
+    if (isBoundToResidenceSignal(text, mention.index, spanLength, signalIndices)) {
+      specs.push(...result.specs);
+    }
     cursor = result.consumedUntil;
   }
   return specs;
@@ -967,9 +1036,10 @@ function findLoneCityCandidates(text: string): { specs: RegionSpec[]; hadUnresol
 }
 
 function parseRegionClause(text: string): { rule?: EligibilityRule; unresolved?: string } | undefined {
-  if (!hasResidenceSignal(text)) return undefined;
+  const signalIndices = residenceSignalIndices(text);
+  if (signalIndices.length === 0) return undefined;
 
-  const provinceSpecs = findProvinceRegionSpecs(text);
+  const provinceSpecs = findProvinceRegionSpecs(text, signalIndices);
   if (provinceSpecs.length > 0) {
     return {
       rule: { id: "text-region", field: "residence", operator: "region_in", value: provinceSpecs, required: true },

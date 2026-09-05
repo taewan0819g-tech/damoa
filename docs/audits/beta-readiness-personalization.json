@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T23:03:54.131Z",
+  "generatedAt": "2026-09-05T02:11:47.612Z",
   "frozenInputs": [
     {
       "label": "MOIS service list",
@@ -28,11 +28,11 @@
       "label": "이천시 청년 무직",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7805,
-        "notEligible": 5907,
+        "unknown": 7807,
+        "notEligible": 5905,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6413,
+      "relevantFeedSize": 6415,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -59,16 +59,16 @@
             6
           ],
           [
-            "region",
-            5
+            "income",
+            6
           ],
           [
-            "income",
-            5
+            "region",
+            4
           ],
           [
             "employment",
-            4
+            3
           ]
         ],
         "sourceFreq": [
@@ -77,39 +77,9 @@
             10
           ]
         ],
-        "regionEvidenceCount": 5,
+        "regionEvidenceCount": 4,
         "interestOverlapCount": 4,
         "detail": [
-          {
-            "id": "mois-PTR000051703",
-            "title": "부도 임대주택 퇴거자 전세자금 융자",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "housing"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-351050000123",
-            "title": "미추홀구 청년 면접수당 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "employment"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": false
-          },
           {
             "id": "mois-391000000152",
             "title": "청년 전월세보증금 대출이자 지원",
@@ -201,6 +171,21 @@
             "interestMatch": true
           },
           {
+            "id": "mois-648000001072",
+            "title": "청년주택 임차보증금 이자지원",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "income",
+              "housing"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": true
+          },
+          {
             "id": "mois-B55140800003",
             "title": "내집마련 디딤돌 대출",
             "source": "government",
@@ -229,6 +214,20 @@
             ],
             "regionSpecificity": "none",
             "interestMatch": false
+          },
+          {
+            "id": "mois-407000000113",
+            "title": "여성 창업 초기물품 지원",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "region"
+            ],
+            "regionSpecificity": "exact_city",
+            "interestMatch": false
           }
         ]
       },
@@ -247,11 +246,11 @@
       "label": "서울 대학생",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7974,
-        "notEligible": 5738,
+        "unknown": 7977,
+        "notEligible": 5735,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6365,
+      "relevantFeedSize": 6368,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -274,16 +273,16 @@
             10
           ],
           [
-            "region",
-            9
-          ],
-          [
             "education",
             9
           ],
           [
+            "region",
+            8
+          ],
+          [
             "income",
-            2
+            3
           ]
         ],
         "sourceFreq": [
@@ -292,8 +291,8 @@
             10
           ]
         ],
-        "regionEvidenceCount": 9,
-        "interestOverlapCount": 7,
+        "regionEvidenceCount": 8,
+        "interestOverlapCount": 6,
         "detail": [
           {
             "id": "mois-O00101000019",
@@ -313,21 +312,6 @@
           {
             "id": "mois-401000000112",
             "title": "대안교육기관 등 신입생 교복비 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "education"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-435000000137",
-            "title": "고등 및 대학생 장학금(유공 및 저소득)",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
@@ -444,6 +428,21 @@
             ],
             "regionSpecificity": "none",
             "interestMatch": false
+          },
+          {
+            "id": "mois-648000001072",
+            "title": "청년주택 임차보증금 이자지원",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "income",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": false
           }
         ]
       },
@@ -454,11 +453,11 @@
       "label": "수원시 직장인 고소득",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7557,
-        "notEligible": 6155,
+        "unknown": 7559,
+        "notEligible": 6153,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6149,
+      "relevantFeedSize": 6151,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -649,11 +648,11 @@
       "label": "이천시 신혼부부",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7950,
-        "notEligible": 5762,
+        "unknown": 7953,
+        "notEligible": 5759,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6248,
+      "relevantFeedSize": 6251,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -846,11 +845,11 @@
       "label": "전남 한부모가족",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 8032,
-        "notEligible": 5680,
+        "unknown": 8039,
+        "notEligible": 5673,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6305,
+      "relevantFeedSize": 6312,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,

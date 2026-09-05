@@ -1,10 +1,28 @@
 # Damoa Closed-Beta Readiness Audit
 
-**Status: AUDIT ONLY.** No production code was changed by this checkpoint. Only this file, `docs/audits/beta-readiness.json`, `docs/audits/beta-readiness-personalization.json`, and `scripts/auditBetaReadiness.ts` (a new, read-only audit script) were added.
+**Status: AUDIT ONLY (original checkpoint below).** No production code was changed by the original Checkpoint D. Only this file, `docs/audits/beta-readiness.json`, `docs/audits/beta-readiness-personalization.json`, and `scripts/auditBetaReadiness.ts` (a new, read-only audit script) were added by that checkpoint.
 
 - Branch: `wip/beta-personalization-pass`, audited at SHA `d8296250349dad384d14633cf0b0bdf5547c1270` (HEAD before this checkpoint's own commit).
 - Diverged from `main` @ `b4f5eb923930ff85ff6d35e103160dcb247970b4`; `main` is a strict ancestor (clean linear history, no conflicts).
 - **Verdict: `READY_AFTER_SMALL_FIXES`**
+
+---
+
+## Addendum — MOIS Region-Clause Precision correction checkpoint (real fix, not audit-only)
+
+Started from SHA `fcca37277703a65f9f45f90130b8d9482fdb7c2d`. Unlike the checkpoint below, this one **did** change production code: `lib/eligibility/extraction/koreanEligibilityParser.ts`.
+
+**Bug found and fixed.** A direct review of this audit found a false positive: an 이천시(Icheon)/Gyeonggi resident's Home Top-10 incorrectly contained `mois-351050000123` ("미추홀구 청년 면접수당 지원"), whose actual applicant-residence requirement is "인천광역시 미추홀구에 주민등록된 청년" — a later, separate clause naming 서울/경기/인천 describes the **interview location**, not applicant residence. Root cause: `findProvinceRegionSpecs()` scanned every province mention in the whole clause text with no requirement that the mention be positively bound to a residence signal (거주/주민등록/주소...), unlike the already-correct lone-city path (`isNearAnyIndex`/`CITY_PROXIMITY_WINDOW`). Fixed by requiring a province mention to be bound via the existing char-proximity window **or** the same "○"-delimited MOIS clause as an actual residence signal (`isBoundToResidenceSignal`).
+
+- **Before → after** for 351050000123: `[{인천광역시,미추홀구}, {서울특별시}, {경기도}, {인천광역시}, {서울특별시}, {인천광역시}]` → `[{인천광역시,미추홀구}]`. Confirmed absent from the Icheon profiles' Home Top-10 after the fix.
+- **Catalog-wide** (frozen 10,967-row MOIS snapshot, `docs/audits/mois-region-binding-precision.json`): 28 records affected, 61 specs removed / 6 added, 16 fields lost their region rule entirely. Removal classification: 0 confirmed-false-residence(A) / 7 valid-spec-accidentally-removed(B, disclosed tradeoff — see `__tests__/fixtures/regionGoldSampleReal.ts`'s `real-rule-multi-region-large-list` note) / 54 ambiguous(C, heuristic classifier, not claimed as verified).
+- **Safety**: `unexpectedNonRegionMismatchCount = 0` — every changed rule across the whole catalog was a `region_in` change; no other eligibility dimension moved.
+- **Top-10/Top-20 impact** (`docs/audits/mois-region-top10-impact.json`, all 6 profiles, before/after): confirmed bug item removed for profile A; small unrelated Top-10 churn for profiles A and B (1-2 items each swapped, expected side effect of removing false specs); C/D/E/F unchanged.
+- **New blind spot closed, new residual found**: extended metadata-only auditing (title/organization locality tokens vs profile province — never production logic) to ALL MOIS Top-20 items, not just Youth. This surfaced a **different, pre-existing, unchanged-by-this-fix** bug shape still reaching Home Top-10 for 2/6 profiles: single-○-clause (or no-○) text where an illustrative/comparison province mention (e.g. `mois-401000000112`'s "(예시) 서울시 소재 학교...") sits within the same binding window as the one true residence signal, with no clause boundary available to discriminate them. Verified byte-identical extraction before/after this checkpoint (not a regression). Tracked as new issue **P1-5** for a future, separately-scoped checkpoint — not fixed here (out of scope, different root cause, would need its own frozen-catalog audit before choosing an implementation).
+- **Regression tests**: added A-G coverage to `__tests__/eligibility/koreanEligibilityParser.test.ts` (describe block "province-spec residence binding (region-clause precision fix)"); updated `__tests__/fixtures/regionGoldSampleReal.ts`'s `real-rule-multi-region-large-list` fixture to the correct, disclosed post-fix expectation. Full suite: 942/942 tests, 57/57 files passing.
+- **Verdict unchanged: `READY_AFTER_SMALL_FIXES`.** The confirmed false positive is fixed; P1-1..P1-4 (dead 예금 filter, empty 금융상품 tab, `likely_eligible` unreachable, Youth zipCd) remain exactly as before, explicitly deferred to their own next checkpoints; P1-5 is newly added, not newly introduced.
+
+See `docs/audits/beta-readiness.json` → `supersededByCheckpoint` / `moisRegionLeakage` / `issues.p1[4]` for the machine-readable version of all of the above.
 
 ---
 
