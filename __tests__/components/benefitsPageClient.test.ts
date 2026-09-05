@@ -7,6 +7,11 @@ import { useProfileStore } from "@/stores/profileStore";
 import { CATEGORY_LABELS, SOURCE_GROUP_LABELS } from "@/lib/labels";
 import type { Benefit } from "@/types/benefit";
 
+// Mirrors BenefitsPageClient's internal `SEARCH_DEBOUNCE_MS` (not exported —
+// this is only used to size a "wait long enough that a debounce would have
+// fired" delay in tests, not to assert on the exact value).
+const SEARCH_DEBOUNCE_MS = 350;
+
 let currentSearch = new URLSearchParams("");
 const replaceMock = vi.fn((url: string) => {
   const qIndex = url.indexOf("?");
@@ -108,15 +113,19 @@ describe("BenefitsPageClient — URL is the source of truth", () => {
     expect(screen.getByRole("button", { name: "전체" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("4. changing search resets page to 1", async () => {
+  it("4. changing search resets page to 1 (after the debounce commits it to the URL)", async () => {
     currentSearch = new URLSearchParams("page=3");
     const { rerender } = render(createElement(BenefitsPageClient));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
     fireEvent.change(screen.getByLabelText("혜택 검색"), { target: { value: "새검색어" } });
-    expect(replaceMock).toHaveBeenCalledWith(
-      expect.stringContaining("q=%EC%83%88%EA%B2%80%EC%83%89%EC%96%B4"),
-      expect.anything()
+    await waitFor(
+      () =>
+        expect(replaceMock).toHaveBeenCalledWith(
+          expect.stringContaining("q=%EC%83%88%EA%B2%80%EC%83%89%EC%96%B4"),
+          expect.anything()
+        ),
+      { timeout: 2000 }
     );
     expect(replaceMock.mock.calls.at(-1)?.[0]).not.toContain("page=");
     rerender(createElement(BenefitsPageClient));
@@ -196,6 +205,107 @@ describe("BenefitsPageClient — URL is the source of truth", () => {
       category: "welfare",
       sort: "latest",
     });
+  });
+});
+
+/**
+ * Fix: Korean IME composition in the /benefits search input.
+ *
+ * The search input previously wrote `router.replace` synchronously on every
+ * `onChange`, which interrupted native IME composition (typing "이천" would
+ * render as decomposed jamo like "ㅇ ㅣ ㅊ ㅓ ㄴ") because the URL/re-render
+ * happened before `compositionend`. The input now keeps a local draft value:
+ * while composing, only the draft updates; on `compositionend` the composed
+ * string commits to the URL immediately; normal (non-IME) typing debounces
+ * the URL commit instead of firing on every keystroke.
+ */
+describe("BenefitsPageClient — IME-safe search input", () => {
+  it("Korean composition ('ㅇ' then 'ㅇㅣ') does not call router.replace mid-composition", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    fetchMock.mockClear();
+
+    const input = screen.getByLabelText("혜택 검색") as HTMLInputElement;
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "ㅇ" } });
+    fireEvent.change(input, { target: { value: "ㅇㅣ" } });
+
+    // Give any (incorrectly) scheduled debounce timer a chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, SEARCH_DEBOUNCE_MS + 150));
+
+    expect(replaceMock).not.toHaveBeenCalled();
+    expect(input.value).toBe("ㅇㅣ");
+  });
+
+  it("compositionend with '이' commits q=이 and resets page to 1", async () => {
+    currentSearch = new URLSearchParams("page=3");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const input = screen.getByLabelText("혜택 검색") as HTMLInputElement;
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "ㅇ" } });
+    fireEvent.change(input, { target: { value: "이" } });
+    fireEvent.compositionEnd(input, { target: { value: "이" } });
+
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(
+        expect.stringContaining(`q=${encodeURIComponent("이")}`),
+        expect.anything()
+      )
+    );
+    expect(replaceMock.mock.calls.at(-1)?.[0]).not.toContain("page=");
+  });
+
+  it("full '이천' commits as composed Hangul, not decomposed jamo", async () => {
+    currentSearch = new URLSearchParams("");
+    const { rerender } = render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const input = screen.getByLabelText("혜택 검색") as HTMLInputElement;
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "ㅇ" } });
+    fireEvent.change(input, { target: { value: "이" } });
+    fireEvent.change(input, { target: { value: "이ㅊ" } });
+    fireEvent.change(input, { target: { value: "이천" } });
+    fireEvent.compositionEnd(input, { target: { value: "이천" } });
+
+    expect(input.value).toBe("이천");
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(expect.stringContaining(`q=${encodeURIComponent("이천")}`), expect.anything())
+    );
+    rerender(createElement(BenefitsPageClient));
+    await waitFor(() => expect(lastRequestBody()).toMatchObject({ search: "이천", page: 1 }));
+  });
+
+  it("normal English typing still updates the URL after the debounce", async () => {
+    currentSearch = new URLSearchParams("");
+    render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const input = screen.getByLabelText("혜택 검색") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "abc" } });
+
+    // Not committed synchronously — it's debounced.
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    await waitFor(
+      () => expect(replaceMock).toHaveBeenCalledWith(expect.stringContaining("q=abc"), expect.anything()),
+      { timeout: 2000 }
+    );
+  });
+
+  it("external URL query change syncs the input when not composing", async () => {
+    currentSearch = new URLSearchParams("q=abc");
+    const { rerender } = render(createElement(BenefitsPageClient));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect((screen.getByLabelText("혜택 검색") as HTMLInputElement).value).toBe("abc");
+
+    currentSearch = new URLSearchParams("q=xyz");
+    rerender(createElement(BenefitsPageClient));
+
+    await waitFor(() => expect((screen.getByLabelText("혜택 검색") as HTMLInputElement).value).toBe("xyz"));
   });
 });
 
