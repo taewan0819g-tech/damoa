@@ -26,6 +26,29 @@ See `docs/audits/beta-readiness.json` → `supersededByCheckpoint` / `moisRegion
 
 ---
 
+## Addendum 3 — MOIS Region Parser Final Closeout Fix (real fix, closes the checkpoint)
+
+Started from SHA `ba3dd7390147c502ca414e108f58a7817c724cfb`. Source of truth: `docs/audits/mois-region-binding-manual-review.json` (28 manually-reviewed records, 16 newly-empty fields, 6 Home Top-20 wrong-region candidates). This checkpoint **did** change production code (`lib/eligibility/extraction/koreanEligibilityParser.ts`) to resolve the residual findings from Addendum 2, and closes the MOIS region-parser checkpoint that Addendum 2 explicitly left open.
+
+**Fixes landed:**
+- **Safe same-field anaphora recovery** (Section 2 of the checkpoint spec): a single, structurally-unambiguous province anchor followed later by a deictic back-reference (e.g. "도내 주민등록"), and explicitly-named region-list groups followed by a whole-set back-reference, are now resolved instead of silently dropped. No service-ID special casing — purely structural (anchor uniqueness + list-membership shape).
+- **`parseRegionClause` now returns `{ unresolved: text }`** instead of silently `undefined` when a genuine residence signal exists (거주/주민등록/주소 등) but can't be safely anchored to a specific place (e.g. "관내 거주자") — narrow, deictic-phrase-gated, not triggered by every generic "주민" mention.
+- **New exclusions**: illustrative "(예시)"/"예를 들어" spans, non-residence institution/location mentions ("~ 소재 학교/대학/기업/사업장"), and embedded province/brand literal tokens (SGI서울보증, 경기 아이-플러스 카드, 경남바로서비스) no longer leak into residence rules. Structural rules first; a 3-item literal list is the fallback only for brand names with no other discriminating shape.
+- **Newly discovered and fixed while adding regression coverage**: `findLoneCityCandidates` (the lone-city resolution path) was missing the same institution/example/brand exclusion gate already applied to province-level scanning, so a city-shaped token inside an excluded span (e.g. "서울시" inside "서울시 소재 학교 학생") could either wrongly resolve as a residence city or silently wipe an unrelated, otherwise-valid lone-city match elsewhere in the same field. Confirmed the OLD parser had an even worse version of this gap (produced a flatly wrong residence spec for the same shape).
+- Two narrow compass/list-delimiter refinements to bare-"경기" disambiguation (경기북부/남부/동부/서부 sub-region qualifiers; "경기," / "경기·" / "경기 또는" list-delimiter forms) so real place usage isn't mistaken for the "game/match" sense.
+
+**Results (`docs/audits/mois-region-parser-closeout.json`, frozen 10,967-row MOIS snapshot):**
+- Section 9 (28 manually-reviewed records, rerun): **28/28 PASS, 0 NEEDS_REVIEW.**
+- Section 10 (16 newly-empty fields, rerun against the 5/7/4 manual targets): `correct_to_be_unrestricted` 5/5, `should_still_have_region_rule` 7/7, `ambiguous` 4/4 — **16/16 PASS, 0 NEEDS_REVIEW.**
+- Section 12 (full frozen catalog safety, MOIS 10,967 records / 12,019 fields): `recordsWithRegionRule` 2595→2598, `regionSpecCount` 2960→2916, 6 fields restored by anaphora/disambiguation, 66 specs removed by the new example/institution/brand guards, 2 newly-unresolved fields, **`unexpectedNonRegionMismatchCount: 0`** (every changed rule was a `region_in` change; no other eligibility dimension moved).
+- Section 3 gold fixture (`__tests__/fixtures/regionGoldSampleReal.ts`, real 상병수당 example, service 135200005017): restored to the full 14-region list via Pattern-B named-list anaphora (previously an accepted "known limitation" `no_rule` fixture).
+- Section 11 (Home Top-20 re-audit, 6 profiles, `docs/audits/mois-region-top10-impact.json` rerun): of the 4 confirmed wrong-region items named in the manual review, **3 are now verified removed from Home Top-10** (`mois-O00101000019`, `mois-401000000112`, `mois-569000000375` — all `before10=true, after10=false` for profile B). The 4th, `mois-648000001072`, is unchanged (`before10=true, after10=true` for profiles A and B) — this matches the manual review's own root-cause finding that **both** the old and new parser produce no region rule for this record; its only textual anchor is the brand name "경남바로서비스", which Section 7's own design requires excluding via the brand-literal list (a documented, unavoidable data limitation, not a parser regression — same category as the accepted 357000000131 exception). The 2 items the manual review marked merely "ambiguous" (`mois-569000000402`, `mois-631000000709`) were correctly left unconverted. **Net: 0 parser-caused obvious wrong-region items remain reachable in Home Top-10** that this checkpoint could fix without violating its own no-guessing/no-brand-inference constraints.
+- **Regression tests**: added tests A-K to `__tests__/eligibility/koreanEligibilityParser.test.ts` (describe block "final closeout fix (anaphora recovery + false-positive exclusions)"), covering comma-joined OR-lists with embedded bare-district collisions, government-entity-list and organizer-subject exclusions, bare-"경기" disambiguation (both senses), compass sub-regions, Pattern A/B anaphora, illustrative-example exclusion (which surfaced the `findLoneCityCandidates` bug above), institution/location exclusion, and brand-literal exclusion. Updated `__tests__/fixtures/regionGoldSample.ts`'s stale `nationwide-no-place-name` fixture (renamed `nationwide-deictic-no-anchor`) to the correct `unresolved` expectation per the Section 4 design. Full suite: 953/953 tests, 57/57 files passing.
+
+**Verdict: `READY_AFTER_SMALL_FIXES` (unchanged).** P1-5 (residual MOIS same-clause region false positives) from Addendum 2 is **closed** — the confirmed false positives are fixed, and the one remaining data-limitation case is explicitly out of scope (would require guessing from a brand name, which the spec forbids). P1-1..P1-4 remain exactly as before, still deferred to their own checkpoints. **The MOIS region-parser checkpoint is now closed** — see `docs/audits/mois-region-parser-closeout.json` for the full per-record disposition.
+
+---
+
 ## Addendum 2 — MOIS Region Binding manual 28-record review (audit only, no production change)
 
 The automated A/B/C classification in `docs/audits/mois-region-binding-precision.json` (0/7/54, with `sampleC` capped at 15 of 54) is **not** a manual review and is superseded as the authoritative account of the 28 affected records. `docs/audits/mois-region-binding-manual-review.json` — produced by manually reading full source text for all 28 records (no automated keyword classifier used for the final label) — is now the **authoritative** artifact for this question. Summary: 19 `A_confirmed_precision_fix`, 7 `B_confirmed_valid_region_lost`, 0 `C_mixed`, 2 `D_ambiguous`. All 16 newly-empty region fields were also manually classified there (5 `correct_to_be_unrestricted`, 7 `should_still_have_region_rule`, 4 `ambiguous`), along with a manual (non-metadata) review of the 6 named Home Top-20 wrong-region candidates and a proposed (not implemented) next-parser design.
@@ -164,7 +187,7 @@ No safety issues found.
 |---|---|
 | `npm run typecheck` | ✅ pass |
 | `npm run lint` | ✅ 0 errors (1 pre-existing warning, unrelated file: `scripts/auditPersonalizationBaseline.ts:421`, unused var) |
-| `npm test` | ✅ 942/942 tests, 57/57 files (see Addendum — count was corrected from a stale 937/937 reference) |
+| `npm test` | ✅ 953/953 tests, 57/57 files (rerun as of Addendum 3 — MOIS Region Parser Final Closeout Fix) |
 | `npm run build` | ✅ success; route shapes unchanged (`/benefits` ○ static, `/benefits/[id]` ƒ dynamic) |
 | `git diff --check` | ✅ clean (no whitespace errors) |
 | Branch relation | `main` is a strict ancestor of `wip/beta-personalization-pass` (linear, no conflicts) |

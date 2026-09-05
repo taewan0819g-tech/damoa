@@ -127,10 +127,10 @@ export const REGION_GOLD_SAMPLES: RegionGoldSample[] = [
     note: "Explicitly nationwide — no region constraint at all.",
   },
   {
-    id: "nationwide-no-place-name",
+    id: "nationwide-deictic-no-anchor",
     text: "관내 거주자를 대상으로 사업을 시행합니다.",
-    expectation: { outcome: "no_rule" },
-    note: "Generic 'local residents' claim with no specific place name to anchor a rule.",
+    expectation: { outcome: "unresolved" },
+    note: "'관내' is a genuine deictic residence phrase (same class as '도내'/'우리 시') asserting residence within SOME specific, unstated jurisdiction — not a generic nationwide claim. With no province/city named anywhere else in the field to anchor it to, Section 4 correctly reports this as unresolved (a real geographic restriction exists but can't be safely placed) rather than silently treating the policy as unrestricted nationwide.",
   },
 
   // -- Organization/location mentions that are NOT residence conditions -----------

@@ -79,8 +79,26 @@ export const REGION_GOLD_SAMPLES_REAL: RegionGoldSampleReal[] = [
     sourceServiceId: "135200005017",
     sourceField: "target",
     text: "○ (1단계 시범사업 대상지역) 서울 종로구, 경기 부천시, 충남 천안시, 전남 순천시, 경북 포항시, 경남 창원시('22.7~2024. 12. 31 종료) ○ (2단계 시범사업 대상지역) 경기 안양시, 경기 용인시, 대구 달서구, 전북 익산시('23.7~) ○ (3단계 시범사업 대상지역) 충북 충주시, 충남 홍성군, 전북 전주시, 강원 원주시('24.7~) ○ (기본 자격) 시범사업 지역 거주 취업자 또는 시범사업 지역 소재 사업장 근로자(거주지 무관), 만 15세 이상 ~ 만 65세 미만 대한민국 국적자(난민 등 일부 외국인 예외 적용) ○ (취업자 기준) ① 건강보험 직장가입자(직전 2개월(60일) 동안 30일 이상 가입 자격 유지), ② 고용보험 또는 산재보험 가입자(직전 2개월(60일) 동안 30일 이상 가입 자격 유지, 일용근로자의 경우 직전 1개월 간 10일 이상 또는 2개월 중 20일 이상 가입한 경우 인정), ③ 사업 기간 및 매출 기준을 충족하는 자영업자(직전 3개월 동안 사업자등록 유지 + 직전 3개월 월평균 매출액 206만원 이상) * 단, 시범사업 기간 동안 한시적으로 직전 3개월 중 1개월 이상 매출이 206만원 이상인 경우 예외 인정 ○ (소득·재산 기준) 2·3단계 시범사업에만 해당 ① 가구 합산 건강보험료 기준중위소득 120% 이하 ○ (가구원) 동일 주민등록표에 기재된 민법상 가족(2촌 이내) 일부 비동거 가족* * 배우자 및 만 25세 미만 자녀, 피부앵자 세대 동일 건강보험증 상 비동거 가족",
-    expectation: { outcome: "no_rule" },
-    note: "한국형 상병수당 시범사업: real 14-region pilot-program rollout list spanning 10 different provinces and one short district (대구 달서구). This is the densest real multi-region text found in the catalog. KNOWN, DOCUMENTED LIMITATION as of the MOIS region-clause-precision checkpoint (see docs/audits/mois-region-binding-precision.json, category B): the 14 region mentions sit in three separate ○-delimited enumeration clauses ('1단계'/'2단계'/'3단계 시범사업 대상지역'), while the only residence signal ('시범사업 지역 거주') is an anaphoric back-reference in a LATER, separate ○-clause ('기본 자격') — genuinely far from every region mention both by character distance (hundreds of chars) and by ○-clause boundary. Previously this fixture asserted all 14 regions resolved; that same lack-of-local-binding is exactly the shape of the confirmed false positive in MOIS 351050000123 ('미추홀구 청년 면접수당 지원', see real-rule-province-and-city-seongdong's sibling bug fix), where a LATER ○-clause's unrelated province mentions (employer/interview location, not residence) were incorrectly absorbed into the residence rule. The fix that removes that false positive necessarily also declines to guess this genuinely indirect, anaphoric reference — trading this recall loss (this record is one of newlyEmptyFieldCount=16 fields catalog-wide that lost their region rule entirely; docs/audits/mois-region-binding-precision.json, aggregate.newlyEmptyFieldServiceIds) for removing the false-positive pattern everywhere else. Silently produces no region rule (not 'unresolved') for the SAME reason 'nationwide residence text produces no region rule at all' does: a real residence signal exists but binds to no geographic token the parser can safely place.",
+    expectation: {
+      outcome: "rule",
+      value: [
+        { province: "서울특별시", city: "종로구" },
+        { province: "경기도", city: "부천시" },
+        { province: "충청남도", city: "천안시" },
+        { province: "전라남도", city: "순천시" },
+        { province: "경상북도", city: "포항시" },
+        { province: "경상남도", city: "창원시" },
+        { province: "경기도", city: "안양시" },
+        { province: "경기도", city: "용인시" },
+        { province: "대구광역시", city: "달서구" },
+        { province: "전북특별자치도", city: "익산시" },
+        { province: "충청북도", city: "충주시" },
+        { province: "충청남도", city: "홍성군" },
+        { province: "전북특별자치도", city: "전주시" },
+        { province: "강원특별자치도", city: "원주시" },
+      ],
+    },
+    note: "한국형 상병수당 시범사업: real 14-region pilot-program rollout list spanning 10 different provinces and one short district (대구 달서구). This is the densest real multi-region text found in the catalog. RESTORED by the MOIS region-parser Section 2 anaphora fix (Pattern B: `resolveNamedRegionListAnaphora`): the 14 region mentions are an explicitly-defined named region SET spelled out across three separate ○-delimited enumeration clauses ('1단계'/'2단계'/'3단계 시범사업 대상지역'), and the ONLY residence signal ('시범사업 지역 거주') is a later, separate ○-clause ('기본 자격') that back-references that whole named set as a single anaphoric unit ('시범사업 지역') rather than re-listing it — a structurally safe, unambiguous whole-set back-reference (not the same shape as the confirmed false positive in MOIS 351050000123, where unrelated LATER-clause province mentions — an employer/interview location, never named as a set anywhere else in the field — were wrongly absorbed into the residence rule). Previously (pre-Section-2) this field lost its region rule entirely because the parser required the region mention and residence signal to sit in the same clause; it is now one of the 6 fields restored by anaphora/disambiguation (docs/audits/mois-region-parser-closeout.json, section12_fullCatalogSafety.fieldRulesRestoredByAnaphoraOrDisambiguation).",
   },
 
   // -- No region restriction (no_rule) --------------------------------------

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T02:11:47.612Z",
+  "generatedAt": "2026-09-05T06:11:32.170Z",
   "frozenInputs": [
     {
       "label": "MOIS service list",
@@ -28,11 +28,11 @@
       "label": "이천시 청년 무직",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7807,
-        "notEligible": 5905,
+        "unknown": 7801,
+        "notEligible": 5911,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6415,
+      "relevantFeedSize": 6409,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -246,11 +246,11 @@
       "label": "서울 대학생",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7977,
-        "notEligible": 5735,
+        "unknown": 7971,
+        "notEligible": 5741,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6368,
+      "relevantFeedSize": 6362,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -273,12 +273,12 @@
             10
           ],
           [
-            "education",
-            9
+            "region",
+            7
           ],
           [
-            "region",
-            8
+            "education",
+            6
           ],
           [
             "income",
@@ -291,57 +291,12 @@
             10
           ]
         ],
-        "regionEvidenceCount": 8,
-        "interestOverlapCount": 6,
+        "regionEvidenceCount": 7,
+        "interestOverlapCount": 2,
         "detail": [
-          {
-            "id": "mois-O00101000019",
-            "title": "전북특별자치도서울장학숙 입사생 수시 모집",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "education"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-401000000112",
-            "title": "대안교육기관 등 신입생 교복비 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "education"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": true
-          },
           {
             "id": "mois-511000000137",
             "title": "상주장학회 공공기숙사 운영",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "education"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-O00087700003",
-            "title": "지역사회기여 장학금",
             "source": "government",
             "status": "unknown",
             "strength": "strong",
@@ -368,36 +323,6 @@
             ],
             "regionSpecificity": "province",
             "interestMatch": true
-          },
-          {
-            "id": "mois-O00101000018",
-            "title": "전북특별자치도서울장학숙 신규입사생 모집",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "region",
-              "education"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": true
-          },
-          {
-            "id": "mois-569000000375",
-            "title": "세종 전세보증금반환보증 보증료 지원",
-            "source": "government",
-            "status": "unknown",
-            "strength": "strong",
-            "dimensions": [
-              "age",
-              "targetScope",
-              "income",
-              "region"
-            ],
-            "regionSpecificity": "province",
-            "interestMatch": false
           },
           {
             "id": "mois-611000019619",
@@ -443,6 +368,77 @@
             ],
             "regionSpecificity": "none",
             "interestMatch": false
+          },
+          {
+            "id": "mois-B55370100009",
+            "title": "햇살론유스",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "income",
+              "education"
+            ],
+            "regionSpecificity": "none",
+            "interestMatch": false
+          },
+          {
+            "id": "mois-320000000124",
+            "title": "관악 청년 1인 가구 안심 건강검진",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "region"
+            ],
+            "regionSpecificity": "exact_city",
+            "interestMatch": false
+          },
+          {
+            "id": "mois-320000000128",
+            "title": "관악구 구민안전보험",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "region"
+            ],
+            "regionSpecificity": "exact_city",
+            "interestMatch": false
+          },
+          {
+            "id": "mois-320000000298",
+            "title": "관악 미취업청년 어학자격시험 응시료 지원",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "region"
+            ],
+            "regionSpecificity": "exact_city",
+            "interestMatch": false
+          },
+          {
+            "id": "mois-320000000314",
+            "title": "장애인 이동기기 수리비 지원",
+            "source": "government",
+            "status": "unknown",
+            "strength": "strong",
+            "dimensions": [
+              "age",
+              "targetScope",
+              "region"
+            ],
+            "regionSpecificity": "exact_city",
+            "interestMatch": false
           }
         ]
       },
@@ -453,11 +449,11 @@
       "label": "수원시 직장인 고소득",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7559,
-        "notEligible": 6153,
+        "unknown": 7553,
+        "notEligible": 6159,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6151,
+      "relevantFeedSize": 6145,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,
@@ -648,11 +644,11 @@
       "label": "이천시 신혼부부",
       "totals": {
         "likelyEligible": 0,
-        "unknown": 7953,
-        "notEligible": 5759,
+        "unknown": 7946,
+        "notEligible": 5766,
         "totalCatalog": 13712
       },
-      "relevantFeedSize": 6251,
+      "relevantFeedSize": 6244,
       "homePreview": {
         "recommendedCount": 10,
         "recommendedUnknownCount": 10,

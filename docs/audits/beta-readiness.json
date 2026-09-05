@@ -45,14 +45,15 @@
     "sourceScript": "scripts/auditBetaReadiness.ts",
     "likelyEligibleAcrossAllProfiles": 0,
     "profiles": [
-      { "id": "A_icheon_unemployed_youth", "label": "A 이천 무직 청년", "likely_eligible": 0, "unknown": 7807, "not_eligible": 5905, "relevantFeedSize": 6415, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "B_seoul_university_student", "label": "B 서울 대학생", "likely_eligible": 0, "unknown": 7977, "not_eligible": 5735, "relevantFeedSize": 6368, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "C_suwon_high_income_worker", "label": "C 수원 고소득 직장인", "likely_eligible": 0, "unknown": 7559, "not_eligible": 6153, "relevantFeedSize": 6151, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
-      { "id": "D_icheon_newlywed", "label": "D 이천 신혼부부", "likely_eligible": 0, "unknown": 7953, "not_eligible": 5759, "relevantFeedSize": 6251, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "A_icheon_unemployed_youth", "label": "A 이천 무직 청년", "likely_eligible": 0, "unknown": 7801, "not_eligible": 5911, "relevantFeedSize": 6409, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "B_seoul_university_student", "label": "B 서울 대학생", "likely_eligible": 0, "unknown": 7971, "not_eligible": 5741, "relevantFeedSize": 6362, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "C_suwon_high_income_worker", "label": "C 수원 고소득 직장인", "likely_eligible": 0, "unknown": 7553, "not_eligible": 6159, "relevantFeedSize": 6145, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
+      { "id": "D_icheon_newlywed", "label": "D 이천 신혼부부", "likely_eligible": 0, "unknown": 7946, "not_eligible": 5766, "relevantFeedSize": 6244, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
       { "id": "E_jeonnam_single_parent", "label": "E 전남 한부모", "likely_eligible": 0, "unknown": 8039, "not_eligible": 5673, "relevantFeedSize": 6312, "homeRecommended": 10, "homeRecommendedPctUnknown": 100, "homeNeedsReview": 10 },
       { "id": "F_minimal_input", "label": "F 최소 입력", "likely_eligible": 0, "unknown": 9844, "not_eligible": 3868, "relevantFeedSize": 8091, "homeRecommended": 0, "homeRecommendedPctUnknown": null, "homeNeedsReview": 10 }
     ],
     "numbersUpdatedByMoisRegionClausePrecisionCheckpoint": true,
+    "numbersRefreshedByMoisRegionParserFinalCloseoutCheckpoint": true,
     "top10HomeRecommendedProfilesAtoE": {
       "strengthStrongPct": 100,
       "sourceGovernmentPct": 100,
@@ -178,9 +179,9 @@
   "qualityGates": {
     "typecheck": "pass",
     "lint": "pass (0 errors, 1 pre-existing unrelated warning: scripts/auditPersonalizationBaseline.ts:421 unused var)",
-    "test": "pass (937/937 tests, 57/57 files)",
-    "build": "pass (route shapes unchanged: /benefits static, /benefits/[id] dynamic)",
-    "gitDiffCheck": "pass (clean, no whitespace errors)",
+    "test": "pass (953/953 tests, 57/57 files) — rerun as of moisRegionParserFinalCloseoutCheckpoint",
+    "build": "pass (route shapes unchanged: /benefits static, /benefits/[id] dynamic) — rerun as of moisRegionParserFinalCloseoutCheckpoint",
+    "gitDiffCheck": "pass (clean, no whitespace errors) — rerun as of moisRegionParserFinalCloseoutCheckpoint",
     "ciEvidence": "none claimed or referenced; no GitHub Actions run checked/exists for this SHA"
   },
   "issues": {
@@ -214,7 +215,10 @@
         "id": "P1-5",
         "title": "Residual MOIS same-○-clause region false positives (mois-401000000112, mois-569000000375, and same-shape cases) still reach Home Top-10 for 2/6 profiles",
         "evidence": "moisRegionLeakage.residualHomeTop10ObviousMismatches; docs/audits/mois-region-top10-impact.json",
-        "smallestNextCheckpoint": "A separate, narrowly-scoped checkpoint auditing single-○-clause (or no-○) MOIS text where an illustrative/comparison province mention sits within the same binding window as the true residence signal — different root cause than this checkpoint's cross-clause fix, needs its own frozen-catalog audit before choosing an implementation"
+        "smallestNextCheckpoint": "A separate, narrowly-scoped checkpoint auditing single-○-clause (or no-○) MOIS text where an illustrative/comparison province mention sits within the same binding window as the true residence signal — different root cause than this checkpoint's cross-clause fix, needs its own frozen-catalog audit before choosing an implementation",
+        "status": "CLOSED",
+        "closedBy": "moisRegionParserFinalCloseoutCheckpoint",
+        "closureNote": "mois-401000000112 and mois-569000000375 confirmed fixed and removed from Home Top-10 (see moisRegionParserFinalCloseoutCheckpoint.section11_homeTop10Reaudit). One residual data-limitation case (mois-648000001072) remains, explicitly out of scope (would require brand-name inference)."
       }
     ],
     "p2": [
@@ -222,7 +226,7 @@
       { "id": "P2-2", "title": "Youth zipCd remains fundamentally unresolved", "note": "root cause of P1-4, tracked separately as the underlying architecture gap" },
       { "id": "P2-3", "title": "'확인이 필요해요' comprehension", "note": "explicitly the subject of the beta test plan item 9; better learned from real testers than guessed at" }
     ],
-    "counts": { "p0": 0, "p1": 5, "p2": 3 }
+    "counts": { "p0": 0, "p1": 5, "p1Open": 4, "p1Closed": 1, "p2": 3 }
   },
   "betaTestPlan": {
     "instrumentation": "manual only — no analytics infrastructure exists in this codebase today (no analytics SDK/event-tracking imports found in app/, components/, hooks/)",
@@ -256,5 +260,53 @@
   "noProductionCodeChanged": false,
   "productionCodeChangedByMoisRegionClausePrecisionCheckpoint": [
     "lib/eligibility/extraction/koreanEligibilityParser.ts"
-  ]
+  ],
+  "moisRegionParserFinalCloseoutCheckpoint": {
+    "title": "Damoa MOIS Region Parser — Final Closeout Fix",
+    "type": "REAL_CODE_FIX (not audit-only); closes the checkpoint left open by Addendum 2",
+    "startedFromSha": "ba3dd7390147c502ca414e108f58a7817c724cfb",
+    "sourceOfTruth": "docs/audits/mois-region-binding-manual-review.json (28 manually-reviewed records)",
+    "closeoutArtifact": "docs/audits/mois-region-parser-closeout.json",
+    "fixesLanded": [
+      "Safe same-field anaphora recovery: single unambiguous province anchor + later deictic back-reference, and named region-list groups + whole-set back-reference (no service-ID special casing)",
+      "parseRegionClause returns { unresolved: text } instead of undefined when a real residence signal can't be safely anchored (narrow, deictic-phrase-gated)",
+      "New exclusions: illustrative (예시) spans, non-residence institution/location mentions (학교/대학/기업/사업장 소재), embedded province/brand literal tokens",
+      "Fixed a previously-undiscovered gap: findLoneCityCandidates lacked the same institution/example/brand exclusion gate already applied to province-level scanning",
+      "Compass sub-region (경기북부/남부/동부/서부) and list-delimiter refinements to bare-경기 disambiguation"
+    ],
+    "section9_manualReview28": { "total": 28, "pass": 28, "needsReview": 0 },
+    "section10_newlyEmpty16": {
+      "correct_to_be_unrestricted": { "total": 5, "pass": 5, "needsReview": 0 },
+      "should_still_have_region_rule": { "total": 7, "pass": 7, "needsReview": 0 },
+      "ambiguous": { "total": 4, "pass": 4, "needsReview": 0 }
+    },
+    "section12_fullCatalogSafety": {
+      "totalMOISRecords": 10967,
+      "totalFieldsProcessed": 12019,
+      "recordsWithRegionRuleBefore": 2595,
+      "recordsWithRegionRuleAfter": 2598,
+      "regionSpecCountBefore": 2960,
+      "regionSpecCountAfter": 2916,
+      "fieldRulesRestoredByAnaphoraOrDisambiguation": 6,
+      "specsRemovedByExampleInstitutionBrandGuards": 66,
+      "newlyUnresolvedFieldCount": 2,
+      "unexpectedNonRegionMismatchCount": 0
+    },
+    "section11_homeTop10Reaudit": {
+      "confirmedWrongRegionItemsFromManualReview": ["mois-O00101000019", "mois-401000000112", "mois-569000000375", "mois-648000001072"],
+      "verifiedRemovedFromHomeTop10": ["mois-O00101000019", "mois-401000000112", "mois-569000000375"],
+      "unchangedDataLimitation": {
+        "id": "mois-648000001072",
+        "reason": "Both old and new parser produce no region rule for this record; the only textual anchor is the brand name 경남바로서비스, which Section 7's design requires excluding via the brand-literal list. Documented, unavoidable data limitation, not a parser regression (same category as the accepted 357000000131 exception).",
+        "before10": true,
+        "after10": true
+      },
+      "correctlyLeftAmbiguous": ["mois-569000000402", "mois-631000000709"],
+      "parserCausedObviousWrongRegionItemsRemainingInHomeTop10": 0
+    },
+    "regressionTests": "Tests A-K added to __tests__/eligibility/koreanEligibilityParser.test.ts (describe block 'final closeout fix (anaphora recovery + false-positive exclusions)'); __tests__/fixtures/regionGoldSample.ts nationwide-no-place-name fixture corrected to nationwide-deictic-no-anchor/unresolved; __tests__/fixtures/regionGoldSampleReal.ts real-rule-multi-region-large-list restored to full 14-region expectation. Full suite: 953/953 tests, 57/57 files.",
+    "p1_5Status": "CLOSED — confirmed false positives fixed; remaining mois-648000001072 case is an explicit, documented, out-of-scope data limitation (would require brand-name inference, which the spec forbids)",
+    "verdictUnchanged": "READY_AFTER_SMALL_FIXES",
+    "moisRegionParserCheckpointStatus": "CLOSED"
+  }
 }
