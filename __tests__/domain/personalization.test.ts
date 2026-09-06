@@ -266,14 +266,22 @@ describe("full discovery vs home-preview admission filtering", () => {
 });
 
 /**
- * §7 (interest-intersection ranking): selected-interest overlap count now
- * ranks immediately after EligibilityStatus — ahead of personalization
- * strength/dimension count/region specificity — so a benefit matching more
- * of the user's selected interests outranks a "stronger" evidence match with
- * no interest overlap. See domain/benefit/recommend.ts's comparator docs.
+ * §7 (interest-intersection ranking), corrected per the checkpoint that
+ * introduced `totalIntersectionCount`: selected-interest overlap count is
+ * combined with `specificDimensionCount` into a single
+ * `totalIntersectionCount = specificDimensionCount + interestOverlapCount`
+ * measure, which ranks immediately after EligibilityStatus — ahead of
+ * personalization strength/region specificity. This means interest overlap
+ * and matched-dimension count are weighted EQUALLY (neither strictly
+ * dominates the other) rather than interest overlap unconditionally
+ * outranking dimension-derived strength as an earlier iteration of this
+ * comparator did. Only once the COMBINED total ties do personalization
+ * strength, then region specificity, then interest overlap again (as a
+ * secondary tie-break), then decide. See domain/benefit/recommend.ts's
+ * comparator docs.
  */
-describe("interest overlap now outranks personalization strength", () => {
-  it("lets a higher interest-overlap match outrank a stronger no-interest-overlap match", () => {
+describe("interest overlap combines with dimension count via totalIntersectionCount", () => {
+  it("a stronger multi-dimension match with equal totalIntersectionCount outranks a single-dimension interest-only match", () => {
     // Distinct from the shared module-level `profile`: needs a resolvable
     // individualIncomeBand so the income rule below actually PASSES (an
     // unresolvable field would leave it out of passedLeaves entirely,
@@ -324,9 +332,15 @@ describe("interest overlap now outranks personalization strength", () => {
       incomeProfile,
       2
     );
-    // weak-interest-match matches a selected interest (employment) while
-    // strong-no-interest-match matches none — interest overlap now wins.
-    expect(result.map((b) => b.id)).toEqual(["weak-interest-match", "strong-no-interest"]);
+    // strong-no-interest-match: specificDimensionCount=2 (age+income),
+    // interestOverlapCount=0 -> totalIntersectionCount=2.
+    // weak-interest-match: specificDimensionCount=1 (age only),
+    // interestOverlapCount=1 (employment) -> totalIntersectionCount=2.
+    // The combined totals TIE, so the next tie-break (personalization
+    // strength) decides -- strong-no-interest-match's richer structured
+    // evidence (age+income both PASS) wins over weak-interest-match's
+    // single age-only rule.
+    expect(result.map((b) => b.id)).toEqual(["strong-no-interest", "weak-interest-match"]);
   });
 
   it("breaks a tie between otherwise-equal candidates using interest overlap", () => {

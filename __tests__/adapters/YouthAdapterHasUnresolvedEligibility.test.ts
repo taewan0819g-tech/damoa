@@ -92,8 +92,14 @@ describe("Youth hasUnresolvedEligibility (Phase 4-B pre-merge cleanup, §8)", ()
     expect(benefit.hasUnresolvedEligibility).toBe(true);
   });
 
-  it("9) a populated zipCd remains unresolved this phase -- flags hasUnresolvedEligibility and never contributes a rule", () => {
+  it("9) a populated, fully-resolvable zipCd (11680 = 서울특별시 강남구) now builds a youth-region rule and does NOT set hasUnresolvedEligibility from the region dimension (checkpoint: Youth zipCd structured region eligibility)", () => {
     const benefit = normalizeYouthPolicy(rawPolicy({ zipCd: "11680" }));
+    expect(leafRuleIds(benefit.eligibility).has("youth-region")).toBe(true);
+    expect(benefit.hasUnresolvedEligibility).not.toBe(true);
+  });
+
+  it("9b) an unrecognized future zipCd token stays unresolved-safe -- flags hasUnresolvedEligibility and never contributes a rule", () => {
+    const benefit = normalizeYouthPolicy(rawPolicy({ zipCd: "99999" }));
     expect(benefit.eligibility).toBeUndefined();
     expect(benefit.hasUnresolvedEligibility).toBe(true);
   });

@@ -20,6 +20,21 @@
  * string aliases (see that module's header for why). Every pair not
  * involved in one of those two named transitions falls back to ordinary
  * exact-match behavior, unchanged from before this checkpoint.
+ *
+ * Checkpoint: Youth zipCd structured region eligibility (subdivision
+ * constraint-compatibility correction) additionally introduces
+ * `RegionSpec.subdivision`, for policy regions expressed at a granularity
+ * FINER than any Damoa profile ever collects (the 13 gu-bearing 일반시 —
+ * 수원시, 성남시, etc. — whose subordinate gu are never profile-selectable;
+ * see `CURRENT_RESIDENCE_GAZETTEER`'s file header). The same U/P
+ * set-containment principle applies: a user known only down to the parent
+ * city is "overlap" (never "contained") against any single subordinate-gu
+ * spec, and only becomes "contained" once an OR-list's subdivision specs for
+ * that city, unioned, exhaustively cover every one of the city's current gu
+ * (`domain/region/subdivisionPartition.ts`'s `subdivisionUnionCoversUser`) —
+ * the same OR-union-completion principle `transitionUnionCoversUser` already
+ * applies to the historical transitions above, just for ordinary intra-city
+ * granularity instead of a boundary change.
  */
 
 import {
@@ -29,12 +44,27 @@ import {
   type NormalizedRegion,
   type TerritoryRelation,
 } from "@/domain/region/adminTransition";
+import { subdivisionUnionCoversUser, type SubdivisionRegion } from "@/domain/region/subdivisionPartition";
 
 export interface RegionSpec {
   /** Province/metropolitan-city name, e.g. "경기도", "서울특별시". */
   province: string;
   /** City/county/district name. Omit to allow the whole province. */
   city?: string;
+  /**
+   * Subordinate 구 within `city`, for the 13 gu-bearing 일반시 ONLY (수원시,
+   * 성남시, 안양시, 부천시, 안산시, 고양시, 용인시, 화성시, 청주시, 천안시, 포항시,
+   * 창원시, 전주시 — see `domain/region/subdivisionPartition.ts`). Requires
+   * `city` to also be set. Never set for ordinary autonomous/metropolitan
+   * districts that Damoa already treats as city-level units (e.g. 서울
+   * 종로구, 인천 제물포구, 전남광주통합특별시 남구 stay plain `city` values, never
+   * `subdivision`) — Damoa profiles never collect which gu of these 13
+   * cities a user lives in, so a `subdivision` spec can only ever reach
+   * "overlap" against a single-city-known user, never "contained" on its
+   * own; see `matchRegion`'s OR-union handling for the one way it CAN still
+   * resolve to "pass".
+   */
+  subdivision?: string;
 }
 
 export const PROVINCE_ALIASES: Record<string, string> = {
@@ -120,6 +150,12 @@ function normalizeCity(input?: string | null): string | undefined {
  * and a single allowed `spec`. Reduces to plain exact-match semantics for
  * every pair not covered by a modeled administrative transition:
  *
+ * - Spec carries a `subdivision` (one of the 13 gu-bearing cities' 구) ->
+ *   a Damoa profile only ever knows the user down to the PARENT city, never
+ *   the gu, so this can be "overlap" at best (same province+city) or
+ *   "disjoint" (different province/city) — never "contained" from a single
+ *   spec. See `matchRegion`'s OR-union handling for how a PASS can still
+ *   emerge from multiple subdivision specs together.
  * - Same province, spec allows whole province -> "contained".
  * - Same province, spec city unknown to us -> "overlap" (could be right).
  * - Same province, spec city equal to user city -> "contained".
@@ -135,6 +171,17 @@ function regionRelation(
   const specProvince = normalizeProvince(spec.province);
   if (!specProvince) return "disjoint";
   const specCity = normalizeCity(spec.city);
+  const specSubdivision = normalizeCity(spec.subdivision);
+
+  if (specSubdivision) {
+    // Case 3 (subordinate-gu leaf under a Damoa parent-city profile unit):
+    // the profile never records which gu the user lives in, so the most we
+    // can ever prove from a SINGLE such spec is that the user's territory
+    // and the spec's territory overlap (same parent city) — never full
+    // containment. A different province/city is provably disjoint.
+    if (!specCity || user.province !== specProvince || user.city !== specCity) return "disjoint";
+    return "overlap";
+  }
 
   if (user.province === specProvince) {
     if (!specCity) return "contained";
@@ -158,8 +205,10 @@ function regionRelation(
  * - Some allowed spec's territory fully contains the user's territory
  *   (including an ordinary exact province/city match) -> "pass".
  * - Otherwise, some allowed spec's territory merely overlaps the user's
- *   (unknown city within a matched province, or a partial administrative-
- *   transition overlap) without any spec proving a full match -> "unknown".
+ *   (unknown city within a matched province, a partial administrative-
+ *   transition overlap, or a subordinate-gu spec under a matched parent
+ *   city) without any spec proving a full match -> "unknown", UNLESS the
+ *   overlapping specs' union proves full coverage (see below) -> "pass".
  */
 export function matchRegion(
   residence: { province?: string; city?: string } | undefined | null,
@@ -172,6 +221,7 @@ export function matchRegion(
 
   let sawOverlap = false;
   const overlappingSpecs: NormalizedRegion[] = [];
+  const overlappingSubdivisionSpecs: SubdivisionRegion[] = [];
 
   for (const spec of allowed) {
     const relation = regionRelation(user, spec);
@@ -179,8 +229,12 @@ export function matchRegion(
     if (relation === "overlap") {
       sawOverlap = true;
       const specProvince = normalizeProvince(spec.province);
-      if (specProvince) {
-        overlappingSpecs.push({ province: specProvince, city: normalizeCity(spec.city) });
+      const specCity = normalizeCity(spec.city);
+      const specSubdivision = normalizeCity(spec.subdivision);
+      if (specProvince && specCity && specSubdivision) {
+        overlappingSubdivisionSpecs.push({ province: specProvince, city: specCity, subdivision: specSubdivision });
+      } else if (specProvince) {
+        overlappingSpecs.push({ province: specProvince, city: specCity });
       }
     }
   }
@@ -188,8 +242,11 @@ export function matchRegion(
   // `allowed` is an OR list: the policy's true territory P is the UNION of
   // every allowed spec, not any single spec in isolation. A user can be
   // "overlap" against every spec individually yet still be fully covered
-  // once two+ overlapping specs are combined (see adminTransition.ts).
+  // once two+ overlapping specs are combined (see adminTransition.ts for the
+  // historical-transition case, subdivisionPartition.ts for the
+  // parent-city/subordinate-gu case).
   if (sawOverlap && transitionUnionCoversUser(user, overlappingSpecs)) return "pass";
+  if (sawOverlap && city && subdivisionUnionCoversUser({ province, city }, overlappingSubdivisionSpecs)) return "pass";
 
   return sawOverlap ? "unknown" : "fail";
 }

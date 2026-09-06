@@ -9,6 +9,7 @@ import {
   buildEducationStatusRule,
   buildEmploymentStatusRule,
   buildMaritalStatusRule,
+  buildYouthRegionRule,
   classifyYouthDimension,
 } from "@/domain/youthCodebook/compatibility";
 import {
@@ -106,18 +107,23 @@ export interface YouthRawPolicy {
   plcyMajorCd?: string;
   /**
    * Region condition code(s), 5-digit Youth Center region codes,
-   * comma-delimited when multiple. NOT present in the official codebook
-   * XLSX (confirmed absent from all 4 sheets) — observed values are
-   * consistent with 시군구-level administrative-region codes, but the exact
-   * official Youth Center code-system identity has not yet been verified
-   * from an authoritative Youth Center source (see
-   * domain/youthCodebook/provenance.ts's `ZIP_CD_PROVENANCE`). Building a
-   * rule requires a verified region-code -> Damoa region-text crosswalk
-   * that doesn't exist yet (see
-   * domain/youthCodebook/compatibility.ts's `ZIP_CD_NEXT_STEP`); kept typed
-   * for documentation/future use only, never wired into buildEligibility()
-   * — but its presence still contributes to `hasUnresolvedEligibility`
-   * (Phase 4-B pre-merge cleanup, §1/§4).
+   * comma-delimited OR list when multiple. Still NOT present in the
+   * official codebook XLSX (confirmed absent from all 4 sheets — see
+   * domain/youthCodebook/provenance.ts's `ZIP_CD_PROVENANCE`), but now
+   * RESOLVED via a different, independently-authoritative source: the
+   * government's 법정동코드 전체자료 dataset (checkpoint: Youth zipCd
+   * structured region eligibility). Every one of the 261 distinct tokens
+   * observed in the frozen catalog snapshot maps deterministically to a
+   * Damoa `RegionSpec` via `domain/youthCodebook/zipCdCrosswalk.ts`'s
+   * `resolveYouthZipCd`, preserving subordinate-gu specificity (via
+   * `RegionSpec.subdivision`) and historical pre-2026-07-01 Incheon
+   * district identities rather than collapsing either into a coarser or
+   * newer territory. Wired into `buildEligibility()` below via
+   * `domain/youthCodebook/compatibility.ts`'s `buildYouthRegionRule`, which
+   * builds a `region_in` rule (id: "youth-region") when every token
+   * resolves, and otherwise leaves `hasUnresolvedEligibility` set — an
+   * unrecognized future zipCd token never silently drops out of the OR
+   * list.
    */
   zipCd?: string;
   [key: string]: unknown;
@@ -304,6 +310,16 @@ function buildIncomeRule(raw: YouthRawPolicy): EligibilityRule | undefined {
  * `sprtTrgtMaxAge`): a "safe"/age-limited code that nonetheless failed to
  * produce a rule because the amount/age data itself was missing or
  * malformed is real unresolved data too, not merely "no condition".
+ *
+ * `zipCd` (checkpoint: Youth zipCd structured region eligibility) is
+ * likewise handled by its own dedicated builder,
+ * `domain/youthCodebook/compatibility.ts`'s `buildYouthRegionRule`, rather
+ * than the generic codebook-field classifier below — it isn't a codebook
+ * family at all (see `ZIP_CD_PROVENANCE`), it's resolved through a separate
+ * government dataset crosswalk. A non-blank `zipCd` that fails to fully
+ * resolve (any unrecognized token) sets `hasUnresolvedEligibility` without
+ * building a partial rule, mirroring the codebook fields' "any unknown code
+ * leaves the whole dimension unresolved" behavior.
  */
 function buildEligibility(raw: YouthRawPolicy): { eligibility?: EligibilityRuleGroup; hasUnresolvedEligibility: boolean } {
   let hasUnresolvedEligibility = false;
@@ -326,6 +342,8 @@ function buildEligibility(raw: YouthRawPolicy): { eligibility?: EligibilityRuleG
   const maritalRule = buildMaritalStatusRule(raw.mrgSttsCd);
   const employmentRule = buildEmploymentStatusRule(raw.jobCd);
   const educationRule = buildEducationStatusRule(raw.schoolCd);
+  const { rule: regionRule, hasUnresolvedEligibility: regionUnresolved } = buildYouthRegionRule(raw.zipCd);
+  if (regionUnresolved) hasUnresolvedEligibility = true;
 
   // Generic per-dimension classification for every codebook-covered field.
   // sbizCd/plcyMajorCd are never wired into a rule at all this phase, but
@@ -344,12 +362,7 @@ function buildEligibility(raw: YouthRawPolicy): { eligibility?: EligibilityRuleG
     if (classifyYouthDimension(apiField, value).hasUnresolvedEligibility) hasUnresolvedEligibility = true;
   }
 
-  // zipCd has no official codebook family at all (see
-  // domain/youthCodebook/provenance.ts's ZIP_CD_PROVENANCE) -- any non-blank
-  // value is real, unstructured region-eligibility data (§4/§9).
-  if (raw.zipCd && raw.zipCd.trim() !== "") hasUnresolvedEligibility = true;
-
-  const rules = [ageRule, incomeRule, maritalRule, employmentRule, educationRule].filter(
+  const rules = [ageRule, incomeRule, maritalRule, employmentRule, educationRule, regionRule].filter(
     (r): r is EligibilityRule => Boolean(r)
   );
   const eligibility = rules.length > 0 ? { type: "all" as const, rules } : undefined;
@@ -368,32 +381,34 @@ function buildEligibility(raw: YouthRawPolicy): { eligibility?: EligibilityRuleG
  * `domain/youthCodebook/provenance.ts` and the Phase 4-A audit at
  * docs/youth-codebook-phase4-audit.md for full source provenance and the
  * Phase 4-B corrections applied on top of that audit's initial proposals).
- * Every live record also carries `sbizCd` (business/target-group status),
- * `zipCd` (residence area), and `plcyMajorCd` (academic major) — NONE of
- * those are wired into a structured RULE this phase: `sbizCd`'s specific
- * codes are either scope-mismatched against existing profile fields (e.g.
- * 한부모가정 vs. the family-membership-scoped `singleParentFamily`) or have
- * no matching Damoa concept at all; `plcyMajorCd` has no Damoa academic-major
- * field; `zipCd` isn't even in the official codebook and would need a
- * verified region-code crosswalk (see `compatibility.ts`'s
- * `ZIP_CD_NEXT_STEP`). See `domain/youthCodebook/table.ts` for the exact
- * per-code `implementationStatus` driving every one of these decisions.
- * They ARE, however, still surfaced via `hasUnresolvedEligibility` (Phase
- * 4-B pre-merge cleanup, §1/§3) whenever they carry real, non-blank,
- * non-unrestricted data — so a benefit whose ONLY real eligibility
- * condition is, say, a specific sbizCd or plcyMajorCd code correctly stays
- * "incomplete"/unresolved instead of silently looking like a clean pass.
+ * Every live record also carries `sbizCd` (business/target-group status)
+ * and `plcyMajorCd` (academic major) — NEITHER is wired into a structured
+ * RULE this phase: `sbizCd`'s specific codes are either scope-mismatched
+ * against existing profile fields (e.g. 한부모가정 vs. the
+ * family-membership-scoped `singleParentFamily`) or have no matching Damoa
+ * concept at all; `plcyMajorCd` has no Damoa academic-major field. See
+ * `domain/youthCodebook/table.ts` for the exact per-code
+ * `implementationStatus` driving these decisions. They ARE, however, still
+ * surfaced via `hasUnresolvedEligibility` (Phase 4-B pre-merge cleanup,
+ * §1/§3) whenever they carry real, non-blank, non-unrestricted data — so a
+ * benefit whose ONLY real eligibility condition is, say, a specific sbizCd
+ * or plcyMajorCd code correctly stays "incomplete"/unresolved instead of
+ * silently looking like a clean pass.
  *
- * So even with marital/employment/education now structured, ANY built
- * eligibility group is STILL marked "incomplete" — unconditionally,
+ * `zipCd` (residence area), by contrast, IS now wired into a structured
+ * `region_in` rule (checkpoint: Youth zipCd structured region eligibility —
+ * see `buildYouthRegionRule` above and `domain/youthCodebook/zipCdCrosswalk.ts`).
+ *
+ * So even with marital/employment/education/region now structured, ANY
+ * built eligibility group is STILL marked "incomplete" — unconditionally,
  * regardless of which specific rules it contains. We know there's real
- * business-status/region/major eligibility data on every record that we
- * still don't structure, so a full pass on the rules we DO parse is never
- * strong enough evidence for likely_eligible on its own (see
+ * business-status/major eligibility data on every record that we still
+ * don't structure, so a full pass on the rules we DO parse is never strong
+ * enough evidence for likely_eligible on its own (see
  * `lib/eligibility/ruleEngine.ts`'s `evaluateEligibilityDetailed`, which
  * downgrades a full pass on `"incomplete"` data to "unknown" rather than
- * promoting it — this is what keeps adding marital/employment/education
- * rules from ever increasing `likelyEligibleCount` by itself, only
+ * promoting it — this is what keeps adding marital/employment/education/
+ * region rules from ever increasing `likelyEligibleCount` by itself, only
  * improving candidate pruning and positive-evidence signal).
  */
 function eligibilityDataStatus(eligibility: EligibilityRuleGroup | undefined): Benefit["eligibilityDataStatus"] {
