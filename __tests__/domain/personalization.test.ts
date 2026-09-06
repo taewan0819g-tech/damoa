@@ -8,6 +8,9 @@ import { getRecommendedBenefits } from "@/domain/benefit/recommend";
 import { getUnknownBenefits } from "@/domain/benefit/unknownBenefits";
 import { sortBenefits } from "@/domain/benefit/sort";
 import { evaluateEligibilityDetailed } from "@/lib/eligibility/ruleEngine";
+import { getCurrentResidenceGazetteer } from "@/lib/eligibility/regionGazetteer";
+import { PARENT_CITY_SUBDIVISIONS } from "@/domain/region/subdivisionPartition";
+import type { RegionSpec } from "@/lib/eligibility/region";
 import type { Benefit, EligibilityStatus, RuleOperator } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 
@@ -161,6 +164,253 @@ describe("resolvePersonalizationEvidence — region specificity never inferred f
 });
 
 /**
+ * Checkpoint: Youth zipCd nationwide-personalization correction. A
+ * structured `region_in` OR-list can legitimately enumerate every current
+ * city in the country (a nationwide program expressed as an explicit list)
+ * or every city of a single province, not just a narrow local subset.
+ * `regionSpecificityForLeaf`/`derivePersonalizationEvidence` must classify
+ * these SEMANTICALLY (via `domain/region/regionScope.ts`, gazetteer-driven)
+ * rather than merely checking "does any entry name the user's city" —
+ * scenarios A-J below are the exact regression matrix from that checkpoint.
+ * Eligibility (`matchRegion`/`evaluateEligibilityDetailed`) is completely
+ * untouched — every scenario that PASSES here also still PASSES eligibility.
+ */
+describe("region breadth classification — nationwide/province OR-lists must not be misread as exact-city evidence", () => {
+  const icheonProfile: UserProfile = {
+    residence: { province: "경기도", city: "이천시" },
+    interests: ["employment"],
+  };
+
+  function nationwideSpecs(): RegionSpec[] {
+    const gaz = getCurrentResidenceGazetteer();
+    const specs: RegionSpec[] = [];
+    for (const [province, cities] of Object.entries(gaz)) {
+      if (cities.length === 0) {
+        specs.push({ province });
+      } else {
+        for (const city of cities) specs.push({ province, city });
+      }
+    }
+    return specs;
+  }
+
+  function gyeonggiFullRosterSpecs(): RegionSpec[] {
+    const gaz = getCurrentResidenceGazetteer();
+    return gaz["경기도"].map((city) => ({ province: "경기도", city }));
+  }
+
+  function regionBenefit(id: string, value: RegionSpec[]): Benefit {
+    return {
+      id,
+      title: "t",
+      shortDescription: "d",
+      category: "welfare",
+      source: { type: "youth_policy", organization: "o" },
+      benefitType: "cash",
+      eligibility: {
+        type: "all",
+        rules: [{ id: "region", field: "residence", operator: "region_in", value, required: true }],
+      },
+    };
+  }
+
+  it("A) exact Icheon-only region -- region dimension counted, regionSpecificity exact_city", () => {
+    const benefit = regionBenefit("a", [{ province: "경기도", city: "이천시" }]);
+    const diag = evaluateEligibilityDetailed(benefit, icheonProfile);
+    expect(diag.status).toBe("likely_eligible");
+    const evidence = resolvePersonalizationEvidence(benefit, icheonProfile);
+    expect(evidence.regionSpecificity).toBe("exact_city");
+    expect(evidence.dimensions).toContain("region");
+    expect(evidence.specificDimensionCount).toBe(1);
+  });
+
+  it("B) full explicit enumeration of every 경기도 city (province-wide, no single province-only spec) -- region counted, regionSpecificity province", () => {
+    const benefit = regionBenefit("b", gyeonggiFullRosterSpecs());
+    const diag = evaluateEligibilityDetailed(benefit, icheonProfile);
+    expect(diag.status).toBe("likely_eligible");
+    const evidence = resolvePersonalizationEvidence(benefit, icheonProfile);
+    expect(evidence.regionSpecificity).toBe("province");
+    expect(evidence.dimensions).toContain("region");
+    expect(evidence.specificDimensionCount).toBe(1);
+  });
+
+  it("C) nationwide full current roster -- eligibility PASS, region dimension NOT counted, regionSpecificity none", () => {
+    const benefit = regionBenefit("c", nationwideSpecs());
+    const diag = evaluateEligibilityDetailed(benefit, icheonProfile);
+    expect(diag.status).toBe("likely_eligible");
+    const evidence = resolvePersonalizationEvidence(benefit, icheonProfile);
+    expect(evidence.regionSpecificity).toBe("none");
+    expect(evidence.dimensions).not.toContain("region");
+    expect(evidence.specificDimensionCount).toBe(0);
+  });
+
+  it("D) nationwide region + employment -- specificDimensionCount counts employment only, not region", () => {
+    const benefit: Benefit = {
+      id: "d",
+      title: "t",
+      shortDescription: "d",
+      category: "welfare",
+      source: { type: "youth_policy", organization: "o" },
+      benefitType: "cash",
+      eligibility: {
+        type: "all",
+        rules: [
+          { id: "region", field: "residence", operator: "region_in", value: nationwideSpecs(), required: true },
+          {
+            id: "employment",
+            field: "employmentStatus",
+            operator: "status_compat",
+            value: { passValues: ["unemployed"], failValues: [] },
+            required: true,
+          },
+        ],
+      },
+    };
+    const employedProfile: UserProfile = { ...icheonProfile, employmentStatus: "unemployed" };
+    const diag = evaluateEligibilityDetailed(benefit, employedProfile);
+    expect(diag.status).toBe("likely_eligible");
+    const evidence = resolvePersonalizationEvidence(benefit, employedProfile);
+    expect(evidence.dimensions).toEqual(["employment"]);
+    expect(evidence.specificDimensionCount).toBe(1);
+    expect(evidence.strength).toBe("moderate");
+  });
+
+  it("E) nationwide + employment + matching employment interest -- totalIntersectionCount reflects 1 profile dimension + 1 interest, not 2 + 1", () => {
+    const nationwideEmploymentBenefit: Benefit = {
+      id: "e-nationwide",
+      title: "t",
+      shortDescription: "d",
+      category: "employment", // matches profile.interests
+      source: { type: "youth_policy", organization: "o" },
+      benefitType: "cash",
+      eligibility: {
+        type: "all",
+        rules: [
+          { id: "region", field: "residence", operator: "region_in", value: nationwideSpecs(), required: true },
+          {
+            id: "employment",
+            field: "employmentStatus",
+            operator: "status_compat",
+            value: { passValues: ["unemployed"], failValues: [] },
+            required: true,
+          },
+        ],
+      },
+    };
+    // A single-dimension local competitor with the SAME interest overlap, so
+    // ranking is decided purely by totalIntersectionCount: if the nationwide
+    // region leaf were (incorrectly) also counted as a specific dimension,
+    // this benefit would score 2 (region+employment) + 1 (interest) = 3 and
+    // wrongly outrank the exact-city competitor below, which correctly
+    // scores 2 (region+employment) + 1 = 3 for a GENUINELY local match.
+    const exactCityCompetitor: Benefit = {
+      id: "e-local",
+      title: "t",
+      shortDescription: "d",
+      category: "employment",
+      source: { type: "youth_policy", organization: "o" },
+      benefitType: "cash",
+      eligibility: {
+        type: "all",
+        rules: [
+          {
+            id: "region",
+            field: "residence",
+            operator: "region_in",
+            value: [{ province: "경기도", city: "이천시" }],
+            required: true,
+          },
+          {
+            id: "employment",
+            field: "employmentStatus",
+            operator: "status_compat",
+            value: { passValues: ["unemployed"], failValues: [] },
+            required: true,
+          },
+        ],
+      },
+    };
+    const employedIcheonProfile: UserProfile = { ...icheonProfile, employmentStatus: "unemployed" };
+    const nationwideEvidence = resolvePersonalizationEvidence(nationwideEmploymentBenefit, employedIcheonProfile);
+    expect(nationwideEvidence.specificDimensionCount).toBe(1); // employment only
+    const localEvidence = resolvePersonalizationEvidence(exactCityCompetitor, employedIcheonProfile);
+    expect(localEvidence.specificDimensionCount).toBe(2); // region + employment
+
+    const statusById = new Map<string, EligibilityStatus>([
+      ["e-nationwide", "likely_eligible"],
+      ["e-local", "likely_eligible"],
+    ]);
+    const result = getRecommendedBenefits(
+      [nationwideEmploymentBenefit, exactCityCompetitor],
+      statusById,
+      employedIcheonProfile,
+      2
+    );
+    // Genuinely local (region+employment+interest) outranks nationwide
+    // (employment+interest only) once the nationwide region leaf is
+    // correctly excluded from specificDimensionCount.
+    expect(result.map((b) => b.id)).toEqual(["e-local", "e-nationwide"]);
+  });
+
+  it("F) multi-city proper subset containing Icheon -- remains region-specific (exact_city-tier), never mistaken for nationwide", () => {
+    const benefit = regionBenefit("f", [
+      { province: "경기도", city: "이천시" },
+      { province: "경기도", city: "수원시" },
+      { province: "충청남도", city: "아산시" },
+    ]);
+    const evidence = resolvePersonalizationEvidence(benefit, icheonProfile);
+    expect(evidence.regionSpecificity).toBe("exact_city");
+    expect(evidence.dimensions).toContain("region");
+  });
+
+  it("G) full subdivision coverage of one parent city (수원시) -- remains local region-specific, not province/nationwide", () => {
+    const suwonGu = PARENT_CITY_SUBDIVISIONS["경기도"]["수원시"];
+    const specs: RegionSpec[] = suwonGu.map((subdivision) => ({ province: "경기도", city: "수원시", subdivision }));
+    const benefit = regionBenefit("g", specs);
+    const suwonProfile: UserProfile = { residence: { province: "경기도", city: "수원시" } };
+    const diag = evaluateEligibilityDetailed(benefit, suwonProfile);
+    expect(diag.status).toBe("likely_eligible"); // full gu-union completion -> PASS
+    const evidence = resolvePersonalizationEvidence(benefit, suwonProfile);
+    expect(evidence.regionSpecificity).toBe("exact_city");
+    expect(evidence.dimensions).toContain("region");
+  });
+
+  it("H) partial subdivision coverage -- eligibility stays UNKNOWN, unaffected by this checkpoint", () => {
+    const suwonGu = PARENT_CITY_SUBDIVISIONS["경기도"]["수원시"];
+    const specs: RegionSpec[] = [{ province: "경기도", city: "수원시", subdivision: suwonGu[0] }];
+    const benefit = regionBenefit("h", specs);
+    const suwonProfile: UserProfile = { residence: { province: "경기도", city: "수원시" } };
+    const diag = evaluateEligibilityDetailed(benefit, suwonProfile);
+    expect(diag.status).toBe("unknown");
+    expect(diag.failedRules).toBe(0);
+  });
+
+  it("I) historical-transition-completed PASS (old 인천 중구 spec + current 영종구 resident) keeps its pre-checkpoint 'province' ranking, unaffected", () => {
+    const benefit = regionBenefit("i", [{ province: "인천광역시", city: "중구" }]);
+    const yeongjongguProfile: UserProfile = { residence: { province: "인천광역시", city: "영종구" } };
+    const diag = evaluateEligibilityDetailed(benefit, yeongjongguProfile);
+    expect(diag.status).toBe("likely_eligible");
+    const evidence = resolvePersonalizationEvidence(benefit, yeongjongguProfile);
+    expect(evidence.regionSpecificity).toBe("province");
+    expect(evidence.dimensions).toContain("region");
+  });
+
+  it("J) empty interests -- nationwide-region benefit still ranks sanely against a stronger local match (no interest signal to muddy the comparison)", () => {
+    const nationwideOnly: Benefit = regionBenefit("j-nationwide", nationwideSpecs());
+    const localOnly: Benefit = regionBenefit("j-local", [{ province: "경기도", city: "이천시" }]);
+    const noInterestProfile: UserProfile = { residence: { province: "경기도", city: "이천시" } };
+    const statusById = new Map<string, EligibilityStatus>([
+      ["j-nationwide", "likely_eligible"],
+      ["j-local", "likely_eligible"],
+    ]);
+    const result = getRecommendedBenefits([nationwideOnly, localOnly], statusById, noInterestProfile, 2);
+    // local (specificDimensionCount=1, region) outranks nationwide
+    // (specificDimensionCount=0) on totalIntersectionCount alone.
+    expect(result.map((b) => b.id)).toEqual(["j-local", "j-nationwide"]);
+  });
+});
+
+/**
  * §1 eligibility semantics must be untouched by any of the ranking-evidence
  * plumbing — status is computed purely by evaluateEligibilityDetailed,
  * independent of derivePersonalizationEvidence.
@@ -265,9 +515,23 @@ describe("full discovery vs home-preview admission filtering", () => {
   });
 });
 
-/** §7 interest overlap is a low-priority tie-breaker, never able to outrank verified strength. */
-describe("interest overlap is a low-priority tie-breaker only", () => {
-  it("does not let interest overlap promote a weaker match above a stronger one", () => {
+/**
+ * §7 (interest-intersection ranking), corrected per the checkpoint that
+ * introduced `totalIntersectionCount`: selected-interest overlap count is
+ * combined with `specificDimensionCount` into a single
+ * `totalIntersectionCount = specificDimensionCount + interestOverlapCount`
+ * measure, which ranks immediately after EligibilityStatus — ahead of
+ * personalization strength/region specificity. This means interest overlap
+ * and matched-dimension count are weighted EQUALLY (neither strictly
+ * dominates the other) rather than interest overlap unconditionally
+ * outranking dimension-derived strength as an earlier iteration of this
+ * comparator did. Only once the COMBINED total ties do personalization
+ * strength, then region specificity, then interest overlap again (as a
+ * secondary tie-break), then decide. See domain/benefit/recommend.ts's
+ * comparator docs.
+ */
+describe("interest overlap combines with dimension count via totalIntersectionCount", () => {
+  it("a stronger multi-dimension match with equal totalIntersectionCount outranks a single-dimension interest-only match", () => {
     // Distinct from the shared module-level `profile`: needs a resolvable
     // individualIncomeBand so the income rule below actually PASSES (an
     // unresolvable field would leave it out of passedLeaves entirely,
@@ -318,6 +582,14 @@ describe("interest overlap is a low-priority tie-breaker only", () => {
       incomeProfile,
       2
     );
+    // strong-no-interest-match: specificDimensionCount=2 (age+income),
+    // interestOverlapCount=0 -> totalIntersectionCount=2.
+    // weak-interest-match: specificDimensionCount=1 (age only),
+    // interestOverlapCount=1 (employment) -> totalIntersectionCount=2.
+    // The combined totals TIE, so the next tie-break (personalization
+    // strength) decides -- strong-no-interest-match's richer structured
+    // evidence (age+income both PASS) wins over weak-interest-match's
+    // single age-only rule.
     expect(result.map((b) => b.id)).toEqual(["strong-no-interest", "weak-interest-match"]);
   });
 

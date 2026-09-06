@@ -3,6 +3,7 @@ import type { EligibilityRule } from "@/types/benefit";
 import { matchStatusCompat, type StatusCompatSpec } from "@/lib/eligibility/statusCompat";
 import { getYouthCodeFamily } from "./table";
 import type { YouthDimensionClassification } from "./types";
+import { resolveYouthZipCd } from "./zipCdCrosswalk";
 
 /**
  * Youth Center (온통청년) codebook -> Damoa profile compatibility mapping.
@@ -328,31 +329,43 @@ export function buildEducationStatusRule(schoolCd: string | undefined): Eligibil
 }
 
 /**
- * §12 (corrected during the Phase 4-B pre-merge cleanup, §4): documented
- * (NOT implemented) next step for `zipCd`. Confirmed absent from the
- * official XLSX (see `provenance.ts`'s `ZIP_CD_PROVENANCE`) — the supplied
- * official 코드정보 sheet has NO `zipCd` family at all. Observed 5-digit
- * values are CONSISTENT WITH 시군구-level administrative-region codes (the
- * pattern used throughout Korean government open data, where the first 5
- * digits identify a 시군구/city-county-district), but the exact official
- * Youth Center code-system identity for `zipCd` has NOT been verified from
- * an authoritative Youth Center source — the earlier claim of a "confirmed"
- * 법정동코드 identity overstated an external, unofficial cross-reference. A
- * future crosswalk would still need to: (1) obtain and verify against an
- * authoritative Youth Center (or equivalently authoritative) region-code
- * reference table, (2) map each region code to the `{province, city}` text
- * pairs `region_in` already understands (`lib/eligibility/region.ts`), and
- * (3) build a `region_in` rule (not a new operator) from the parsed code
- * list using this module's same OR-composition pattern. Explicitly out of
- * scope for Phase 4-B — no frequency-based inference, no partial crosswalk,
- * per the task's instruction not to start this implementation in the same
- * run.
+ * §12, RESOLVED (checkpoint: Youth zipCd structured region eligibility).
+ * `zipCd` is still genuinely absent from the official 온통청년 코드정의서 XLSX
+ * (see `provenance.ts`'s `ZIP_CD_PROVENANCE` — that verdict is about that
+ * DIFFERENT source and remains true), but it is now resolved from an
+ * independently-authoritative source instead: the Korean government's own
+ * 법정동코드 전체자료 dataset, crosswalked in full in `zipCdCrosswalk.ts` (see
+ * that file's header and `YOUTH_ZIPCD_CROSSWALK_PROVENANCE` for the exact
+ * source file/hash and the 261-token classification). This function is the
+ * `region_in` counterpart of `buildMaritalStatusRule`/`buildEmploymentStatusRule`/
+ * `buildEducationStatusRule` above: parses `zipCd` as a comma-delimited OR
+ * list, resolves every token through the crosswalk (preserving subdivision
+ * specificity and historical Incheon identities rather than collapsing
+ * them), and — mirroring §3's "any unknown code leaves the whole dimension
+ * unresolved" rule — refuses to build a rule from a partial known-token
+ * subset if even one token is unrecognized, since `matchRegion`'s OR-list
+ * fail path can only be trusted once every branch has been accounted for.
  */
-export const ZIP_CD_NEXT_STEP =
-  "zipCd is a 5-digit Youth Center region code; observed values are " +
-  "consistent with 시군구-level administrative-region codes, but the exact " +
-  "official code-system identity has not yet been verified from an " +
-  "authoritative Youth Center source (see provenance.ts). Building a " +
-  "production rule requires a verified region-code -> Damoa region " +
-  "{province, city} crosswalk that does not exist in this codebase yet; " +
-  "deferred to a dedicated future checkpoint, not started in Phase 4-B.";
+export function buildYouthRegionRule(zipCd: string | undefined): {
+  rule?: EligibilityRule;
+  hasUnresolvedEligibility: boolean;
+} {
+  if (!zipCd || zipCd.trim() === "") return { hasUnresolvedEligibility: false };
+
+  const resolution = resolveYouthZipCd(zipCd);
+  if (!resolution.allResolved || resolution.specs.length === 0) {
+    return { hasUnresolvedEligibility: true };
+  }
+
+  return {
+    rule: {
+      id: "youth-region",
+      field: "residence",
+      operator: "region_in",
+      value: resolution.specs,
+      required: true,
+      evidence: { sourceField: "zipCd", sourceText: zipCd, extractionType: "structured_api" },
+    },
+    hasUnresolvedEligibility: false,
+  };
+}

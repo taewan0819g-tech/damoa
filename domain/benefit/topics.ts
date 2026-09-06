@@ -234,3 +234,25 @@ export function matchesUserInterest(benefit: Benefit, interests: Iterable<Benefi
   }
   return false;
 }
+
+/**
+ * Counts DISTINCT selected interests that match this benefit, via
+ * `matchesBenefitFacet` (category equality, `financialFacets`, or `topics`
+ * membership — same semantics `matchesUserInterest` uses, just not collapsed
+ * to a boolean). Ranking evidence only — never eligibility.
+ *
+ * Deduplicates the `interests` input itself (a caller-supplied duplicate
+ * selected interest never inflates the count), and each interest can only
+ * ever contribute 1 regardless of how many ways it matches the benefit (e.g.
+ * a benefit whose `category` equals "housing" AND whose `topics` also lists
+ * "housing" still counts "housing" once — `matchesBenefitFacet` is a single
+ * boolean check per interest, not a sum over its internal signals).
+ */
+export function countUserInterestOverlap(benefit: Benefit, interests: Iterable<BenefitCategory>): number {
+  const distinct = new Set(interests);
+  let count = 0;
+  for (const interest of distinct) {
+    if (matchesBenefitFacet(benefit, interest)) count += 1;
+  }
+  return count;
+}

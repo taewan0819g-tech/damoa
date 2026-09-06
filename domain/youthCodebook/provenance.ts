@@ -27,30 +27,28 @@ export const YOUTH_CODEBOOK_PROVENANCE: YouthCodebookProvenance = {
 
 /**
  * `zipCd` has NO entry in the official 코드정보 sheet (verified: 69/69 data
- * rows checked, no zipCd-named family in any of the workbook's 4 sheets).
- * Its raw 5-digit values are consistent with a public 법정동코드
- * (administrative-district code) reference table's 시군구-level pattern (e.g.
- * 11680=서울 강남구, 41135=경기 성남시 분당구, 26440=부산 강서구, 50110=제주시,
- * 36110=세종특별자치시 all match that pattern) — but this is an external,
- * unofficial cross-reference, NOT a verification against an authoritative
- * Youth Center source, so the exact official Youth Center code-system
- * identity for `zipCd` has NOT been established (corrected during the
- * Phase 4-B pre-merge cleanup, §4 — the earlier wording overstated this as
- * "confirmed"). Regardless of the exact code-system identity, Damoa's
- * profile stores province/city as free TEXT (`region_in`), not a numeric
- * code, so turning this into a rule requires a separate, verified
- * region-code -> Damoa-region-text crosswalk that does not exist in this
- * codebase yet. See `compatibility.ts`'s `ZIP_CD_NEXT_STEP` for the
- * documented (not implemented) next-step path.
+ * rows checked, no zipCd-named family in any of the workbook's 4 sheets) —
+ * this XLSX-absence fact remains true and is NOT contradicted by anything
+ * below. Its raw 5-digit values ARE, however, now RESOLVED against a
+ * DIFFERENT, independently-authoritative source: the Korean government's
+ * own 법정동코드 전체자료 dataset (checkpoint: Youth zipCd structured region
+ * eligibility). All 261 distinct zipCd tokens observed in the frozen
+ * 2,745-record Youth catalog snapshot were classified against that dataset
+ * with zero unmapped tokens, and a `region_in` rule is now built from it in
+ * production (`compatibility.ts`'s `buildYouthRegionRule`, wired into
+ * `YouthAdapter.ts`'s `buildEligibility()`). See
+ * `zipCdCrosswalk.ts`'s `YOUTH_ZIPCD_CROSSWALK_PROVENANCE` for the exact
+ * source filename/hash, row counts, and the full classification breakdown
+ * (plain leaf / subordinate-gu / parent-aggregate / historical).
  */
 export const ZIP_CD_PROVENANCE = {
   officialXlsxCoverage: false as const,
   note:
-    "zipCd is ABSENT from API코드정보.xlsx's 코드정보 sheet. It is a 5-digit " +
-    "Youth Center region code; observed values are consistent with " +
-    "시군구-level administrative-region codes, but the exact official " +
-    "code-system identity has not yet been verified from an authoritative " +
-    "Youth Center source. Treated as UNRESOLVED for production " +
-    "rule-building purposes (Phase 4-B, §12; terminology corrected in the " +
-    "Phase 4-B pre-merge cleanup, §4).",
+    "zipCd is ABSENT from API코드정보.xlsx's 코드정보 sheet (this remains " +
+    "true). It is a 5-digit region code now RESOLVED via a different, " +
+    "independently-authoritative source — the government's 법정동코드 " +
+    "전체자료 dataset — with zero unmapped tokens across all 261 observed " +
+    "values; see zipCdCrosswalk.ts's YOUTH_ZIPCD_CROSSWALK_PROVENANCE for " +
+    "the full provenance and compatibility.ts's buildYouthRegionRule for " +
+    "the production region_in rule now built from it.",
 };

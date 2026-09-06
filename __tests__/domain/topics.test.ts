@@ -3,6 +3,7 @@ import {
   TOPIC_PRIORITY,
   STARTUP_WORDS,
   TRANSPORT_WORDS,
+  countUserInterestOverlap,
   deriveFinancialFacets,
   finalizeTopics,
   hasAssetBuildingSignal,
@@ -139,6 +140,45 @@ describe("matchesUserInterest", () => {
     expect(matchesUserInterest(benefit, ["employment", "loan"])).toBe(true);
     expect(matchesUserInterest(benefit, ["employment", "childcare"])).toBe(false);
     expect(matchesUserInterest(benefit, [])).toBe(false);
+  });
+});
+
+// H2. countUserInterestOverlap: distinct selected-interest intersection count
+// (interest-intersection ranking feature) — counts DISTINCT selected
+// interests that match, via every matchesBenefitFacet channel, never double-
+// counting a duplicate representation of the same interest.
+describe("countUserInterestOverlap", () => {
+  it("counts each distinct matching selected interest once", () => {
+    const benefit = minimalBenefit({ category: "housing", topics: ["housing"], financialFacets: ["loan"] });
+    expect(countUserInterestOverlap(benefit, ["housing", "loan"])).toBe(2);
+    expect(countUserInterestOverlap(benefit, ["housing"])).toBe(1);
+    expect(countUserInterestOverlap(benefit, ["employment"])).toBe(0);
+  });
+
+  it("does not double-count a duplicate selected interest in the input", () => {
+    const benefit = minimalBenefit({ category: "housing" });
+    expect(countUserInterestOverlap(benefit, ["housing", "housing", "housing"])).toBe(1);
+  });
+
+  it("does not double-count when the SAME interest matches via multiple channels (category equality AND topics membership)", () => {
+    // "housing" matches both the direct category AND the topics list — still one interest.
+    const benefit = minimalBenefit({ category: "housing", topics: ["housing"] });
+    expect(countUserInterestOverlap(benefit, ["housing"])).toBe(1);
+  });
+
+  it("counts multiple distinct financial facets matched by a single benefit (housing loan matches both housing and loan)", () => {
+    const housingLoan = minimalBenefit({ category: "housing", topics: ["housing"], financialFacets: ["loan"] });
+    expect(countUserInterestOverlap(housingLoan, ["housing", "loan", "childcare"])).toBe(2);
+  });
+
+  it("counts every distinct matched dimension for a multi-topic benefit", () => {
+    const multiTopic = minimalBenefit({ category: "housing", topics: ["housing", "startup", "employment"] });
+    expect(countUserInterestOverlap(multiTopic, ["housing", "startup", "employment", "childcare"])).toBe(3);
+  });
+
+  it("returns 0 for an empty selected-interests input", () => {
+    const benefit = minimalBenefit({ category: "housing" });
+    expect(countUserInterestOverlap(benefit, [])).toBe(0);
   });
 });
 

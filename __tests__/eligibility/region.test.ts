@@ -357,3 +357,64 @@ describe("matchRegion — OR-union completion (Checkpoint: Final tiny Region OR-
     ).toBe("unknown");
   });
 });
+
+/**
+ * Checkpoint: Youth zipCd structured region eligibility (subdivision
+ * constraint-compatibility correction). A Damoa profile only ever knows a
+ * user down to the parent-city level for the 13 gu-bearing 일반시 (수원시,
+ * 성남시, ...) — never which subordinate gu. `RegionSpec.subdivision` must
+ * therefore never let a single-gu spec silently PASS a same-city user; only
+ * an OR-list whose subdivision specs, unioned, exhaust the parent city's
+ * full current-gu roster may PASS (see domain/region/subdivisionPartition.ts).
+ */
+describe("matchRegion — RegionSpec.subdivision (parent-city/subordinate-gu granularity)", () => {
+  it("D: a single subordinate-gu spec never PASSes a same-parent-city user — resolves unknown, not pass", () => {
+    const suwonResident = { province: "경기도", city: "수원시" };
+    const result = matchRegion(suwonResident, [{ province: "경기도", city: "수원시", subdivision: "장안구" }]);
+    expect(result).toBe("unknown");
+    expect(result).not.toBe("pass");
+  });
+
+  it("E: an OR-list covering every current gu of the parent city PASSes", () => {
+    const suwonResident = { province: "경기도", city: "수원시" };
+    const allGu = ["장안구", "권선구", "팔달구", "영통구"].map((subdivision) => ({
+      province: "경기도",
+      city: "수원시",
+      subdivision,
+    }));
+    expect(matchRegion(suwonResident, allGu)).toBe("pass");
+  });
+
+  it("F: an OR-list covering only a subset of the parent city's gu stays unknown", () => {
+    const suwonResident = { province: "경기도", city: "수원시" };
+    const partial = ["장안구", "권선구"].map((subdivision) => ({
+      province: "경기도",
+      city: "수원시",
+      subdivision,
+    }));
+    expect(matchRegion(suwonResident, partial)).toBe("unknown");
+  });
+
+  it("G: a subdivision-only OR-list for a DIFFERENT city fails outright for a non-matching user", () => {
+    const nonSuwonResident = { province: "경기도", city: "이천시" };
+    const suwonGu = [{ province: "경기도", city: "수원시", subdivision: "장안구" }];
+    expect(matchRegion(nonSuwonResident, suwonGu)).toBe("fail");
+  });
+
+  it("plain city-level spec still passes normally alongside subdivision specs in the same OR list", () => {
+    const suwonResident = { province: "경기도", city: "수원시" };
+    expect(
+      matchRegion(suwonResident, [
+        { province: "경기도", city: "수원시" },
+        { province: "경기도", city: "수원시", subdivision: "장안구" },
+      ])
+    ).toBe("pass");
+  });
+
+  it("a subdivision spec never applies fuzzy/cross-city matching — different parent city under the same province is disjoint", () => {
+    const seongnamResident = { province: "경기도", city: "성남시" };
+    expect(matchRegion(seongnamResident, [{ province: "경기도", city: "수원시", subdivision: "장안구" }])).toBe(
+      "fail"
+    );
+  });
+});

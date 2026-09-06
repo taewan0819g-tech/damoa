@@ -28,9 +28,10 @@ import {
 } from "../adapters/mois/MOISAdapter";
 import { normalizeYouthPolicy, type YouthRawPolicy } from "../adapters/youthCenter/YouthAdapter";
 import { matchBenefitsDetailed, isRelevantForFeed } from "../domain/eligibility/matchBenefits";
+import { evaluateEligibilityDetailed } from "../lib/eligibility/ruleEngine";
 import { getRecommendedBenefits } from "../domain/benefit/recommend";
 import { getUnknownBenefits } from "../domain/benefit/unknownBenefits";
-import { matchesUserInterest } from "../domain/benefit/topics";
+import { matchesUserInterest, countUserInterestOverlap } from "../domain/benefit/topics";
 import type { PersonalizationEvidence } from "../domain/benefit/personalization";
 import type { Benefit, EligibilityStatus } from "../types/benefit";
 import type { UserProfile } from "../types/profile";
@@ -219,12 +220,15 @@ async function main() {
     const recommendedUnknownCount = recommended.filter((b) => statusById.get(b.id) === "unknown").length;
 
     // Top-10 = the actual Home "recommended" bucket a beta user sees.
+    const selectedInterests = profile.interests ?? [];
     const top10Detail = recommended.map((b) => {
       const ev = evidenceById.get(b.id)!;
       return {
         id: b.id, title: b.title, source: b.source.type, status: statusById.get(b.id),
         strength: ev.strength, dimensions: ev.dimensions, regionSpecificity: ev.regionSpecificity,
-        interestMatch: matchesUserInterest(b, new Set(profile.interests ?? [])),
+        interestMatch: matchesUserInterest(b, new Set(selectedInterests)),
+        interestOverlapCount: countUserInterestOverlap(b, selectedInterests),
+        matchedInterests: selectedInterests.filter((i) => countUserInterestOverlap(b, [i]) === 1),
       };
     });
     const top10StrengthFreq = sortedFreq(freq(top10Detail.map((b) => b.strength)));
@@ -274,8 +278,21 @@ async function main() {
     const isYouth = (b: Benefit) => b.source.type === "youth_policy";
     const noRegionEvidence = (b: Benefit) => (evidenceById.get(b.id)?.regionSpecificity ?? "none") === "none";
 
+    // `regionSpecificity === "none"` is now (correctly, post nationwide-
+    // personalization fix) ALSO produced by a `region_in` leaf that was
+    // fully verified to PASS but whose OR-list is nationwide/province-wide
+    // in effect (see domain/region/regionScope.ts) -- that is NOT "no
+    // region evidence", it's "region evidence that happens to be broad".
+    // Re-check the underlying `passedLeaves` (audit-only re-evaluation,
+    // never done in the production hot path) to tell that case apart from
+    // a genuine absence of any verified region_in PASS -- only the latter
+    // is real "suspicious local" signal worth flagging for human review.
+    const hasVerifiedRegionPass = (b: Benefit) =>
+      evaluateEligibilityDetailed(b, profile).passedLeaves.some((l) => l.operator === "region_in");
+
     function suspiciousLocal(b: Benefit) {
       if (!isYouth(b) || !noRegionEvidence(b)) return null;
+      if (hasVerifiedRegionPass(b)) return null;
       const text = `${b.title} ${b.source.organization ?? ""} ${b.institution?.name ?? ""}`;
       const token = detectRegionToken(text, userCity);
       return token ? { id: b.id, title: b.title, org: b.source.organization, matchedToken: token } : null;
