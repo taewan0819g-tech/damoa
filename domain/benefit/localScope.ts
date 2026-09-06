@@ -4,6 +4,9 @@ import { PROVINCE_ALIASES, matchRegion, type RegionSpec } from "@/lib/eligibilit
 import { getGazetteer } from "@/lib/eligibility/regionGazetteer";
 import type { RegionSpecificity } from "./personalization";
 
+/** Structured admin-name suffix for provincial/metropolitan education offices — see the block below. */
+const EDUCATION_OFFICE_SUFFIX = "교육청";
+
 /**
  * Parses a benefit's PUBLISHING organization name (`source.organization`,
  * e.g. "경상남도", "경기도 평택시", "국토교통부") into a `RegionSpec` — exact-match
@@ -18,10 +21,39 @@ import type { RegionSpecificity } from "./personalization";
  * Returns `undefined` when the organization name carries no recognizable
  * province token at all (e.g. a central ministry like "국토교통부") — those
  * are treated as having no local-scope signal, never as a false conflict.
+ *
+ * One additional, deliberately narrow structured pattern is checked FIRST:
+ * "<canonical province name>교육청" with NO separator (e.g. "경기도교육청",
+ * "서울특별시교육청", "전북특별자치도교육청", "전남광주통합특별시교육청") — the
+ * exact 소관기관명 shape of every one of the 261 MOIS 소관기관유형="교육청"
+ * records (see `MOISAdapter.mapInstitutionType`'s audit note), which never
+ * contain a space and so are otherwise invisible to the whitespace-token
+ * check above. This match requires the ENTIRE remainder after stripping the
+ * "교육청" suffix to be an exact canonical province alias — never a substring
+ * or partial match — so it can only ever recognize the unambiguous
+ * "<province>교육청" shape and nothing else. It deliberately does NOT infer
+ * locality from a name merely ending in "교육청" for any other reason, and
+ * does NOT attempt city-level 교육지원청 names (none exist in the audited
+ * catalog; see Phase 3 of the eligibility-precision audit for the explicit
+ * decision to leave embedded-city-name parsing, e.g. "재단법인목포인재육성재단",
+ * unresolved rather than guessed).
+ *
+ * Verified NON-matches (collision regression coverage): "서울대학교병원",
+ * "인천국제공항공사", "강원랜드", "한국장학재단" — none carry a bare province
+ * token as their first whitespace-delimited token, and none end in the
+ * "교육청" suffix, so all four correctly remain unresolved (`undefined`)
+ * rather than being misread as locally scoped.
  */
 export function resolveOrganizationRegion(organization: string | undefined): RegionSpec | undefined {
   const trimmed = organization?.trim();
   if (!trimmed) return undefined;
+
+  if (trimmed.endsWith(EDUCATION_OFFICE_SUFFIX)) {
+    const provincePart = trimmed.slice(0, -EDUCATION_OFFICE_SUFFIX.length);
+    const province = PROVINCE_ALIASES[provincePart];
+    if (province) return { province };
+  }
+
   const spaceIdx = trimmed.indexOf(" ");
   const firstToken = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
   const province = PROVINCE_ALIASES[firstToken];
