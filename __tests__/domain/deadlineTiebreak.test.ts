@@ -59,6 +59,26 @@ describe("getRecommendedBenefits: date_unknown vs date_unknown ties fall through
     expect(result.map((b) => b.id)).toEqual(["has-date", "no-date"]);
   });
 
+  it("a TODAY (D-0) deadline still outranks a date_unknown candidate even when tied on every earlier key", () => {
+    // Regression coverage for the second deadline-comparator bug: before the
+    // resolveComparableDays fix, a "today" deadline fell into the same
+    // "unknown" bucket as no-date at all, so this ordering would incorrectly
+    // tie (and fall through to the id tiebreak, which happens to sort
+    // "no-date" first here — the wrong, buggy order this test guards against).
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const noDate = makeBenefit({ id: "no-date", source: { type: "youth_policy", organization: "o" } });
+    const dueToday = makeBenefit({
+      id: "due-today",
+      source: { type: "youth_policy", organization: "o" },
+      application: { startDate: "2020-01-01", endDate: todayIso },
+    });
+    const benefits = [noDate, dueToday];
+    const statusById = new Map<string, EligibilityStatus>(benefits.map((b) => [b.id, "unknown"]));
+
+    const result = getRecommendedBenefits(benefits, statusById, profile, benefits.length);
+    expect(result.map((b) => b.id)).toEqual(["due-today", "no-date"]);
+  });
+
   it("never throws/produces undefined ordering (no NaN leaking into .sort) across many date_unknown ties", () => {
     const many = Array.from({ length: 12 }, (_, i) =>
       makeBenefit({ id: `youth-${String(i).padStart(2, "0")}`, source: { type: "youth_policy", organization: "o" } })

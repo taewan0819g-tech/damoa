@@ -41,6 +41,58 @@ describe("compareDeadlineProximity", () => {
     expect(compareDeadlineProximity("2026-09-10", "2020-01-01", REF)).toBeLessThan(0);
   });
 
+  /**
+   * Regression coverage for the SECOND deadline-comparator bug (found via
+   * independent PR review after the NaN fix above landed): the first fix
+   * only ever treated `kind === "upcoming"` as a comparable deadline, so a
+   * benefit due TODAY (`kind: "today"`, D-0) silently fell into the same
+   * "unknown" bucket as a missing/malformed/closed date instead of ranking
+   * strictly ahead of it. `resolveComparableDays` now maps `"today"` -> `0`,
+   * distinct from `undefined`, fixing exactly this.
+   */
+  describe("today (D-0) handling", () => {
+    it("today vs D-1 (upcoming): today sorts first", () => {
+      const today = "2026-09-06"; // D-0 relative to REF
+      const dPlus1 = "2026-09-07"; // D-1
+      expect(compareDeadlineProximity(today, dPlus1, REF)).toBeLessThan(0);
+      expect(compareDeadlineProximity(dPlus1, today, REF)).toBeGreaterThan(0);
+    });
+
+    it("today vs missing (undefined): today sorts first", () => {
+      const today = "2026-09-06";
+      expect(compareDeadlineProximity(today, undefined, REF)).toBeLessThan(0);
+      expect(compareDeadlineProximity(undefined, today, REF)).toBeGreaterThan(0);
+    });
+
+    it("today vs today: ties at exactly 0", () => {
+      const today = "2026-09-06";
+      const result = compareDeadlineProximity(today, today, REF);
+      expect(result).toBe(0);
+      expect(Number.isNaN(result)).toBe(false);
+    });
+  });
+
+  it("D-1 (upcoming) vs missing (undefined): the upcoming one sorts first", () => {
+    const dPlus1 = "2026-09-07"; // D-1
+    expect(compareDeadlineProximity(dPlus1, undefined, REF)).toBeLessThan(0);
+    expect(compareDeadlineProximity(undefined, dPlus1, REF)).toBeGreaterThan(0);
+  });
+
+  it("missing vs missing (both undefined): ties at exactly 0", () => {
+    const result = compareDeadlineProximity(undefined, undefined, REF);
+    expect(result).toBe(0);
+    expect(Number.isNaN(result)).toBe(false);
+  });
+
+  it("malformed vs missing: ties at exactly 0, never NaN", () => {
+    const resultA = compareDeadlineProximity("not-a-date", undefined, REF);
+    const resultB = compareDeadlineProximity(undefined, "not-a-date", REF);
+    expect(resultA).toBe(0);
+    expect(resultB).toBe(0);
+    expect(Number.isNaN(resultA)).toBe(false);
+    expect(Number.isNaN(resultB)).toBe(false);
+  });
+
   it("unknown vs unknown (both undefined): ties at exactly 0, never NaN", () => {
     const result = compareDeadlineProximity(undefined, undefined, REF);
     expect(result).toBe(0);
@@ -62,7 +114,10 @@ describe("compareDeadlineProximity", () => {
   });
 
   it("never returns NaN for any finite/unknown combination", () => {
-    const candidates = [undefined, "not-a-date", "2020-01-01", "2026-09-06", "2026-12-31"];
+    // Includes "2026-09-06" (today relative to REF, kind "today") and
+    // "2026-09-07" (D-1, kind "upcoming") alongside closed/malformed/missing
+    // dates, so this sweep exercises every DDayInfo kind pairwise.
+    const candidates = [undefined, "not-a-date", "2020-01-01", "2026-09-06", "2026-09-07", "2026-12-31"];
     for (const a of candidates) {
       for (const b of candidates) {
         expect(Number.isNaN(compareDeadlineProximity(a, b, REF))).toBe(false);
