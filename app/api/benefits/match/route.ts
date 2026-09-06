@@ -291,6 +291,7 @@ export async function POST(request: Request) {
       const needsReview = getUnknownBenefits(relevant, statusById, profile, HOME_PREVIEW_LIMIT, {
         excludeIds,
         evidenceById,
+        excludeLocalScopeConflicts: true,
       });
       const previewStatuses: Record<string, EligibilityStatus> = {};
       for (const b of [...recommended, ...needsReview]) previewStatuses[b.id] = statusById.get(b.id) ?? "unknown";

@@ -1,6 +1,6 @@
 import type { Benefit, EligibilityStatus } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
-import { getDDayInfo } from "@/lib/dates/dday";
+import { compareDeadlineProximity } from "@/lib/dates/dday";
 import { countUserInterestOverlap } from "./topics";
 import {
   resolvePersonalizationEvidence,
@@ -131,11 +131,7 @@ export function getRecommendedBenefits(
       const interestDiff = b.interestOverlapCount - a.interestOverlapCount;
       if (interestDiff !== 0) return interestDiff;
 
-      const aDday = getDDayInfo(a.benefit.application?.endDate);
-      const bDday = getDDayInfo(b.benefit.application?.endDate);
-      const aDays = aDday?.kind === "upcoming" ? aDday.days : Infinity;
-      const bDays = bDday?.kind === "upcoming" ? bDday.days : Infinity;
-      const ddayDiff = aDays - bDays;
+      const ddayDiff = compareDeadlineProximity(a.benefit.application?.endDate, b.benefit.application?.endDate);
       if (ddayDiff !== 0) return ddayDiff;
 
       return a.benefit.id.localeCompare(b.benefit.id);
