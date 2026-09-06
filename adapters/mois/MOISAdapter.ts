@@ -204,6 +204,16 @@ function mapBenefitType(지원유형?: string): BenefitType {
  * classification stays tied to the controlled-vocabulary field regardless).
  * "공공기관" and "중앙행정기관" are deliberately left mapped to "government" —
  * neither is a provincial/city government body.
+ *
+ * The "교육청" check below is deliberately EXACT equality, not `.includes()`
+ * like the legacy checks above it — the frozen-catalog audit only ever
+ * observed the bare raw value "교육청" (never e.g. a compound value like
+ * "교육청 산하기관"), so exact equality is both sufficient and strictly safer:
+ * it can never accidentally sweep in some future/unaudited raw
+ * 소관기관유형 value that merely contains "교육청" as a substring without
+ * actually being this exact controlled-vocabulary category. The legacy
+ * `.includes()` checks for 광역시도/시군구/지자체/지방 are untouched by this
+ * PR and keep their existing (broader, already-shipped) behavior.
  */
 function mapInstitutionType(소관기관유형?: string): InstitutionType {
   if (!소관기관유형) return "government";
@@ -212,7 +222,7 @@ function mapInstitutionType(소관기관유형?: string): InstitutionType {
     소관기관유형.includes("시군구") ||
     소관기관유형.includes("지자체") ||
     소관기관유형.includes("지방") ||
-    소관기관유형.includes("교육청")
+    소관기관유형 === "교육청"
   ) {
     return "local_government";
   }

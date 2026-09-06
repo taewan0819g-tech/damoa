@@ -8,6 +8,49 @@ import type { RegionSpecificity } from "./personalization";
 const EDUCATION_OFFICE_SUFFIX = "교육청";
 
 /**
+ * The FULL canonical (or historically-full, pre-rename) province/metro
+ * administrative names that the "<province>교육청" pattern below is allowed
+ * to match against — deliberately a hand-picked subset of
+ * `PROVINCE_ALIASES`' keys, NOT every key in that table. `PROVINCE_ALIASES`
+ * also contains short abbreviated surface forms (e.g. "경기" -> "경기도",
+ * "서울" -> "서울특별시", "전북" -> "전북특별자치도") that exist for normalizing
+ * free-text province mentions elsewhere in the app, but the frozen-catalog
+ * audit backing this pattern only ever observed FULL official names in real
+ * 소관기관명 values (e.g. "경기도교육청", never "경기교육청") — so the education
+ * -office pattern must reject the abbreviated forms even though
+ * `PROVINCE_ALIASES` itself could normalize them. Historically-full official
+ * names that predate a special-autonomous-province rename (e.g. "강원도",
+ * "제주도", "전라북도" before their 강원특별자치도/제주특별자치도/전북특별자치도
+ * renames) are intentionally kept here — they're full names, not
+ * abbreviations, even though they're no longer the current canonical form —
+ * consistent with the historical-transition recognition
+ * `lib/eligibility/region.ts` already applies elsewhere.
+ */
+const FULL_PROVINCE_NAMES = new Set<string>([
+  "서울특별시",
+  "부산광역시",
+  "대구광역시",
+  "인천광역시",
+  "광주광역시",
+  "대전광역시",
+  "울산광역시",
+  "세종특별자치시",
+  "경기도",
+  "강원도",
+  "강원특별자치도",
+  "충청북도",
+  "충청남도",
+  "전라북도",
+  "전북특별자치도",
+  "전라남도",
+  "경상북도",
+  "경상남도",
+  "제주도",
+  "제주특별자치도",
+  "전남광주통합특별시",
+]);
+
+/**
  * Parses a benefit's PUBLISHING organization name (`source.organization`,
  * e.g. "경상남도", "경기도 평택시", "국토교통부") into a `RegionSpec` — exact-match
  * only, same philosophy as `lib/eligibility/region.ts`: never guesses, only
@@ -23,20 +66,27 @@ const EDUCATION_OFFICE_SUFFIX = "교육청";
  * are treated as having no local-scope signal, never as a false conflict.
  *
  * One additional, deliberately narrow structured pattern is checked FIRST:
- * "<canonical province name>교육청" with NO separator (e.g. "경기도교육청",
+ * "<FULL province name>교육청" with NO separator (e.g. "경기도교육청",
  * "서울특별시교육청", "전북특별자치도교육청", "전남광주통합특별시교육청") — the
  * exact 소관기관명 shape of every one of the 261 MOIS 소관기관유형="교육청"
  * records (see `MOISAdapter.mapInstitutionType`'s audit note), which never
  * contain a space and so are otherwise invisible to the whitespace-token
  * check above. This match requires the ENTIRE remainder after stripping the
- * "교육청" suffix to be an exact canonical province alias — never a substring
- * or partial match — so it can only ever recognize the unambiguous
- * "<province>교육청" shape and nothing else. It deliberately does NOT infer
- * locality from a name merely ending in "교육청" for any other reason, and
- * does NOT attempt city-level 교육지원청 names (none exist in the audited
- * catalog; see Phase 3 of the eligibility-precision audit for the explicit
- * decision to leave embedded-city-name parsing, e.g. "재단법인목포인재육성재단",
- * unresolved rather than guessed).
+ * "교육청" suffix to be an exact match against `FULL_PROVINCE_NAMES` — a
+ * deliberately narrower set than `PROVINCE_ALIASES`' full key list, since
+ * that table also contains short abbreviated forms ("경기", "서울", "전북",
+ * etc.) that the frozen-catalog audit never observed in a real 소관기관명
+ * (every one of the 16 audited names uses the full official — or
+ * historically-full pre-rename — province name, never an abbreviation). So
+ * "경기도교육청"/"서울특별시교육청"/"전북특별자치도교육청" resolve, but
+ * "경기교육청"/"서울교육청"/"전북교육청" deliberately do NOT — never a
+ * substring or partial match, and never resolved merely because
+ * `PROVINCE_ALIASES` itself could normalize the abbreviation. It deliberately
+ * does NOT infer locality from a name merely ending in "교육청" for any other
+ * reason, and does NOT attempt city-level 교육지원청 names (none exist in the
+ * audited catalog; see Phase 3 of the eligibility-precision audit for the
+ * explicit decision to leave embedded-city-name parsing, e.g.
+ * "재단법인목포인재육성재단", unresolved rather than guessed).
  *
  * Verified NON-matches (collision regression coverage): "서울대학교병원",
  * "인천국제공항공사", "강원랜드", "한국장학재단" — none carry a bare province
@@ -50,8 +100,10 @@ export function resolveOrganizationRegion(organization: string | undefined): Reg
 
   if (trimmed.endsWith(EDUCATION_OFFICE_SUFFIX)) {
     const provincePart = trimmed.slice(0, -EDUCATION_OFFICE_SUFFIX.length);
-    const province = PROVINCE_ALIASES[provincePart];
-    if (province) return { province };
+    if (FULL_PROVINCE_NAMES.has(provincePart)) {
+      const province = PROVINCE_ALIASES[provincePart];
+      if (province) return { province };
+    }
   }
 
   const spaceIdx = trimmed.indexOf(" ");

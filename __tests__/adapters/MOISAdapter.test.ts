@@ -308,6 +308,13 @@ describe("normalizeMOISServiceListItem institution.type (소관기관유형 mapp
     expect(benefit.institution).toEqual({ name: "경기도교육청", type: "local_government" });
   });
 
+  it("does NOT map a compound value merely containing 교육청 (e.g. '교육청 산하기관') to local_government", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 소관기관명: "교육청 산하기관", 소관기관유형: "교육청 산하기관" })
+    );
+    expect(benefit.institution).toEqual({ name: "교육청 산하기관", type: "government" });
+  });
+
   it("keeps 중앙행정기관 mapped to government (unchanged)", () => {
     const benefit = normalizeMOISServiceListItem(rawListItem({ 소관기관명: "교육부", 소관기관유형: "중앙행정기관" }));
     expect(benefit.institution).toEqual({ name: "교육부", type: "government" });

@@ -133,6 +133,22 @@ describe("hasUnresolvedLocalScopeConflict — resolveOrganizationRegion", () => 
         expect(resolveOrganizationRegion(name)?.city).toBeUndefined();
       }
     });
+
+    /**
+     * Tightening regression (reviewer-requested): the structured pattern must
+     * require a FULL canonical province name, not merely any key
+     * `PROVINCE_ALIASES` happens to normalize. "경기"/"서울"/"전북" are
+     * abbreviated aliases in that table — the frozen-catalog audit never
+     * observed them as a real 소관기관명 prefix (always the full official
+     * name), so the structured "<province>교육청" rule must not resolve
+     * these, even though `PROVINCE_ALIASES` itself could normalize them.
+     */
+    it.each(["경기교육청", "서울교육청", "전북교육청"])(
+      "does NOT resolve %s via the structured rule (abbreviated province alias, not a full name)",
+      (name) => {
+        expect(resolveOrganizationRegion(name)).toBeUndefined();
+      }
+    );
   });
 
   /**
