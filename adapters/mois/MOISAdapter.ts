@@ -179,20 +179,51 @@ function mapBenefitType(지원유형?: string): BenefitType {
 }
 
 /**
- * Live MOIS 소관기관유형 values are "중앙행정기관" (central government),
- * "광역시도" (province/metropolitan-city government), and "시군구"
- * (city/county/district government) — NOT "지자체"/"지방", which this
- * function used to check for and which never actually appear in the live
- * API, silently classifying every real local-government record as
- * "government". The Home local-scope-conflict gate (see
+ * Live MOIS 소관기관유형 values observed in the full frozen catalog (10,967
+ * records): "시군구" (6,517), "광역시도" (1,390), "중앙행정기관" (1,052),
+ * "공공기관" (603), "지방출자_출연기관" (583, already caught by the "지방"
+ * substring check below), "지방공기업" (561, ditto), and "교육청" (261) — NOT
+ * "지자체", which this function also checks for defensively even though it
+ * never appears in the live API. The Home local-scope-conflict gate (see
  * domain/benefit/localScope.ts) requires `institution.type ===
  * "local_government"` as one of two independent signals before ever
  * demoting a benefit, so this needs to be accurate for that gate to fire on
  * real MOIS local-government records at all.
+ *
+ * "교육청" (education office) is a provincial/metropolitan-level local
+ * administrative body, not a central-government agency — every one of the
+ * 261 raw 소관기관유형="교육청" records in the frozen catalog has 소관기관명
+ * exactly "<canonical province/metro name>교육청" (e.g. "경기도교육청",
+ * "전북특별자치도교육청", "전남광주통합특별시교육청"; audited across all 16
+ * distinct organization names, zero exceptions), confirming this raw type
+ * value always denotes a provincial education office in this dataset.
+ * Mapped to "local_government" here using the STRUCTURED 소관기관유형 field
+ * only — never inferred from an organization NAME merely ending in "교육청"
+ * (that would misclassify e.g. a private academy or association whose name
+ * happens to end that way; no such case exists in this dataset, but the
+ * classification stays tied to the controlled-vocabulary field regardless).
+ * "공공기관" and "중앙행정기관" are deliberately left mapped to "government" —
+ * neither is a provincial/city government body.
+ *
+ * The "교육청" check below is deliberately EXACT equality, not `.includes()`
+ * like the legacy checks above it — the frozen-catalog audit only ever
+ * observed the bare raw value "교육청" (never e.g. a compound value like
+ * "교육청 산하기관"), so exact equality is both sufficient and strictly safer:
+ * it can never accidentally sweep in some future/unaudited raw
+ * 소관기관유형 value that merely contains "교육청" as a substring without
+ * actually being this exact controlled-vocabulary category. The legacy
+ * `.includes()` checks for 광역시도/시군구/지자체/지방 are untouched by this
+ * PR and keep their existing (broader, already-shipped) behavior.
  */
 function mapInstitutionType(소관기관유형?: string): InstitutionType {
   if (!소관기관유형) return "government";
-  if (소관기관유형.includes("광역시도") || 소관기관유형.includes("시군구") || 소관기관유형.includes("지자체") || 소관기관유형.includes("지방")) {
+  if (
+    소관기관유형.includes("광역시도") ||
+    소관기관유형.includes("시군구") ||
+    소관기관유형.includes("지자체") ||
+    소관기관유형.includes("지방") ||
+    소관기관유형 === "교육청"
+  ) {
     return "local_government";
   }
   return "government";

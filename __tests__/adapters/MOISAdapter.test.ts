@@ -285,3 +285,56 @@ describe("MOISAdapter — 임대 housing/non-residential-lease homonym fix", () 
     expect(benefit.topics).toContain("housing");
   });
 });
+
+/**
+ * Regression coverage for the eligibility-precision-pass Phase 1 fix:
+ * 소관기관유형 "교육청" (261 of 10,967 frozen-catalog records) previously fell
+ * through to the "government" default, so the Home local-scope-conflict gate
+ * (domain/benefit/localScope.ts) could never recognize a provincial
+ * education office as locally scoped. See MOISAdapter's mapInstitutionType
+ * doc comment for the full audit (every one of the 16 distinct 교육청
+ * organization names is exactly "<canonical province name>교육청").
+ */
+describe("normalizeMOISServiceListItem institution.type (소관기관유형 mapping)", () => {
+  it("maps 전북특별자치도교육청 (소관기관유형: 교육청) to local_government", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 소관기관명: "전북특별자치도교육청", 소관기관유형: "교육청" })
+    );
+    expect(benefit.institution).toEqual({ name: "전북특별자치도교육청", type: "local_government" });
+  });
+
+  it("maps 경기도교육청 (소관기관유형: 교육청) to local_government", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 소관기관명: "경기도교육청", 소관기관유형: "교육청" }));
+    expect(benefit.institution).toEqual({ name: "경기도교육청", type: "local_government" });
+  });
+
+  it("does NOT map a compound value merely containing 교육청 (e.g. '교육청 산하기관') to local_government", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 소관기관명: "교육청 산하기관", 소관기관유형: "교육청 산하기관" })
+    );
+    expect(benefit.institution).toEqual({ name: "교육청 산하기관", type: "government" });
+  });
+
+  it("keeps 중앙행정기관 mapped to government (unchanged)", () => {
+    const benefit = normalizeMOISServiceListItem(rawListItem({ 소관기관명: "교육부", 소관기관유형: "중앙행정기관" }));
+    expect(benefit.institution).toEqual({ name: "교육부", type: "government" });
+  });
+
+  it("keeps 공공기관 mapped to government (unchanged)", () => {
+    const benefit = normalizeMOISServiceListItem(
+      rawListItem({ 소관기관명: "한국장학재단", 소관기관유형: "공공기관" })
+    );
+    expect(benefit.institution).toEqual({ name: "한국장학재단", type: "government" });
+  });
+
+  it("still maps 시군구/광역시도 to local_government (unchanged)", () => {
+    const cityBenefit = normalizeMOISServiceListItem(
+      rawListItem({ 소관기관명: "이천시", 소관기관유형: "시군구" })
+    );
+    const provinceBenefit = normalizeMOISServiceListItem(
+      rawListItem({ 소관기관명: "경기도", 소관기관유형: "광역시도" })
+    );
+    expect(cityBenefit.institution?.type).toBe("local_government");
+    expect(provinceBenefit.institution?.type).toBe("local_government");
+  });
+});

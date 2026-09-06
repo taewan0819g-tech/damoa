@@ -87,6 +87,84 @@ describe("hasUnresolvedLocalScopeConflict — resolveOrganizationRegion", () => 
   it("returns undefined for a central-ministry name with no province token", () => {
     expect(resolveOrganizationRegion("국토교통부")).toBeUndefined();
   });
+
+  /**
+   * Regression coverage for the eligibility-precision-pass Phase 2 fix:
+   * "<canonical province name>교육청" (no separator) is the exact 소관기관명
+   * shape of every one of the 261 MOIS 소관기관유형="교육청" records (audited
+   * across all 16 distinct organization names in the frozen catalog, zero
+   * exceptions) — previously invisible to the whitespace-token check since
+   * these names never contain a space.
+   */
+  describe("structured '<province>교육청' pattern", () => {
+    it("resolves 경기도교육청 to the 경기도 province", () => {
+      expect(resolveOrganizationRegion("경기도교육청")).toEqual({ province: "경기도" });
+    });
+
+    it("resolves 서울특별시교육청 to the 서울특별시 province", () => {
+      expect(resolveOrganizationRegion("서울특별시교육청")).toEqual({ province: "서울특별시" });
+    });
+
+    it("resolves 전북특별자치도교육청 to the 전북특별자치도 province", () => {
+      expect(resolveOrganizationRegion("전북특별자치도교육청")).toEqual({ province: "전북특별자치도" });
+    });
+
+    it("resolves every one of the 16 distinct audited MOIS 교육청 organization names", () => {
+      const auditedNames = [
+        "강원특별자치도교육청",
+        "경기도교육청",
+        "경상남도교육청",
+        "경상북도교육청",
+        "대구광역시교육청",
+        "대전광역시교육청",
+        "부산광역시교육청",
+        "서울특별시교육청",
+        "세종특별자치시교육청",
+        "울산광역시교육청",
+        "인천광역시교육청",
+        "전남광주통합특별시교육청",
+        "전북특별자치도교육청",
+        "제주특별자치도교육청",
+        "충청남도교육청",
+        "충청북도교육청",
+      ];
+      for (const name of auditedNames) {
+        expect(resolveOrganizationRegion(name)).toBeDefined();
+        expect(resolveOrganizationRegion(name)?.city).toBeUndefined();
+      }
+    });
+
+    /**
+     * Tightening regression (reviewer-requested): the structured pattern must
+     * require a FULL canonical province name, not merely any key
+     * `PROVINCE_ALIASES` happens to normalize. "경기"/"서울"/"전북" are
+     * abbreviated aliases in that table — the frozen-catalog audit never
+     * observed them as a real 소관기관명 prefix (always the full official
+     * name), so the structured "<province>교육청" rule must not resolve
+     * these, even though `PROVINCE_ALIASES` itself could normalize them.
+     */
+    it.each(["경기교육청", "서울교육청", "전북교육청"])(
+      "does NOT resolve %s via the structured rule (abbreviated province alias, not a full name)",
+      (name) => {
+        expect(resolveOrganizationRegion(name)).toBeUndefined();
+      }
+    );
+  });
+
+  /**
+   * Collision regression coverage (Phase 2, explicitly required): these
+   * institution names must remain unresolved — none carries a bare province
+   * token as its first whitespace-delimited token, and none ends in the
+   * "교육청" suffix, so the new structured pattern must never fire on them.
+   */
+  describe("collision regressions — must remain unresolved", () => {
+    it.each(["서울대학교병원", "인천국제공항공사", "강원랜드", "한국장학재단"])(
+      "does not resolve a region for %s",
+      (name) => {
+        expect(resolveOrganizationRegion(name)).toBeUndefined();
+      }
+    );
+  });
 });
 
 describe("Home precision gate — getRecommendedBenefits(excludeWeakUnknown: true)", () => {
