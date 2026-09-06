@@ -2,6 +2,7 @@ import type { Benefit, RuleOperator } from "@/types/benefit";
 import type { UserProfile } from "@/types/profile";
 import { normalizeProvince, type RegionSpec } from "@/lib/eligibility/region";
 import { evaluateEligibilityDetailed } from "@/lib/eligibility/ruleEngine";
+import { isNationwideRegionSpec, isProvinceWideRegionSpec } from "@/domain/region/regionScope";
 
 /**
  * Ranking-only personalization dimensions. Distinct from eligibility: these
@@ -70,8 +71,34 @@ function dimensionFor(field: string, operator: RuleOperator): PersonalizationDim
 
 /**
  * For a PASSED `region_in` leaf, classifies whether the match came from a
- * spec naming the user's exact city or one that allows the whole province —
+ * spec naming the user's exact city, one that allows the whole province, or
+ * one that (as an OR-union) is effectively nationwide/unrestricted —
  * ranking-only, mirrors (but never modifies) matchRegion()'s own pass logic.
+ *
+ * Checkpoint: Youth zipCd nationwide-personalization correction. A Youth
+ * Center policy's `zipCd` OR-list can legitimately enumerate every current
+ * city in the country (a nationwide program expressed as an explicit list
+ * rather than "no region rule at all") — see `domain/region/regionScope.ts`.
+ * Naively checking "does any spec in the OR-list name the user's city" would
+ * wrongly call that "exact_city" personalization evidence merely because
+ * the user's city happens to be one of the (every) cities listed. This
+ * function asks the SEMANTIC breadth question first:
+ *
+ *   1. The OR-list, unioned, provably covers every current Damoa-selectable
+ *      province/city -> "none" (not personalization evidence at all,
+ *      regardless of which cities happen to be named).
+ *   2. The OR-list provably covers the user's WHOLE current province (via an
+ *      explicit province-only spec, or via enumerating every city/gu in it)
+ *      -> "province", even if achieved by literally naming the user's city
+ *      among many others rather than a single province-level spec.
+ *   3. Otherwise, a spec directly names the user's exact city (or a
+ *      subdivision-union/historical-transition completion covers them) ->
+ *      "exact_city" -- a genuinely narrower, profile-specific match.
+ *   4. No spec relates to the user's province at all (can only happen via
+ *      the 전남광주통합특별시 cross-province merger completion, since every
+ *      other PASS path requires a same-province spec) -> "province", same
+ *      fallback as before this checkpoint -- preserves historical/transition
+ *      ranking behavior unchanged.
  */
 function regionSpecificityForLeaf(
   leaf: { operator: RuleOperator; value: unknown },
@@ -80,10 +107,16 @@ function regionSpecificityForLeaf(
   if (leaf.operator !== "region_in" || !Array.isArray(leaf.value)) return null;
   const province = normalizeProvince(profile.residence?.province);
   if (!province) return null;
+  const specs = leaf.value as RegionSpec[];
+
+  if (isNationwideRegionSpec(specs)) return "none";
+
   const city = profile.residence?.city?.trim();
-  for (const spec of leaf.value as RegionSpec[]) {
+  for (const spec of specs) {
     if (normalizeProvince(spec.province) !== province) continue;
-    if (spec.city && city && spec.city.trim() === city) return "exact_city";
+    if (spec.city && city && spec.city.trim() === city) {
+      return isProvinceWideRegionSpec(specs, province) ? "province" : "exact_city";
+    }
   }
   return "province";
 }
@@ -101,6 +134,16 @@ function regionSpecificityForLeaf(
  * User interest overlap is never consulted here, so it can never promote a
  * WEAK match into MODERATE/STRONG (see recommend.ts's comparator, which
  * only uses interest overlap as a low-priority tie-breaker after strength).
+ *
+ * A PASSED `region_in` leaf contributes the "region" dimension ONLY when
+ * `regionSpecificityForLeaf` resolves it to `"exact_city"` or `"province"` —
+ * a nationwide/unrestricted OR-list (`"none"`) is real eligibility evidence
+ * (the leaf really did PASS) but NOT specific personalization evidence, so
+ * it must never inflate `specificDimensionCount`/`strength` (see
+ * `regionSpecificityForLeaf`'s doc comment for why "the user's city is one
+ * of 200+ listed cities" isn't meaningfully profile-specific). Every other
+ * dimension is unaffected and still counts unconditionally, exactly as
+ * before.
  */
 export function derivePersonalizationEvidence(
   passedLeaves: { field: string; operator: RuleOperator; value: unknown }[],
@@ -110,10 +153,13 @@ export function derivePersonalizationEvidence(
   let regionSpecificity: RegionSpecificity = "none";
 
   for (const leaf of passedLeaves) {
-    dimensionSet.add(dimensionFor(leaf.field, leaf.operator));
+    const dimension = dimensionFor(leaf.field, leaf.operator);
     const spec = regionSpecificityForLeaf(leaf, profile);
     if (spec === "exact_city") regionSpecificity = "exact_city";
     else if (spec === "province" && regionSpecificity !== "exact_city") regionSpecificity = "province";
+
+    const isNonSpecificRegion = dimension === "region" && spec !== "exact_city" && spec !== "province";
+    if (!isNonSpecificRegion) dimensionSet.add(dimension);
   }
 
   const dimensions = [...dimensionSet];
