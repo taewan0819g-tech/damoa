@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T03:06:29.116Z",
+  "generatedAt": "2026-09-06T03:16:59.309Z",
   "frozenInputs": [
     {
       "label": "MOIS service list",
@@ -267,7 +267,7 @@
         "relevantYouthCount": 246,
         "top10YouthCount": 8,
         "top20YouthCount": 14,
-        "relevantSuspiciousLocalCount": 2,
+        "relevantSuspiciousLocalCount": 0,
         "top10SuspiciousLocalCount": 0,
         "top20SuspiciousLocalCount": 0,
         "top20SuspiciousSamples": []
@@ -970,7 +970,7 @@
         "relevantYouthCount": 247,
         "top10YouthCount": 0,
         "top20YouthCount": 0,
-        "relevantSuspiciousLocalCount": 2,
+        "relevantSuspiciousLocalCount": 0,
         "top10SuspiciousLocalCount": 0,
         "top20SuspiciousLocalCount": 0,
         "top20SuspiciousSamples": []
