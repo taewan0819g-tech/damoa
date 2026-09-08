@@ -1021,18 +1021,120 @@ describe("extractEligibilityFromText", () => {
       }
     );
 
-    it("narrows combined school-level phrasing (중고등학교, 초·중·고등학교) to high_school only", () => {
+    // -----------------------------------------------------------------
+    // PR #7 follow-up: multi-school-level clauses must NOT be narrowed to
+    // high_school-only. "중고등학교 학생" / "중·고등학교 재학생" /
+    // "초·중·고등학교 재학생" / "초,중,고등학교 학생" name an ADDITIONAL school
+    // level (elementary/middle/special-education) that `educationStatus` has
+    // no value for -- collapsing them to high_school would be a NARROWER
+    // rule than the source states, wrongly excluding a real, eligible
+    // middle-school/elementary-school profile. These must fall through to
+    // existing/unresolved behavior instead (never add
+    // middle_school/elementary_school to UserProfile to "solve" this).
+    // -----------------------------------------------------------------
+    it("does NOT narrow combined school-level phrasing (중고등학교, 초중고교) to high_school only", () => {
       const middleHigh = extractEligibilityFromText("지원대상", "관내 소재 중고등학교 학생 및 관내 거주 학생");
-      expect(middleHigh.rules[0]).toEqual(
-        expect.objectContaining({ field: "educationStatus", operator: "eq", value: "high_school" })
-      );
+      const middleHighRule = middleHigh.rules.find((r) => r.field === "educationStatus");
+      expect(middleHighRule?.id).not.toBe("text-education-high");
 
+      const elemMiddleHigh = extractEligibilityFromText("지원대상", "관내 소재 초중고교 학생 및 관내 거주 학생");
+      const elemMiddleHighRule = elemMiddleHigh.rules.find((r) => r.field === "educationStatus");
+      expect(elemMiddleHighRule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow 초·중·고등학교 재학생 (mois-O00069200001-style, all levels via middle dots) to high_school only", () => {
       const allLevels = extractEligibilityFromText(
         "지원대상",
         "초·중·고등학교 재학생으로서 공고일 현재 그 보호자와 함께 성주군에 주소를 두고 거주하는 학생 중 성적순 선발"
       );
-      expect(allLevels.rules.find((r) => r.field === "educationStatus")).toEqual(
-        expect.objectContaining({ field: "educationStatus", operator: "eq", value: "high_school" })
+      const rule = allLevels.rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow 초,중,고등학교 학생 (comma-delimited school-level list) to high_school only", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "영등포구 관내 초, 중, 고등학교 학생");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow 중,고등학교 재학생 (comma-glued middle+high) to high_school only", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "관내 중,고등학교 재학생 대상");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow 중학교 및 고등학교 재학생 (level named as a separate word joined by 및) to high_school only", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "관내 중학교 및 고등학교 재학생 대상");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow 초등학교·중학교·고등학교 학생 (fully spelled-out level list) to high_school only", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "초등학교·중학교·고등학교 학생 대상");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    // -----------------------------------------------------------------
+    // Confirms the 3 previously-changed multi-level records named in the
+    // PR #7 follow-up review no longer narrow to high_school-only.
+    // -----------------------------------------------------------------
+    it("does NOT narrow mois-444000000114 (중고등학생 통학택시비, multi-level) to high_school only", () => {
+      const { rules } = extractEligibilityFromText(
+        "지원대상",
+        "영동군에 주소를 두고 거주하는 군민의 자녀 중 관내 중고등학교 재학생"
+      );
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow mois-724000000004 (초·중·고 특수교육대상자 통학비, multi-level) to high_school only", () => {
+      const { rules } = extractEligibilityFromText(
+        "지원대상",
+        "초·중·고등학교 재학생 중 특수교육대상자로 선정되고, 원거리 통학하는 학생 및 보호자"
+      );
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT narrow mois-731000000005 (초·중·고·특수학생 교과용도서, multi-level) to high_school only", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "초·중·고등학교 학생");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    // -----------------------------------------------------------------
+    // PR #7 follow-up: an OR immediately adjacent to the matched phrase
+    // joins the high-school population with an untracked, unrelated
+    // applicant class (e.g. disability status) -- the document-level
+    // `hasLocalCrossDimensionOr` safety net does not catch this because it
+    // only fires when 2+ of THIS parser's own tracked fields collide on the
+    // same OR, and disability status has no tracked field at all. A required
+    // educationStatus gate must not be created for the whole benefit here.
+    // -----------------------------------------------------------------
+    it("does NOT create a required high_school gate when OR'd with an untracked applicant class (장애인 또는 고등학교 재학생)", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "장애인 또는 고등학교 재학생");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("does NOT create a required high_school gate when OR'd with an untracked applicant class (고등학교 재학생 혹은 다른 법정 지원대상자)", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "고등학교 재학생 혹은 다른 법정 지원대상자");
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule?.id).not.toBe("text-education-high");
+    });
+
+    it("still narrows a genuine single-population high-school clause even with an unrelated 또는 far away in the same document", () => {
+      // The residence/income clause elsewhere in the document uses 또는, but
+      // it sits far from the education phrase and does not touch it -- the
+      // adjacency-scoped OR guard must not over-trigger on unrelated ORs.
+      const { rules } = extractEligibilityFromText(
+        "지원대상",
+        "서울특별시 또는 경기도에 거주하는 자로서, 관내 고등학교 재학생 중 상위 3% 이내 성적우수자"
+      );
+      const rule = rules.find((r) => r.field === "educationStatus");
+      expect(rule).toEqual(
+        expect.objectContaining({ id: "text-education-high", field: "educationStatus", operator: "eq", value: "high_school" })
       );
     });
 
