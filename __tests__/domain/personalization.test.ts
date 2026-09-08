@@ -66,6 +66,81 @@ describe("derivePersonalizationEvidence — strength rules", () => {
   });
 });
 
+/**
+ * PR #8: `age between [0, 120]` is the MOIS provider's own full-domain
+ * "unrestricted" age range (see the JA0110/JA0111 audit) — it really PASSES
+ * (real eligibility evidence, `evaluateEligibilityDetailed`/`ruleEngine.ts`
+ * are completely untouched by this change), but it constrains nothing, so
+ * it must not count as specific "age" personalization evidence. The check
+ * is intentionally exact: only the literal [0,120] `between` shape on the
+ * `age` field is excluded — every other age rule (any other range, or
+ * gte/lte) is unaffected and still counts exactly as before.
+ */
+describe("derivePersonalizationEvidence — exact [0,120] age is not specific personalization evidence", () => {
+  it("(A) exact [0,120] age alone -- no age dimension, count 0, weak", () => {
+    const evidence = derivePersonalizationEvidence([leaf("age", "between", [0, 120])], profile);
+    expect(evidence.dimensions).not.toContain("age");
+    expect(evidence.dimensions).toEqual([]);
+    expect(evidence.specificDimensionCount).toBe(0);
+    expect(evidence.strength).toBe("weak");
+  });
+
+  it("(B) exact [0,120] age + education -- dimensions has education not age, count 1, MODERATE (key regression)", () => {
+    const evidence = derivePersonalizationEvidence(
+      [leaf("age", "between", [0, 120]), leaf("educationStatus", "status_compat", { passValues: ["university"], failValues: [] })],
+      profile
+    );
+    expect(evidence.dimensions).toEqual(["education"]);
+    expect(evidence.dimensions).not.toContain("age");
+    expect(evidence.specificDimensionCount).toBe(1);
+    // Without the fix this would incorrectly stay WEAK (age+education = 2
+    // dimensions -> strong) or double-count; the correct result once [0,120]
+    // is excluded is exactly one non-age specific dimension -> MODERATE.
+    expect(evidence.strength).toBe("moderate");
+  });
+
+  it("(C) restrictive age ranges still count as the age dimension -- [19,34]/[18,39]/[0,18]/[65,120]", () => {
+    for (const range of [
+      [19, 34],
+      [18, 39],
+      [0, 18],
+      [65, 120],
+    ]) {
+      const evidence = derivePersonalizationEvidence([leaf("age", "between", range)], profile);
+      expect(evidence.dimensions).toEqual(["age"]);
+      expect(evidence.specificDimensionCount).toBe(1);
+    }
+  });
+
+  it("(D) non-between age operators (gte/lte) still count as the age dimension, unaffected by the [0,120]-between check", () => {
+    const gteEvidence = derivePersonalizationEvidence([leaf("age", "gte", 18)], profile);
+    expect(gteEvidence.dimensions).toEqual(["age"]);
+    expect(gteEvidence.specificDimensionCount).toBe(1);
+
+    const lteEvidence = derivePersonalizationEvidence([leaf("age", "lte", 34)], profile);
+    expect(lteEvidence.dimensions).toEqual(["age"]);
+    expect(lteEvidence.specificDimensionCount).toBe(1);
+  });
+
+  it("(E) region specificity behavior is completely unchanged by the age exclusion", () => {
+    const evidence = derivePersonalizationEvidence(
+      [
+        leaf("age", "between", [0, 120]),
+        { field: "residence", operator: "region_in" as RuleOperator, value: [{ province: "경기도", city: "이천시" }] },
+      ],
+      profile
+    );
+    expect(evidence.regionSpecificity).toBe("exact_city");
+    expect(evidence.dimensions).toEqual(["region"]);
+    expect(evidence.dimensions).not.toContain("age");
+  });
+
+  it("near-miss shapes (not exactly [0,120]) still count as the age dimension -- [0,121], [1,120]", () => {
+    expect(derivePersonalizationEvidence([leaf("age", "between", [0, 121])], profile).dimensions).toEqual(["age"]);
+    expect(derivePersonalizationEvidence([leaf("age", "between", [1, 120])], profile).dimensions).toEqual(["age"]);
+  });
+});
+
 /** §5 distinct dimensions must be deduplicated — multiple fields collapsing to one real-world dimension. */
 describe("derivePersonalizationEvidence — dimension dedup", () => {
   it("collapses maritalStatus + marriageDate + childrenCount into a single 'family' dimension", () => {
@@ -436,6 +511,66 @@ describe("eligibility status is unaffected by personalization evidence", () => {
     const evidence = derivePersonalizationEvidence(diag.passedLeaves, profile);
     expect(evidence.strength).toBe("weak");
     expect(diag.status).toBe("likely_eligible");
+  });
+
+  /**
+   * PR #8 non-regression proof: `ruleEngine.ts` is NOT modified by the
+   * [0,120] personalization exclusion. A benefit gated by `age between
+   * [0,120]` must still evaluate exactly as it did before this PR — PASS
+   * for any resolvable age, the [0,120] leaf still appears verbatim in
+   * `passedLeaves` (the rule engine has no concept of "non-specific"), and
+   * status/hasPositiveEvidence are computed purely by the rule engine. Only
+   * `derivePersonalizationEvidence` (a downstream, ranking-only consumer of
+   * `passedLeaves`) treats this leaf differently.
+   */
+  it("age between [0,120] still PASSES eligibility and appears in passedLeaves unchanged -- filtering happens only in derivePersonalizationEvidence", () => {
+    const benefit: Benefit = {
+      id: "b2",
+      title: "t",
+      shortDescription: "d",
+      category: "welfare",
+      source: { type: "government", organization: "o" },
+      benefitType: "other",
+      eligibility: {
+        type: "all",
+        rules: [{ id: "mois-age", field: "age", operator: "between", value: [0, 120], required: true }],
+      },
+    };
+    const diag = evaluateEligibilityDetailed(benefit, profile);
+    expect(diag.status).toBe("likely_eligible");
+    expect(diag.hasPositiveEvidence).toBe(true);
+    expect(diag.failedRules).toBe(0);
+    // The rule engine still reports the leaf as PASSED, verbatim value —
+    // ruleEngine.ts has no awareness of "non-specific" age ranges.
+    expect(diag.passedLeaves).toEqual([{ field: "age", operator: "between", value: [0, 120] }]);
+    // Only the downstream, ranking-only evidence derivation excludes it.
+    const evidence = derivePersonalizationEvidence(diag.passedLeaves, profile);
+    expect(evidence.dimensions).not.toContain("age");
+    expect(evidence.specificDimensionCount).toBe(0);
+    expect(evidence.strength).toBe("weak");
+    // Eligibility status itself is completely unaffected either way.
+    expect(diag.status).toBe("likely_eligible");
+  });
+
+  it("an out-of-domain age against [0,120] still genuinely FAILS eligibility (not silently skipped) -- proves the rule remains a real, enforced constraint", () => {
+    const benefit: Benefit = {
+      id: "b3",
+      title: "t",
+      shortDescription: "d",
+      category: "welfare",
+      source: { type: "government", organization: "o" },
+      benefitType: "other",
+      eligibility: {
+        type: "all",
+        rules: [{ id: "mois-age", field: "age", operator: "between", value: [0, 120], required: true }],
+      },
+    };
+    // A resolvable age (125) that is genuinely outside [0,120] -- domain/profile/age.ts
+    // only returns null above 130, so 125 resolves to a real number and must fail.
+    const veryOldProfile: UserProfile = { ...profile, birthDate: "1900-01-01" };
+    const diag = evaluateEligibilityDetailed(benefit, veryOldProfile);
+    expect(diag.status).toBe("not_eligible");
+    expect(diag.passedLeaves).toEqual([]);
   });
 });
 

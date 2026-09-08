@@ -70,6 +70,29 @@ function dimensionFor(field: string, operator: RuleOperator): PersonalizationDim
 }
 
 /**
+ * A PASSED `age between [0, 120]` leaf is the MOIS provider's own
+ * full-domain age range (see the JA0110/JA0111 audit) — it really did PASS
+ * (real eligibility evidence, never touched here), but it constrains
+ * nothing: every profile with a resolvable age passes it. Counting it as
+ * specific "age" personalization evidence would rank a benefit with this
+ * one meaningless leaf the same as one with a genuinely narrow age gate
+ * (e.g. [19,34]), which is misleading. This check is intentionally exact —
+ * only the literal [0,120] `between` shape on the `age` field is excluded;
+ * every other age rule (any other between-range, gte/lte, or a narrower
+ * range) is unaffected and still counts exactly as before.
+ */
+function isNonSpecificAgeLeaf(leaf: { field: string; operator: RuleOperator; value: unknown }): boolean {
+  return (
+    leaf.field === "age" &&
+    leaf.operator === "between" &&
+    Array.isArray(leaf.value) &&
+    leaf.value.length === 2 &&
+    leaf.value[0] === 0 &&
+    leaf.value[1] === 120
+  );
+}
+
+/**
  * For a PASSED `region_in` leaf, classifies whether the match came from a
  * spec naming the user's exact city, one that allows the whole province, or
  * one that (as an OR-union) is effectively nationwide/unrestricted —
@@ -141,9 +164,14 @@ function regionSpecificityForLeaf(
  * (the leaf really did PASS) but NOT specific personalization evidence, so
  * it must never inflate `specificDimensionCount`/`strength` (see
  * `regionSpecificityForLeaf`'s doc comment for why "the user's city is one
- * of 200+ listed cities" isn't meaningfully profile-specific). Every other
- * dimension is unaffected and still counts unconditionally, exactly as
- * before.
+ * of 200+ listed cities" isn't meaningfully profile-specific).
+ *
+ * Mirrors the same principle: a PASSED `age between [0, 120]` leaf (the
+ * MOIS provider's full-domain non-restriction, see `isNonSpecificAgeLeaf`)
+ * is real eligibility evidence but not specific personalization evidence,
+ * so it's excluded from `dimensionSet` the same way a nationwide region
+ * leaf is. Every other dimension is unaffected and still counts
+ * unconditionally, exactly as before.
  */
 export function derivePersonalizationEvidence(
   passedLeaves: { field: string; operator: RuleOperator; value: unknown }[],
@@ -159,7 +187,8 @@ export function derivePersonalizationEvidence(
     else if (spec === "province" && regionSpecificity !== "exact_city") regionSpecificity = "province";
 
     const isNonSpecificRegion = dimension === "region" && spec !== "exact_city" && spec !== "province";
-    if (!isNonSpecificRegion) dimensionSet.add(dimension);
+    const isNonSpecificAge = dimension === "age" && isNonSpecificAgeLeaf(leaf);
+    if (!isNonSpecificRegion && !isNonSpecificAge) dimensionSet.add(dimension);
   }
 
   const dimensions = [...dimensionSet];
