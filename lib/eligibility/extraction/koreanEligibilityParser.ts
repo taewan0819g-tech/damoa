@@ -1629,6 +1629,75 @@ function parseEducationClause(text: string): { rule?: EligibilityRule; unresolve
     return { rule: { id: "text-education-high", field: "educationStatus", operator: "eq", value: "high_school", required: true } };
   }
 
+  // "고등학교 재학생" / "고등학교 학생" / "고교 재학생" / "고교 학생" -- audited against the full
+  // frozen MOIS 지원대상/선정기준 corpus (PR #7): 47 record+field hits across these 4 phrase
+  // variants, 29 records with no "대학" substring anywhere in the text. Of those 29, only 8 are
+  // genuinely SINGLE-population high-school-only enrollment gates and are safe to narrow to a
+  // strict `educationStatus eq high_school` rule. The other 21 are excluded by the guards below,
+  // most commonly because the source names an ADDITIONAL school level (elementary/middle/special-
+  // education), e.g. "중고등학교 학생", "중·고등학교 재학생", "초·중·고등학교 재학생",
+  // "초,중,고등학교 학생" -- these describe a population `educationStatus` cannot represent (there
+  // is no middle_school/elementary_school value), so narrowing them to high_school-only would be a
+  // NARROWER rule than the source states, wrongly excluding a real, eligible middle-school/
+  // elementary-school profile. Damoa's parser philosophy is: never encode a narrower rule than the
+  // source unambiguously supports; unresolved (or the existing broader bare-"학생" umbrella) is
+  // always safer than a false FAIL. Do NOT add middle_school/elementary_school to UserProfile to
+  // "solve" this -- multi-level clauses are left on existing/unresolved behavior instead.
+  //
+  // Two independent guards enforce this:
+  //   1. `hasMultiLevelWordMarker` -- the source text names another school level ANYWHERE
+  //      ("초등학교"/"중학교"/"특수학교" as standalone words), e.g. "중학교 및 고등학교 재학생" or
+  //      the O00002700001/7-style "유치원·초등학교·중학교·고등학교 학생" list.
+  //   2. `hasAdjacentLevelPrefix` -- the matched phrase's OWN "고등학교"/"고교" token is directly
+  //      glued to another level marker with no (or only separator) characters between them --
+  //      "중고등학교" (중+고등학교, no separator), "초중고교" (초+중+고교), "중,고등학교",
+  //      "중·고등학교", "초·중·고등학교", "유·초·중·고등학교" -- none of which contain "중학교" or
+  //      "초등학교" as a standalone word, so guard 1 alone would miss them.
+  //
+  // The remaining single-population records are further guarded against 3 other ambiguity shapes:
+  //   - 아동 만18세미만(20세 이하 중고등학교 재학생 포함) [mois-347000000111]: a parenthetical
+  //     age-range inclusion ("...포함)"), not a standalone education gate (also multi-level: 중고).
+  //   - 다만, 18세 이상 20세 미만의 중·고등학교 재학생은 20세가 도래하는 날까지 인정
+  //     [mois-WLU000000020]: a "다만" (however) age-extension exception clause inside an unrelated
+  //     disease/income program (also multi-level: 중·고).
+  //   - mois-O00002700001 / mois-O00002700007 (문화시설 이용요금 감면): generic facility-fee-discount
+  //     records listing many unrelated legally-defined applicant categories (국가유공자/장애인/
+  //     기초생활수급자/한부모가족/...) as independent alternatives, of which "학생" is only one
+  //     (also multi-level: 초등학교/중학교/고등학교).
+  //   - a "또는"/"혹은" sitting immediately next to the matched phrase (`hasAdjacentOrSignal`), e.g.
+  //     "장애인 또는 고등학교 재학생" or "고등학교 재학생 혹은 다른 법정 지원대상자": the OR joins the
+  //     high-school population with an untracked, unrelated applicant class (disability status,
+  //     "other statutory recipients", ...) that this parser has no field for, so a required
+  //     educationStatus gate on the WHOLE benefit would be wrong -- the existing document-level
+  //     `hasLocalCrossDimensionOr` safety net only fires when 2+ of our OWN tracked fields collide
+  //     on the same OR, so it does not catch an OR against an untracked field like disability; this
+  //     local proximity check is scoped strictly to this one branch, not a change to the shared OR
+  //     infrastructure (`OR_SIGNALS`/`detectLogicalConnective`/`hasLocalCrossDimensionOr`).
+  // All 18 records containing "대학" (대학생/대학원생/대학교/대학(원)생/전입대학(원)생 etc, e.g.
+  // "고등학교 및 대학교 재학생") are excluded by the pre-existing "대학" check and fall through
+  // unchanged, per the requirement not to narrow mixed high-school+university structures.
+  const HIGH_SCHOOL_ENROLLMENT_PATTERNS = ["고등학교 재학생", "고등학교 학생", "고교 재학생", "고교 학생"];
+  const matchedHighSchoolPattern = HIGH_SCHOOL_ENROLLMENT_PATTERNS.find((p) => text.includes(p));
+  const MULTI_LEVEL_WORD_MARKERS = ["초등학교", "중학교", "특수학교"];
+  const hasMultiLevelWordMarker = MULTI_LEVEL_WORD_MARKERS.some((m) => text.includes(m));
+  if (matchedHighSchoolPattern && !text.includes("대학") && !text.includes("국가유공자") && !hasMultiLevelWordMarker) {
+    const matchIdx = text.indexOf(matchedHighSchoolPattern);
+    const precedingRaw = text.slice(Math.max(0, matchIdx - 20), matchIdx);
+    const precedingStripped = precedingRaw.replace(/[\s,·、및]+$/u, "");
+    const lastChar = precedingStripped.slice(-1);
+    const hasAdjacentLevelPrefix = lastChar === "초" || lastChar === "중" || lastChar === "특" || lastChar === "수";
+    const precedingWindow = text.slice(Math.max(0, matchIdx - 30), matchIdx);
+    const followingWindow = text.slice(matchIdx, matchIdx + matchedHighSchoolPattern.length + 15);
+    const isAgeExceptionClause = precedingWindow.includes("다만") || followingWindow.includes("포함)");
+    const orWindowBefore = text.slice(Math.max(0, matchIdx - 12), matchIdx);
+    const orWindowAfter = text.slice(matchIdx, matchIdx + matchedHighSchoolPattern.length + 12);
+    const hasAdjacentOrSignal = /또는|혹은/.test(orWindowBefore) || /또는|혹은/.test(orWindowAfter);
+    if (!hasAdjacentLevelPrefix && !isAgeExceptionClause && !hasAdjacentOrSignal) {
+      if (negatedNear(matchedHighSchoolPattern)) return { unresolved: text };
+      return { rule: { id: "text-education-high", field: "educationStatus", operator: "eq", value: "high_school", required: true } };
+    }
+  }
+
   // Bare "학생" (broad, hierarchical umbrella over high_school/university/graduate_school)
   if (/(?<!대)(?<!대학)학생/.test(text) || text.includes("학생")) {
     if (negatedNear("학생")) return { unresolved: text };
