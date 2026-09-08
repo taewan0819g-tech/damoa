@@ -4,6 +4,8 @@ import {
   extractEligibilityFromText,
 } from "@/lib/eligibility/extraction/koreanEligibilityParser";
 import { EMPLOYMENT_TARGET_SPECS } from "@/lib/eligibility/employment";
+import { evaluateRule } from "@/lib/eligibility/ruleEngine";
+import type { UserProfile } from "@/types/profile";
 
 describe("extractEligibilityFromText", () => {
   it("returns empty result for blank/missing text", () => {
@@ -987,6 +989,174 @@ describe("extractEligibilityFromText", () => {
       const result = extractEligibilityFromText("f", "대학생은 제외한다");
       expect(result.rules).toEqual([]);
       expect(result.unresolvedClauses).toEqual(["대학생은 제외한다"]);
+    });
+
+    // -----------------------------------------------------------------
+    // "고등학교 재학생" (PR #7): mois-O00096800006 "고교 진학 후 성적우수 학생
+    // 장학금" reads "관내 고등학교 재학생 중 상위 3% 이내 성적우수자 학생" -- the
+    // compact "고등학생" check above doesn't match, so this used to fall
+    // through to the broad bare-"학생" umbrella (high_school | university |
+    // graduate_school), wrongly admitting university-status profiles into a
+    // benefit that is, per the source text, high-school-only.
+    // -----------------------------------------------------------------
+    it("resolves 고등학교 재학생 to high_school only (not the broad student umbrella)", () => {
+      const { rules } = extractEligibilityFromText("지원대상", "고등학교 재학생인 자");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          id: "text-education-high",
+          field: "educationStatus",
+          operator: "eq",
+          value: "high_school",
+        })
+      );
+    });
+
+    it.each(["고등학교 학생", "고교 재학생", "고교 학생"])(
+      "resolves audited-safe variant %s to high_school only",
+      (phrase) => {
+        const { rules } = extractEligibilityFromText("지원대상", `${phrase}인 자`);
+        expect(rules[0]).toEqual(
+          expect.objectContaining({ field: "educationStatus", operator: "eq", value: "high_school" })
+        );
+      }
+    );
+
+    it("narrows combined school-level phrasing (중고등학교, 초·중·고등학교) to high_school only", () => {
+      const middleHigh = extractEligibilityFromText("지원대상", "관내 소재 중고등학교 학생 및 관내 거주 학생");
+      expect(middleHigh.rules[0]).toEqual(
+        expect.objectContaining({ field: "educationStatus", operator: "eq", value: "high_school" })
+      );
+
+      const allLevels = extractEligibilityFromText(
+        "지원대상",
+        "초·중·고등학교 재학생으로서 공고일 현재 그 보호자와 함께 성주군에 주소를 두고 거주하는 학생 중 성적순 선발"
+      );
+      expect(allLevels.rules.find((r) => r.field === "educationStatus")).toEqual(
+        expect.objectContaining({ field: "educationStatus", operator: "eq", value: "high_school" })
+      );
+    });
+
+    it("exact mois-O00096800006 지원대상 text: educationStatus=university no longer passes", () => {
+      const text = "관내 고등학교 재학생 중 상위 3% 이내 성적우수자 학생";
+      const { rules } = extractEligibilityFromText("지원대상", text);
+      const educationRule = rules.find((r) => r.field === "educationStatus");
+      expect(educationRule).toEqual(
+        expect.objectContaining({
+          id: "text-education-high",
+          field: "educationStatus",
+          operator: "eq",
+          value: "high_school",
+        })
+      );
+
+      const universityProfile: UserProfile = { educationStatus: "university" };
+      expect(evaluateRule(educationRule!, universityProfile)).toBe("fail");
+
+      const highSchoolProfile: UserProfile = { educationStatus: "high_school" };
+      expect(evaluateRule(educationRule!, highSchoolProfile)).toBe("pass");
+    });
+
+    it("does not regress the existing bare 고등학생 branch (still eq high_school)", () => {
+      const { rules } = extractEligibilityFromText("f", "고등학생인 자");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({ id: "text-education-high", field: "educationStatus", operator: "eq", value: "high_school" })
+      );
+    });
+
+    it("does not regress 대학생 (still eq university, not narrowed to high_school)", () => {
+      const { rules } = extractEligibilityFromText("f", "대학생인 자");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({ field: "educationStatus", operator: "eq", value: "university" })
+      );
+    });
+
+    it("does not regress 대학원생 (still eq graduate_school)", () => {
+      const { rules } = extractEligibilityFromText("f", "대학원생인 자");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({ field: "educationStatus", operator: "eq", value: "graduate_school" })
+      );
+    });
+
+    it("bare 학생 (no 고등학교/고교/대학 qualifier) remains the broad student umbrella", () => {
+      const { rules } = extractEligibilityFromText("f", "학생인 자");
+      expect(rules[0]).toEqual(
+        expect.objectContaining({
+          id: "text-education-student",
+          field: "educationStatus",
+          operator: "in",
+          value: ["high_school", "university", "graduate_school"],
+        })
+      );
+    });
+
+    it('does NOT narrow a mixed high-school+university clause ("고등학교 및 대학교 재학생") to high_school-only', () => {
+      const { rules } = extractEligibilityFromText("지원대상", "고등학교 및 대학교 재학생인 자");
+      const educationRule = rules.find((r) => r.field === "educationStatus");
+      // The "대학" guard blocks the new narrow branch; this falls through to
+      // the pre-existing broad bare-"학생" umbrella (unchanged behavior) --
+      // it must NOT be narrowed to high_school only.
+      expect(educationRule).toEqual(
+        expect.objectContaining({
+          id: "text-education-student",
+          field: "educationStatus",
+          operator: "in",
+          value: ["high_school", "university", "graduate_school"],
+        })
+      );
+    });
+
+    it("does not narrow a mois-536000000111-style 대학(원)생 parenthetical mixed clause to high_school-only", () => {
+      // Isolates the new branch's "대학" guard: "대학(원)생" doesn't match the
+      // exact "대학생"/"대학원생" substrings (see the earlier audit-tooling
+      // gap this uncovered), but does contain the broad "대학" substring, so
+      // it must still block the new high-school-only branch.
+      const { rules } = extractEligibilityFromText(
+        "지원대상",
+        "전입일 기준으로 1년 이상 경과한 관내 소재 중고등학교 재학생. 관내 소재 대학(원)생도 포함"
+      );
+      const educationRule = rules.find((r) => r.field === "educationStatus");
+      expect(educationRule?.id).not.toBe("text-education-high");
+      expect(educationRule?.value).not.toBe("high_school");
+    });
+
+    // NOTE (documented, intentionally not exercised as a test assertion of
+    // desired behavior): the *real* mois-536000000111 record uses "전입중고등학생"
+    // as a section heading, whose substring "고등학생" already matches the
+    // pre-existing, unchanged `text.includes("고등학생")` branch (line ~1627)
+    // -- before this PR's new branch is ever reached. That is a separate,
+    // pre-existing false-narrowing edge case unrelated to the "고등학교
+    // 재학생" gap this PR fixes, out of scope here, and reported separately.
+
+    it("leaves the mois-347000000111-style age-extension parenthetical inclusion unresolved by the new branch (falls through unchanged)", () => {
+      const text = "조부모 만65세이상, 아동 만18세미만(20세 이하 중고등학교 재학생 포함)";
+      const { rules } = extractEligibilityFromText("지원대상", text);
+      const educationRule = rules.find((r) => r.field === "educationStatus");
+      // Must not be narrowed to a required eq high_school gate -- this is an
+      // age-range carve-out for an unrelated 조손가족 수당 benefit, not a
+      // standalone high-school-enrollment eligibility gate.
+      expect(educationRule?.id).not.toBe("text-education-high");
+    });
+
+    it("leaves the WLU000000020-style 다만 age-extension exception clause unresolved by the new branch (falls through unchanged)", () => {
+      const text =
+        "18세 미만인 자(18세가 도래하는 날이 속하는 해) 다만, 18세 이상 20세 미만의 중·고등학교 재학생은 20세가 도래하는 날이 속하는 달까지 인정";
+      const { rules } = extractEligibilityFromText("지원대상", text);
+      const educationRule = rules.find((r) => r.field === "educationStatus");
+      expect(educationRule?.id).not.toBe("text-education-high");
+    });
+
+    it("leaves the mois-O00002700001/7-style multi-category facility-discount clause unresolved by the new branch (falls through unchanged)", () => {
+      const text =
+        "「국가유공자 등 예우 및 지원에 관한 법률」에 따라 등록된 국가유공자 「장애인복지법」에 따라 등록된 장애인 「국민기초생활 보장법」에 따른 수급자 유치원·초등학교·중학교·고등학교 학생의 교육 및 수련활동을 위해 이용하는 경우";
+      const { rules } = extractEligibilityFromText("지원대상", text);
+      const educationRule = rules.find((r) => r.field === "educationStatus");
+      expect(educationRule?.id).not.toBe("text-education-high");
+    });
+
+    it("preserves negation safety for the new high-school-enrollment branch (제외 -> unresolved)", () => {
+      const result = extractEligibilityFromText("f", "고등학교 재학생은 제외한다");
+      expect(result.rules.find((r) => r.field === "educationStatus")).toBeUndefined();
+      expect(result.unresolvedClauses).toContain("고등학교 재학생은 제외한다");
     });
   });
 
