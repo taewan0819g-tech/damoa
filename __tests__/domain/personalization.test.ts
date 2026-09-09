@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { calculateAge } from "@/domain/profile/age";
 import {
   derivePersonalizationEvidence,
   resolvePersonalizationEvidence,
@@ -67,12 +68,19 @@ describe("derivePersonalizationEvidence — strength rules", () => {
 });
 
 /**
- * PR #8: `age between [0, 120]` is the MOIS provider's own full-domain
- * "unrestricted" age range (see the JA0110/JA0111 audit) — it really PASSES
- * (real eligibility evidence, `evaluateEligibilityDetailed`/`ruleEngine.ts`
- * are completely untouched by this change), but it constrains nothing, so
- * it must not count as specific "age" personalization evidence. The check
- * is intentionally exact: only the literal [0,120] `between` shape on the
+ * PR #8: `age between [0, 120]` is a real, enforced MOIS eligibility rule
+ * (see the JA0110/JA0111 audit) — it really PASSES (real eligibility
+ * evidence, `evaluateEligibilityDetailed`/`ruleEngine.ts` are completely
+ * untouched by this change), and it is NOT mathematically universal over
+ * Damoa's own resolvable age domain: `calculateAge()` resolves ages 0-130,
+ * so a resolvable age of 121-130 genuinely FAILS this rule (see the
+ * dedicated eligibility non-regression test below). It is nevertheless
+ * treated as effectively non-specific FOR PERSONALIZATION RANKING ONLY,
+ * because [0,120] covers essentially the entire realistic age range of a
+ * public-benefit applicant and so carries no useful age-targeting signal —
+ * this ranking-only judgment does not require or assume that 120 is a
+ * formally documented MOIS sentinel value. The exclusion check is
+ * intentionally exact: only the literal [0,120] `between` shape on the
  * `age` field is excluded — every other age rule (any other range, or
  * gte/lte) is unaffected and still counts exactly as before.
  */
@@ -552,7 +560,22 @@ describe("eligibility status is unaffected by personalization evidence", () => {
     expect(diag.status).toBe("likely_eligible");
   });
 
-  it("an out-of-domain age against [0,120] still genuinely FAILS eligibility (not silently skipped) -- proves the rule remains a real, enforced constraint", () => {
+  /**
+   * A valid Damoa age outside the [0,120] rule range (age 121-130, still
+   * inside `calculateAge()`'s [0,130] resolvable domain) must genuinely FAIL
+   * eligibility -- not be silently skipped as "unresolvable" -- proving
+   * [0,120] remains a real, fully enforced constraint and is NOT
+   * mathematically universal over Damoa's own age domain. `fieldResolver.ts`
+   * computes age via `calculateAge(profile.birthDate)` with no injectable
+   * reference date, so the wall-clock "now" must be frozen (Vitest fake
+   * system time) to make the resulting age deterministic across real time --
+   * mirrors the explicit-`referenceInstant` convention used directly against
+   * `calculateAge` in __tests__/eligibility/age.test.ts, adapted here since
+   * this path goes through the full rule engine instead of calling
+   * `calculateAge` directly. Fake time is always restored in `finally` so it
+   * can never leak into other tests even if an assertion throws.
+   */
+  it("a valid Damoa age outside the [0,120] rule range (121-130) still genuinely FAILS eligibility (not silently skipped) -- proves the rule remains a real, enforced constraint", () => {
     const benefit: Benefit = {
       id: "b3",
       title: "t",
@@ -565,12 +588,31 @@ describe("eligibility status is unaffected by personalization evidence", () => {
         rules: [{ id: "mois-age", field: "age", operator: "between", value: [0, 120], required: true }],
       },
     };
-    // A resolvable age (125) that is genuinely outside [0,120] -- domain/profile/age.ts
-    // only returns null above 130, so 125 resolves to a real number and must fail.
-    const veryOldProfile: UserProfile = { ...profile, birthDate: "1900-01-01" };
-    const diag = evaluateEligibilityDetailed(benefit, veryOldProfile);
-    expect(diag.status).toBe("not_eligible");
-    expect(diag.passedLeaves).toEqual([]);
+    // Frozen reference instant, independent of the real wall clock.
+    const frozenNow = new Date("2026-09-09T00:30:00+09:00");
+    const veryOldProfile: UserProfile = { ...profile, birthDate: "1900-09-01" };
+
+    // Prove the computed age is within Damoa's valid [0,130] domain (i.e.
+    // genuinely resolvable, not null) and specifically >120, before even
+    // touching the rule engine -- age.test.ts's own explicit-referenceInstant
+    // convention, used directly against calculateAge.
+    const computedAge = calculateAge(veryOldProfile.birthDate, frozenNow);
+    expect(computedAge).not.toBeNull();
+    expect(computedAge as number).toBeGreaterThanOrEqual(121);
+    expect(computedAge as number).toBeLessThanOrEqual(130);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(frozenNow);
+    try {
+      // fieldResolver.ts's calculateAge(profile.birthDate) call has no
+      // injectable reference date -- it always uses the default getNow(),
+      // so the rule engine only sees the frozen 126 while system time is faked.
+      const diag = evaluateEligibilityDetailed(benefit, veryOldProfile);
+      expect(diag.status).toBe("not_eligible");
+      expect(diag.passedLeaves).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
