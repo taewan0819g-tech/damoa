@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { calculateAge } from "@/domain/profile/age";
 import {
   derivePersonalizationEvidence,
   resolvePersonalizationEvidence,
@@ -63,6 +64,88 @@ describe("derivePersonalizationEvidence — strength rules", () => {
   it("keeps age-only weaker than moderate/strong via STRENGTH_RANK", () => {
     expect(STRENGTH_RANK.strong).toBeLessThan(STRENGTH_RANK.moderate);
     expect(STRENGTH_RANK.moderate).toBeLessThan(STRENGTH_RANK.weak);
+  });
+});
+
+/**
+ * PR #8: `age between [0, 120]` is a real, enforced MOIS eligibility rule
+ * (see the JA0110/JA0111 audit) — it really PASSES (real eligibility
+ * evidence, `evaluateEligibilityDetailed`/`ruleEngine.ts` are completely
+ * untouched by this change), and it is NOT mathematically universal over
+ * Damoa's own resolvable age domain: `calculateAge()` resolves ages 0-130,
+ * so a resolvable age of 121-130 genuinely FAILS this rule (see the
+ * dedicated eligibility non-regression test below). It is nevertheless
+ * treated as effectively non-specific FOR PERSONALIZATION RANKING ONLY,
+ * because [0,120] covers essentially the entire realistic age range of a
+ * public-benefit applicant and so carries no useful age-targeting signal —
+ * this ranking-only judgment does not require or assume that 120 is a
+ * formally documented MOIS sentinel value. The exclusion check is
+ * intentionally exact: only the literal [0,120] `between` shape on the
+ * `age` field is excluded — every other age rule (any other range, or
+ * gte/lte) is unaffected and still counts exactly as before.
+ */
+describe("derivePersonalizationEvidence — exact [0,120] age is not specific personalization evidence", () => {
+  it("(A) exact [0,120] age alone -- no age dimension, count 0, weak", () => {
+    const evidence = derivePersonalizationEvidence([leaf("age", "between", [0, 120])], profile);
+    expect(evidence.dimensions).not.toContain("age");
+    expect(evidence.dimensions).toEqual([]);
+    expect(evidence.specificDimensionCount).toBe(0);
+    expect(evidence.strength).toBe("weak");
+  });
+
+  it("(B) exact [0,120] age + education -- dimensions has education not age, count 1, MODERATE (key regression)", () => {
+    const evidence = derivePersonalizationEvidence(
+      [leaf("age", "between", [0, 120]), leaf("educationStatus", "status_compat", { passValues: ["university"], failValues: [] })],
+      profile
+    );
+    expect(evidence.dimensions).toEqual(["education"]);
+    expect(evidence.dimensions).not.toContain("age");
+    expect(evidence.specificDimensionCount).toBe(1);
+    // Without the fix this would incorrectly stay WEAK (age+education = 2
+    // dimensions -> strong) or double-count; the correct result once [0,120]
+    // is excluded is exactly one non-age specific dimension -> MODERATE.
+    expect(evidence.strength).toBe("moderate");
+  });
+
+  it("(C) restrictive age ranges still count as the age dimension -- [19,34]/[18,39]/[0,18]/[65,120]", () => {
+    for (const range of [
+      [19, 34],
+      [18, 39],
+      [0, 18],
+      [65, 120],
+    ]) {
+      const evidence = derivePersonalizationEvidence([leaf("age", "between", range)], profile);
+      expect(evidence.dimensions).toEqual(["age"]);
+      expect(evidence.specificDimensionCount).toBe(1);
+    }
+  });
+
+  it("(D) non-between age operators (gte/lte) still count as the age dimension, unaffected by the [0,120]-between check", () => {
+    const gteEvidence = derivePersonalizationEvidence([leaf("age", "gte", 18)], profile);
+    expect(gteEvidence.dimensions).toEqual(["age"]);
+    expect(gteEvidence.specificDimensionCount).toBe(1);
+
+    const lteEvidence = derivePersonalizationEvidence([leaf("age", "lte", 34)], profile);
+    expect(lteEvidence.dimensions).toEqual(["age"]);
+    expect(lteEvidence.specificDimensionCount).toBe(1);
+  });
+
+  it("(E) region specificity behavior is completely unchanged by the age exclusion", () => {
+    const evidence = derivePersonalizationEvidence(
+      [
+        leaf("age", "between", [0, 120]),
+        { field: "residence", operator: "region_in" as RuleOperator, value: [{ province: "경기도", city: "이천시" }] },
+      ],
+      profile
+    );
+    expect(evidence.regionSpecificity).toBe("exact_city");
+    expect(evidence.dimensions).toEqual(["region"]);
+    expect(evidence.dimensions).not.toContain("age");
+  });
+
+  it("near-miss shapes (not exactly [0,120]) still count as the age dimension -- [0,121], [1,120]", () => {
+    expect(derivePersonalizationEvidence([leaf("age", "between", [0, 121])], profile).dimensions).toEqual(["age"]);
+    expect(derivePersonalizationEvidence([leaf("age", "between", [1, 120])], profile).dimensions).toEqual(["age"]);
   });
 });
 
@@ -436,6 +519,106 @@ describe("eligibility status is unaffected by personalization evidence", () => {
     const evidence = derivePersonalizationEvidence(diag.passedLeaves, profile);
     expect(evidence.strength).toBe("weak");
     expect(diag.status).toBe("likely_eligible");
+  });
+
+  /**
+   * PR #8 non-regression proof: `ruleEngine.ts` is NOT modified by the
+   * [0,120] personalization exclusion. A benefit gated by `age between
+   * [0,120]` must still evaluate exactly as it did before this PR: a
+   * resolvable age that falls inside [0,120] (as used here) still PASSES,
+   * while a resolvable age of 121-130 correctly FAILs this same rule
+   * instead (see the deterministic out-of-range test below) — [0,120]
+   * remains a real, fully enforced eligibility constraint, NOT a
+   * mathematically universal one over Damoa's [0,130] age domain. For this
+   * in-range PASS, the [0,120] leaf still appears verbatim in
+   * `passedLeaves` (the rule engine has no concept of "non-specific"), and
+   * status/hasPositiveEvidence are computed purely by the rule engine. Only
+   * `derivePersonalizationEvidence` (a downstream, ranking-only consumer of
+   * `passedLeaves`) suppresses this leaf's personalization evidence —
+   * eligibility semantics are completely unaffected.
+   */
+  it("age between [0,120] still PASSES eligibility and appears in passedLeaves unchanged -- filtering happens only in derivePersonalizationEvidence", () => {
+    const benefit: Benefit = {
+      id: "b2",
+      title: "t",
+      shortDescription: "d",
+      category: "welfare",
+      source: { type: "government", organization: "o" },
+      benefitType: "other",
+      eligibility: {
+        type: "all",
+        rules: [{ id: "mois-age", field: "age", operator: "between", value: [0, 120], required: true }],
+      },
+    };
+    const diag = evaluateEligibilityDetailed(benefit, profile);
+    expect(diag.status).toBe("likely_eligible");
+    expect(diag.hasPositiveEvidence).toBe(true);
+    expect(diag.failedRules).toBe(0);
+    // The rule engine still reports the leaf as PASSED, verbatim value —
+    // ruleEngine.ts has no awareness of "non-specific" age ranges.
+    expect(diag.passedLeaves).toEqual([{ field: "age", operator: "between", value: [0, 120] }]);
+    // Only the downstream, ranking-only evidence derivation excludes it.
+    const evidence = derivePersonalizationEvidence(diag.passedLeaves, profile);
+    expect(evidence.dimensions).not.toContain("age");
+    expect(evidence.specificDimensionCount).toBe(0);
+    expect(evidence.strength).toBe("weak");
+    // Eligibility status itself is completely unaffected either way.
+    expect(diag.status).toBe("likely_eligible");
+  });
+
+  /**
+   * A valid Damoa age outside the [0,120] rule range (age 121-130, still
+   * inside `calculateAge()`'s [0,130] resolvable domain) must genuinely FAIL
+   * eligibility -- not be silently skipped as "unresolvable" -- proving
+   * [0,120] remains a real, fully enforced constraint and is NOT
+   * mathematically universal over Damoa's own age domain. `fieldResolver.ts`
+   * computes age via `calculateAge(profile.birthDate)` with no injectable
+   * reference date, so the wall-clock "now" must be frozen (Vitest fake
+   * system time) to make the resulting age deterministic across real time --
+   * mirrors the explicit-`referenceInstant` convention used directly against
+   * `calculateAge` in __tests__/eligibility/age.test.ts, adapted here since
+   * this path goes through the full rule engine instead of calling
+   * `calculateAge` directly. Fake time is always restored in `finally` so it
+   * can never leak into other tests even if an assertion throws.
+   */
+  it("a valid Damoa age outside the [0,120] rule range (121-130) still genuinely FAILS eligibility (not silently skipped) -- proves the rule remains a real, enforced constraint", () => {
+    const benefit: Benefit = {
+      id: "b3",
+      title: "t",
+      shortDescription: "d",
+      category: "welfare",
+      source: { type: "government", organization: "o" },
+      benefitType: "other",
+      eligibility: {
+        type: "all",
+        rules: [{ id: "mois-age", field: "age", operator: "between", value: [0, 120], required: true }],
+      },
+    };
+    // Frozen reference instant, independent of the real wall clock.
+    const frozenNow = new Date("2026-09-09T00:30:00+09:00");
+    const veryOldProfile: UserProfile = { ...profile, birthDate: "1900-09-01" };
+
+    // Prove the computed age is within Damoa's valid [0,130] domain (i.e.
+    // genuinely resolvable, not null) and specifically >120, before even
+    // touching the rule engine -- age.test.ts's own explicit-referenceInstant
+    // convention, used directly against calculateAge.
+    const computedAge = calculateAge(veryOldProfile.birthDate, frozenNow);
+    expect(computedAge).not.toBeNull();
+    expect(computedAge as number).toBeGreaterThanOrEqual(121);
+    expect(computedAge as number).toBeLessThanOrEqual(130);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(frozenNow);
+    try {
+      // fieldResolver.ts's calculateAge(profile.birthDate) call has no
+      // injectable reference date -- it always uses the default getNow(),
+      // so the rule engine only sees the frozen 126 while system time is faked.
+      const diag = evaluateEligibilityDetailed(benefit, veryOldProfile);
+      expect(diag.status).toBe("not_eligible");
+      expect(diag.passedLeaves).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
