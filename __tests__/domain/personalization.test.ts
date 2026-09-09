@@ -524,12 +524,18 @@ describe("eligibility status is unaffected by personalization evidence", () => {
   /**
    * PR #8 non-regression proof: `ruleEngine.ts` is NOT modified by the
    * [0,120] personalization exclusion. A benefit gated by `age between
-   * [0,120]` must still evaluate exactly as it did before this PR — PASS
-   * for any resolvable age, the [0,120] leaf still appears verbatim in
+   * [0,120]` must still evaluate exactly as it did before this PR: a
+   * resolvable age that falls inside [0,120] (as used here) still PASSES,
+   * while a resolvable age of 121-130 correctly FAILs this same rule
+   * instead (see the deterministic out-of-range test below) — [0,120]
+   * remains a real, fully enforced eligibility constraint, NOT a
+   * mathematically universal one over Damoa's [0,130] age domain. For this
+   * in-range PASS, the [0,120] leaf still appears verbatim in
    * `passedLeaves` (the rule engine has no concept of "non-specific"), and
    * status/hasPositiveEvidence are computed purely by the rule engine. Only
    * `derivePersonalizationEvidence` (a downstream, ranking-only consumer of
-   * `passedLeaves`) treats this leaf differently.
+   * `passedLeaves`) suppresses this leaf's personalization evidence —
+   * eligibility semantics are completely unaffected.
    */
   it("age between [0,120] still PASSES eligibility and appears in passedLeaves unchanged -- filtering happens only in derivePersonalizationEvidence", () => {
     const benefit: Benefit = {
